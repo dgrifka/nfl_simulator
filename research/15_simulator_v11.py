@@ -50,7 +50,10 @@ from nfl_simulator.simulator import points_per_epa, simulate_game  # noqa: E402
 
 RANDOM_SEED = 20260817
 POSTERIOR_DRAWS = 200
-COIN_DRAWS = 100
+# 800, not 100: docs/research/10 §8 measured that below 800 the reported 89%
+# interval covers ~97% of informative games, because Monte Carlo noise in the
+# coin flips pads its width by about a quarter.
+COIN_DRAWS = 800
 
 SIM_COLUMNS = [
     *ANALYSIS_COLUMNS,

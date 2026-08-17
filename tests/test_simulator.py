@@ -623,3 +623,34 @@ def test_bootstrap_dtw_is_a_probability_per_draw():
         rng=np.random.default_rng(3),
     )
     assert np.all((dtw >= 0.0) & (dtw <= 1.0))
+
+
+def test_the_default_coin_draw_count_is_the_calibrated_one():
+    """A calibration-critical constant, not a performance knob.
+
+    `docs/research/10` §8 measured the DTW interval's coverage as a function of
+    this number and found it must be at least 800: below that, Monte Carlo noise
+    in the coin flips inflates the reported interval and the 89% band covers
+    ~97% of the time on informative games. Lowering it for speed would silently
+    break the interval's meaning, which is what this test exists to stop.
+    """
+    from nfl_simulator.simulator import DEFAULT_COIN_DRAWS
+
+    assert DEFAULT_COIN_DRAWS >= 800
+
+
+def test_more_coin_draws_produce_a_narrower_dtw_interval():
+    """The mechanism behind that constant: excess width is Monte Carlo noise."""
+    events = [coin(0.5, realized=1.0, swing=6.0, draws=400)]
+
+    def width(n_coin_draws: int) -> float:
+        _, dtw = bootstrap_margins(
+            events,
+            actual_margin=1.0,
+            points_per_epa=1.0,
+            n_coin_draws=n_coin_draws,
+            rng=np.random.default_rng(7),
+        )
+        return float(np.percentile(dtw, 94.5) - np.percentile(dtw, 5.5))
+
+    assert width(1600) < width(50)

@@ -41,7 +41,16 @@ from nfl_simulator.fg_model import FieldGoalModel, Weather, sanitize_weather
 from nfl_simulator.ledger import Ledger, LedgerEntry
 
 DEFAULT_POSTERIOR_DRAWS = 400
-DEFAULT_COIN_DRAWS = 200
+
+# Not a performance knob. `dtw_per_draw` is an average over this many coin
+# flips, so its spread across posterior draws mixes real uncertainty about `p`
+# with Monte Carlo noise from a finite flip count — and the second does not
+# belong in a credible interval. `docs/research/10` §8 measured coverage against
+# this constant: at 100 the nominal 89% interval covered 97% of informative
+# games, and 800 is the smallest swept value that lands inside the
+# pre-registered band. Lowering it widens every reported interval.
+DEFAULT_COIN_DRAWS = 800
+
 DEFAULT_SEED = 20260817
 
 # Document 03's convention, carried through Phase 2.

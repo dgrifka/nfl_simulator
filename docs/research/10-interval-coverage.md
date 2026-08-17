@@ -207,3 +207,117 @@ gate without knowing that would have produced an uninterpretable failure.
 | `points_per_epa` | 0.8389 | `research/outputs/model_metadata_v11.json` |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Scripts: `research/17_coverage.py` (the check) and
+`research/18_coverage_remediation.py` (the pre-registered remediation). Gates
+fixed by §4 above, committed at `bf95345` before either script existed. Results
+in `research/outputs/17_coverage.json` and `18_coverage_remediation.json`.*
+
+### Gate outcomes, stated first
+
+| Gate | Rule | Result |
+|---|---|---|
+| **V-1 — calibrated?** | coverage in [0.86, 0.92] | **FAIL** — **0.9403** |
+| **V-2 — direction** | reported | **Over-coverage**, +5.0 pp — the conservative direction |
+| **V-3 — informative games** | reported | **0.9693** on 1,954 of 4,000 |
+| **V-4 — attributable?** | diagnostic | **Yes.** 31.0% of the interval's width is Monte Carlo noise |
+
+4,000 synthetic games, Monte Carlo SE 0.37 pp, so the 5.0 pp miss is about
+14 standard errors. This is not noise.
+
+> **The 89% DTW interval was not an 89% interval. It was an approximately
+> 97% interval on the games where the number means anything, and it said 89%.**
+
+### What went wrong, and what did not
+
+The finding splits cleanly in two, and the distinction is the whole value of the
+diagnostic gate:
+
+**The two-layer construction is correct.** Document 05 §4's design — draw `p`
+from its posterior, then flip the coin at that `p` — produces a calibrated
+interval. The evidence is the converged arm: at 1,600 coin draws, coverage on
+informative games is **0.9007** against a nominal 0.89. That is calibration.
+
+**The parameter was wrong.** `dtw_per_draw` is an average over a *finite* number
+of coin flips, so its spread across posterior draws mixes two things — real
+uncertainty about `p`, which belongs in the interval, and Monte Carlo noise from
+the flip count, which does not. At the shipped 100 flips the second was
+contributing about a third of the width.
+
+| Coin draws | Coverage, all games | **Coverage, informative** | Mean interval width |
+|---|---|---|---|
+| **100 (shipped)** | 0.9417 | **0.9737** | 0.0593 |
+| 400 | 0.9477 | 0.9366 | 0.0470 |
+| **800** | 0.9430 | **0.9152** ✓ | **0.0446** |
+| 1,600 | 0.9503 | 0.9146 ✓ | 0.0413 |
+
+*(4,000 games per row. The all-games column moves very little because roughly
+half of all games have a true DTW% of exactly 0 or 1 and a degenerate interval,
+and those are covered trivially — which is exactly what Gate V-3 was
+pre-registered to expose.)*
+
+### The remediation, as pre-registered
+
+§4's decision rule committed the response in advance for precisely this outcome:
+
+> V-1 fails, over-coverage, attributable to coin draws → *"Raise `n_coin_draws`,
+> re-measure, and report the corrected coverage. Existing published numbers are
+> not wrong, only wide."*
+
+**`DEFAULT_COIN_DRAWS` is raised from 200 to 800**, and the shipped run in
+`research/15_simulator_v11.py` from 100 to 800 — the smallest swept value whose
+informative-game coverage lands inside the pre-registered band.
+
+The constant now carries a comment saying it is not a performance knob, and a
+test asserts it stays at or above 800. That test exists because the failure mode
+is invisible: someone lowering it to speed up a run would widen every reported
+interval and nothing would break.
+
+### What changed in the shipped output
+
+| Quantity | At 100 coin draws | **At 800** |
+|---|---|---|
+| Mean interval width (controlled study) | 0.0593 | **0.0446** — 24.9% narrower |
+| Informative-game coverage | 0.9737 | **0.9152** |
+| Shipped mean interval width, all 2,761 games | — | 0.0365 |
+| Shipped mean interval width, 1,556 informative games | — | 0.0647 |
+| Rematch Gate 1 (document 06) | −0.00133, PASS | **−0.00133, PASS** |
+| Games whose DTW winner flips vs v1 | 47 | 46 |
+
+**No deserve-to-win verdict changed** — the point estimate never depended on the
+coin count. Every published interval simply gets narrower and now means what it
+claims.
+
+### Honest residual
+
+Coverage on informative games at 800 draws is **0.9152**, inside the [0.86, 0.92]
+band but sitting near its top edge, and the converged arm at 1,600 lands at
+0.9146. So the interval remains **mildly conservative** — perhaps 2 points wider
+than nominal — even with Monte Carlo noise removed.
+
+Two candidate explanations, neither tested here: the discreteness of a
+probability estimated from 200 posterior draws, and the Beta–Binomial
+idealization of the field-goal posterior noted in §2. Both are recorded below
+rather than resolved, and the direction is the safe one.
+
+### What this establishes
+
+Document 07's list of things not established loses a line. **The DTW credible
+interval has been checked, was found mislabelled, was diagnosed to a parameter
+rather than a design, and has been corrected.** The claim the project can now
+make is narrow and true: *given calibrated per-event probabilities, the two-layer
+bootstrap's 89% interval covers the truth about 91.5% of the time on games where
+there is something to adjudicate.*
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **The interval is still ~2 pp conservative at 800 draws** | Informative coverage 0.9152, and 0.9146 at 1,600 | **Open.** Direction is safe; candidates are posterior-draw discreteness and §2's Beta–Binomial idealization |
+| The all-games coverage figure is half tautology | ~50% of games have a degenerate true DTW% | **Closed** by Gate V-3, which reports both — but the headline number should never be quoted alone |
+| `DEFAULT_COIN_DRAWS` is now 8× its original value | Runtime of a full ten-season run rises accordingly | **Accepted.** A few minutes, and the alternative is a mislabelled interval |
+| The check never validated the FG hierarchy's own posterior | Scoped out in §2 | **Open**, and covered separately by Gates FG-4 and W-5 |
