@@ -284,3 +284,145 @@ margin. That is an identity, not a tolerance, and the simulator asserts it.
 
 Verdicts for the pending rows land in this document's §3 as step 3 and step 4
 complete. The rule in §1 does not change; only the table does.
+
+---
+
+## 7. Attribution round — pre-registered
+
+*Added 2026-08-17, **before any attribution model was fit**. Power checks:
+`research/06_attribution_power.py`, results in
+`research/outputs/06_attribution_power.json`. Every threshold below carries a
+power number, per the process law from document 04.*
+
+### The instrument
+
+Each power check simulates 400 datasets at the **real denominators** under a
+known true population SD, fits the beta-binomial hierarchy, and records the 89%
+upper bound the fit produces. That answers the question document 04's Gate 2
+never asked: *can this many observations reach the bound the threshold demands,
+even when the truth is exactly zero?*
+
+Fits use an exact grid posterior over `(mu, log_kappa)` rather than NUTS —
+the marginalized model has only two free parameters, so the posterior can be
+evaluated directly. It reproduces the Phase 1 nutpie fumble fit to within
+0.02 pp on the reported interval (`research/_betabinom_grid.py`, `self_check`),
+which is what licenses using it for thousands of power fits.
+
+### 3a — whose skill is the 14.3% interception spread?
+
+**Model.** Hierarchical logistic on charted interception-worthy throws,
+2022–2025, with **crossed** quarterback and defense random effects:
+
+```
+logit p(picked) = intercept + qb[passer] + defense[defteam]
+qb[·]      ~ Normal(0, sigma_qb)
+defense[·] ~ Normal(0, sigma_def)
+```
+
+Half-Normal(1) on both scales, on the log-odds scale. **Non-centered
+parameterization is a ruling, not a default**: document 04's Gate 1 failure was
+exactly a centered hierarchy funnelling, and with a median of 10 throws per
+quarterback-season the per-entity data is thinner here than it was there.
+
+**Reported quantity.** `sigma_qb` and `sigma_def`, each converted to a
+population SD in rate units at the league mean, with 89% intervals.
+
+**No pass/fail gate**, following the convention document 03 §6 Gate 3 set: these
+are estimation, and pre-registering a threshold for a quantity with no prior
+estimate is theatre. The **reporting rule** is pre-registered instead:
+
+- Both scales are reported with 89% intervals whatever they say.
+- A claim that the spread "belongs to" quarterbacks or to defenses requires that
+  entity's interval to exclude the achievable-null bound **and** the other's to
+  fail to, stated in percentage points.
+- If both exclude it, the spread is shared and the interception row of §3 stays
+  at the team grain.
+
+**Power, and the honesty it forces:**
+
+| Grain | Entities | Median n | Null 89% bound (90th pct) | Power at 10% relative | Power at 21% relative |
+|---|---|---|---|---|---|
+| Quarterback-season | 281 | 10 | 6.85 pp | 0.475 | 1.000 |
+| Defense-season | 128 | 23 | 6.03 pp | 0.738 | 1.000 |
+
+Document 04 measured the team-level spread at 6.6 pp (14.3% relative). Both
+grains resolve an effect that size, but **neither can rule out a spread below
+about 10% relative**. A null result at either grain is therefore not evidence of
+absence, and must not be written as one.
+
+### 3b — is offensive holding random?
+
+**The hypothesis**, stated in §3 before the fit: offensive holding is random even
+though pooled judgment calls persist, because holding occurs on most plays and
+the flag is a sampling of it.
+
+**Model.** The same beta-binomial hierarchy as document 03, on offensive-holding
+counts per team-season over plays. 320 team-seasons, 916,700 plays, 6,597
+holding calls, league rate 0.7196%. **False Start** is fit as a comparison arm
+on the identical denominator, so the pre-snap benchmark is like-for-like.
+
+**Pre-registered gate — this one has a real pass rule, because it is powered:**
+
+> **Pass** (holding is effectively random): the 89% upper bound on the
+> population SD of true offensive-holding rates is **below 0.0837 pp**
+> (11.6% of the league rate).
+
+**Power check:**
+
+| Condition | Outcome |
+|---|---|
+| True SD = 0 | bound lands below 0.0837 pp **90%** of the time *(threshold is set as this percentile)* |
+| True SD = 5% relative | correctly rejected 36.5% of the time |
+| **True SD = 12.5% relative** (the pooled-judgment figure) | **correctly rejected 99.3%** of the time |
+| True SD = 25% relative | correctly rejected 100% |
+
+This is the one attribution question the data answers cleanly. 916,700 plays is
+three orders of magnitude more evidence than the 4,898 fumbles that sank
+document 04's Gate 2, and the threshold is derived from the null distribution
+rather than from a football argument about what 0.0837 pp feels like.
+
+**On pass:** offensive holding splits out of the judgment class and gains a
+branch-point argument to be argued on its own merits in §2. **On failure:** the
+hypothesis is dead, the penalty rows of §3 stand unchanged, and no penalty is
+neutralized.
+
+### 3c — does return yardage persist?
+
+**Primary statistic.** Split-half correlation of mean interception return yards
+per defense-season, 200 random within-season splits — the identical machinery
+document 02 used, so the number is comparable to the ones already on record.
+319 defense-seasons, 4,304 interceptions, median 13 per defense-season.
+
+**Detectability floor.** At 319 team-seasons the 95% interval on a correlation
+has a half-width of about **±0.11**. Any true correlation below that is
+indistinguishable from zero here. Document 02's middle three components sat at
+r = 0.12–0.16, i.e. **only just** above this floor.
+
+**Secondary statistic.** Pick-six rate as a beta-binomial hierarchy — the binary
+form of the same question, on a league rate of 8.90%.
+
+**No pass/fail gate for 3c, and the power check is why:**
+
+| True SD | Relative | Power to reject "no skill" |
+|---|---|---|
+| 1.0 pp | 11.2% | 0.142 |
+| 2.0 pp | 22.5% | 0.330 |
+| 4.0 pp | 45.0% | 0.930 |
+
+Only a spread near **45% of the league rate** — roughly three times anything
+document 04 measured for any component — is reliably detectable. Committing a
+threshold here would repeat document 04's mistake with the arithmetic already in
+hand to know better. Both statistics are reported descriptively, with this table
+attached, and the return-yardage row of §3 will most likely resolve to *"not
+resolvable with ten seasons"* rather than to a verdict.
+
+### Constants added by this section
+
+| Constant | Value | Where it lives |
+|---|---|---|
+| Power-check datasets per scenario | 400 | `research/06_attribution_power.py` (`DATASETS`) |
+| **3b gate threshold** | **0.0837 pp** | this section, `research/06_attribution.py` |
+| 3b power at 12.5% relative | 0.993 | power check |
+| 3a null bound, QB / defense grain | 6.85 / 6.03 pp | power check |
+| 3c correlation detectability floor | ±0.11 | this section |
+| Reference relative spread | 12.5% | document 04, pooled judgment penalties |
