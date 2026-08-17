@@ -404,3 +404,208 @@ uninterpretable result either way.
 | Drives / team-games / team-seasons | 49,507 / 5,522 / 320 | measured, §2 |
 
 Results are written back into this document as §10.
+
+---
+
+## 10. Results
+
+*Script: `research/19_drive_anatomy.py`. Design, statistics and thresholds fixed
+by §§1–9 above, committed at `a2b9376` before this script produced a result.
+Results in `research/outputs/19_drive_anatomy.json`; the drive table itself is
+persisted to `research/outputs/drive_anatomy.parquet`.*
+
+### Gate outcomes, stated first
+
+| Gate | Rule | Result |
+|---|---|---|
+| **DA-1 — positive control** | points per drive far above the null 99th pct (0.0891) | **PASS** — r = **+0.629** |
+| **DA-1b — replication control** | F0 spread retention within 5 pp of 70.6% | **PASS** — **70.5%**, a gap of 0.08 pp |
+| **DA-2 — does the residual persist?** | reported against the null 95th pct | **every feature set persists** — F1 +0.324, F3 **+0.108**, F4 +0.132 |
+| **DA-3 — interpretability** | power ≥ 0.80 at r = 0.12 | **PASS** on all five (0.89–0.93) |
+| **DA-4 — spread retention** | descriptive | 70.5% → **94.8%** from depth to the rich summary |
+
+49,507 drives, 5,522 team-games, 320 team-seasons. Nothing below was chosen
+after seeing a number.
+
+### Gate DA-1b — the replication is exact, and that matters
+
+| Quantity | Document 08 §11 | Here |
+|---|---|---|
+| Share of between-team spread retained | 70.6% | **70.5%** |
+| corr(quality, adjustment) | −0.784 | **+0.784** *(sign-flipped twin — the residual is the negated adjustment)* |
+
+A reimplementation with new features, a different estimator and out-of-fold
+prediction rather than in-sample reproduces the number that killed DQW% to
+within a tenth of a percentage point, and reproduces its headline diagnostic to
+three decimal places. **Everything below is therefore a comparison against the
+thing that actually failed**, not against a lookalike.
+
+### The drive summary table
+
+49,507 drives in the resampling universe:
+
+| Result | Drives | Share |
+|---|---|---|
+| Punt | 22,382 | 45.2% |
+| Touchdown | 13,404 | 27.1% |
+| Field goal | 9,070 | 18.3% |
+| Turnover on downs | 3,021 | 6.1% |
+| Missed field goal | 1,630 | 3.3% |
+
+| Feature | Mean | Median |
+|---|---|---|
+| `start_yardline_100` | 70.9 | 75 |
+| `depth` | 39.2 | 39 |
+| `scrimmage_plays` | 6.15 | 6 |
+| `net_yards` | 34.4 | 29 |
+| `max_gain` | 16.7 | 14 |
+| `explosive_plays` | 0.70 | 0 |
+| `first_downs` | 1.85 | 1 |
+| `penalty_aid_yards` | 2.60 | 0 |
+
+**The entanglement §2 named is real and it is large.** On the 13,404 touchdown
+drives, **78.1%** have net yards within 5 of the starting distance to the goal —
+because a touchdown drive by definition travels the whole field. `net_yards`
+correlates with drive points at **+0.741** where `depth` correlates at −0.727.
+That is why F4 is quarantined: a successor leaning on `net_yards` is partly
+conditioning on the answer.
+
+### Question 1 — how much does a rich summary actually explain?
+
+| Feature set | OOF R² | Residual SD | **Spread retained** | corr(quality, residual) |
+|---|---|---|---|---|
+| F0 — depth cell means *(document 08's instrument)* | 0.581 | 1.92 | **70.5%** | +0.784 |
+| F1 — depth | 0.584 | 1.92 | 70.3% | +0.786 |
+| F2 — + start, plays | 0.641 | 1.78 | 76.4% | +0.737 |
+| **F3 — + explosive, max gain, first downs, penalty aid** | **0.880** | **1.03** | **94.8%** | **+0.355** |
+| F4 — + net yards | 0.902 | 0.93 | 96.8% | +0.266 |
+
+**The answer to question 1 is emphatically yes.** Depth alone explains 58% of
+the variance in a drive's points; the rich summary explains 88%, and it lifts
+between-team spread retention from 70.5% to **94.8%**. Document 08's instrument
+destroyed 29.5% of the real difference between NFL offenses; the rich summary
+destroys **5.2%**.
+
+F0 and F1 agree to three decimals, so none of that gain is the estimator.
+
+**One caution on the correlation column, which turns out to be a weaker
+diagnostic than it looks.** A team-season's points per drive *contains* its own
+residual, so even a perfectly specified model leaves
+`corr(quality, residual) = √(1 − retention²)` by pure arithmetic — 0.71 at F1's
+retention and 0.32 at F3's. The observed values (0.786 and 0.355) sit barely
+above those mechanical floors. **Most of what looks like a damning correlation is
+an identity, not a defect**, and a successor's sufficiency criteria must not lean
+on it. That is a design input for step 2 and it was not obvious in advance.
+
+### Question 2 — does the finishing residual persist?
+
+| Measure | Split-half r | 5th–95th pct | Threshold | Power at r = 0.12 | Reading |
+|---|---|---|---|---|---|
+| points per drive *(control)* | **+0.629** | +0.587 … +0.667 | — | — | harness works |
+| residual, F0 cell means | **+0.318** | +0.262 … +0.371 | 0.0705 | 0.90 | persists |
+| residual, F1 depth | **+0.324** | +0.269 … +0.377 | 0.0706 | 0.89 | persists |
+| residual, F2 advance | **+0.246** | +0.188 … +0.300 | 0.0674 | 0.92 | persists |
+| **residual, F3 production** | **+0.108** | +0.050 … +0.174 | 0.0695 | 0.89 | **persists** |
+| residual, F4 yardage | **+0.132** | +0.065 … +0.199 | 0.0642 | 0.93 | persists |
+
+**Every residual persists, including the rich one.** The rich summary cuts the
+persistence by two-thirds — from +0.324 to +0.108 — but does not extinguish it.
+
+Per the decision rule committed in §6 before this ran, that means: *"Step 2 is
+not pre-registered on F3. Report the finding; the successor's premise is
+refuted."* **That rule holds and it is what happens.** A resampling built on F3
+would still be redrawing something repeatable, which is how DQW% failed.
+
+Note also that F4 persists *more* than F3 despite explaining more variance.
+Adding the outcome-entangled feature does not help; it moves the residual
+somewhere the summary can see even less clearly.
+
+### Why the residual persists — exploratory, and it changes what step 2 should be
+
+**Labelled exploratory throughout because it was added after seeing the DA-2
+result**, per the precedent document 07 set for its DTW% arm and document 08 §9
+for its competitive-play control. It changes no gate. It changes what may
+honestly be *said*, and what step 2 should be built on.
+
+The obvious first suspect was that the persistence is nothing but offensive
+quality the summary cannot see. That would reconcile DA-2 with document 08 §9's
+finding that the red-zone **gap** does not persist (r = −0.034 at 87% power): a
+gap subtracts the team's own overall efficiency, so a uniformly good offense
+scores zero on it and positive on a residual.
+
+**It is not that.** Regressing each half's residual rate on that half's own
+offensive EPA per play, and correlating the regression residuals:
+
+| Measure | Uncontrolled r | Controlled for offensive EPA/play | Exploratory null 95th pct |
+|---|---|---|---|
+| residual, F1 depth | +0.324 | **+0.112** | 0.054 |
+| residual, F3 production | +0.108 | **+0.098** | 0.055 |
+| residual, F4 yardage | +0.132 | **+0.134** | 0.072 |
+
+F3's persistence barely moves. Whatever is repeating is not "being good at
+football".
+
+**So the same drives were valued three ways, and the answer is unambiguous:**
+
+| Valuation of the drive | Residual split-half r | Exploratory null 95th pct | Reading |
+|---|---|---|---|
+| Points — all channels | **+0.108** | 0.062 | persists |
+| **Touchdown points only** | **+0.042** | 0.056 | **flat** |
+| **Field-goal points only** | **+0.229** | 0.066 | **persists strongly** |
+
+> **Reaching the end zone, given a rich drive summary, does not persist. Turning
+> a drive into three points does — and more than twice as strongly as the
+> pooled measure.**
+
+That reconciles everything on the page. Document 08 §9's S1 measured *offensive
+EPA placement* and found no persistence; the touchdown row here measures the
+same channel a different way and agrees. What the pooled residual was carrying
+is the **kicking channel** — and kicker skill is not a mystery, it is a sized,
+persistent team property this project already measured (`sigma_kicker` = 0.342,
+document 05b §11) **and already neutralizes inside DTW%.**
+
+Document 08 §11's own defect register saw this coming, twice:
+
+> *"Field-goal make/miss sits inside the resampled quantity. A missed-FG drive
+> can be redrawn to 3 points, and DTW% already neutralizes FG luck."*
+>
+> *"The red-zone-only arm still resamples FG outcomes. **Open. Recorded for the
+> successor design.**"*
+
+It was recorded as a second reason never to combine the two measures. It is
+larger than that: **it is the dominant reason the finishing residual is not
+resampleable, and removing it is the successor design.**
+
+### What this changes
+
+1. **The successor is not "a richer summary".** A rich summary was necessary —
+   it lifted spread retention from 70.5% to 94.8% and cut residual persistence
+   by two-thirds — and it is not sufficient. Building the measure document 08
+   §11 sketched and re-running the rematch gate would have failed again, and
+   this round is why that will not happen.
+2. **A touchdown-valued drive resampling has a licensed premise**, on a
+   properly powered test: r = +0.042 against a 0.056 null, at 89% power against
+   the r = 0.12 reference. That is evidence of absence, not absence of evidence,
+   and it is step 2's design.
+3. **Field goals leave the resampled quantity entirely** and stay where they
+   already are — priced by the kicker hierarchy inside DTW%, with weather.
+   Resampling them in a second measure was double-counting a component the
+   project had already solved.
+4. **Nothing in document 05's treatment table moves.** No ledger row was at
+   stake. Gate A rules sequencing out of neutralization at any value of `w`, and
+   this round could not breach it.
+5. **`corr(quality, adjustment)` is a weaker sufficiency criterion than it
+   appears**, because most of it is the arithmetic identity above. Residual
+   persistence is the sharp instrument, and step 2's sufficiency criteria are
+   built on it.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **The pooled finishing residual persists at every summary tested** | F3 r = +0.108 against a 0.0695 threshold, 89% power | **Closed as diagnosed** — the persistence is the kicking channel, and the successor removes it. Not closed as *absent* |
+| The touchdown-only null is closer to its threshold than S1's was | +0.042 against 0.056, where document 08's S1 sat at −0.034 against 0.0703 | **Open.** The margin is real but slimmer; step 2 re-tests it on its own denominators |
+| `corr(quality, residual)` has a mechanical floor of √(1 − retention²) | 0.71 at F1, 0.32 at F3, against observed 0.786 and 0.355 | **New.** Any sufficiency criterion on this quantity must be stated net of the floor |
+| The quality control uses offensive EPA per play from the same games | Control and outcome share a half's plays | **Open.** Attenuates the control, so the controlled column is if anything an *under*-statement of what survives |
+| The exploratory channel split has 200-replicate nulls | Gated nulls used 500 | **Accepted.** Nothing is gated on them, and the two persisting rows clear their thresholds by 4× and 0.7× the null SD respectively |
+| F4 persists more than F3 | +0.132 against +0.108, despite higher R² | **Open, unexplained.** Consistent with `net_yards` absorbing production that the residual then misses, but untested |
