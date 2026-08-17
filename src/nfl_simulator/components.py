@@ -443,3 +443,56 @@ def variance_shares(games: pl.DataFrame, target: str = "epa_diff") -> pl.DataFra
             ]
         )
     return table
+
+
+# --------------------------------------------------------------------------
+# team perspective
+# --------------------------------------------------------------------------
+
+
+def to_team_games(games: pl.DataFrame) -> pl.DataFrame:
+    """Explode the game table into two rows per game, one per team.
+
+    Every component flips sign for the away team, because the home-perspective
+    convention means a positive value was good for the home side. Persistence
+    tests need this view: a team's luck has to follow the *team*, not the venue.
+    """
+    home = games.select(
+        pl.col("game_id"),
+        pl.col("season"),
+        pl.col("week"),
+        pl.col("home_team").alias("team"),
+        pl.col("away_team").alias("opponent"),
+        pl.lit(True).alias("is_home"),
+        pl.col("margin"),
+        pl.col("epa_diff"),
+        *[pl.col(component) for component in COMPONENTS],
+    )
+    away = games.select(
+        pl.col("game_id"),
+        pl.col("season"),
+        pl.col("week"),
+        pl.col("away_team").alias("team"),
+        pl.col("home_team").alias("opponent"),
+        pl.lit(False).alias("is_home"),
+        (-pl.col("margin")).alias("margin"),
+        (-pl.col("epa_diff")).alias("epa_diff"),
+        *[(-pl.col(component)).alias(component) for component in COMPONENTS],
+    )
+    return pl.concat([home, away]).sort(["season", "week", "team"])
+
+
+def luck_stripped_epa(games: pl.DataFrame, luck_components: tuple[str, ...]) -> pl.Expr:
+    """EPA differential with the named components removed.
+
+    Removing a component means "pretend that coin landed on its expectation",
+    which is exactly subtracting the swing term, because each swing is already
+    measured as a deviation from expectation.
+    """
+    unknown = set(luck_components) - set(COMPONENTS)
+    if unknown:
+        raise ValueError(f"unknown component(s): {sorted(unknown)}")
+    stripped = pl.col("epa_diff")
+    for component in luck_components:
+        stripped = stripped - pl.col(component)
+    return stripped

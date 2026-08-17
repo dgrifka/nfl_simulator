@@ -26,34 +26,7 @@ from nfl_simulator.components import (
     fit_fumble_baseline,
     variance_shares,
 )
-from nfl_simulator.ingest import PBP_SEASONS, load_pbp
-
-PBP_COLUMNS = [
-    "game_id",
-    "play_id",
-    "season",
-    "week",
-    "home_team",
-    "away_team",
-    "posteam",
-    "defteam",
-    "play_type",
-    "epa",
-    "result",
-    "fumble",
-    "fumble_lost",
-    "fumbled_1_team",
-    "fumble_recovery_1_team",
-    "fumble_out_of_bounds",
-    "aborted_play",
-    "interception",
-    "penalty",
-    "penalty_type",
-    "penalty_team",
-    "field_goal_result",
-    "kick_distance",
-    "spread_line",
-]
+from nfl_simulator.ingest import ANALYSIS_COLUMNS, PBP_SEASONS, load_pbp
 
 
 def audit(pbp: pl.DataFrame) -> dict:
@@ -186,7 +159,7 @@ def variance_tables(games: pl.DataFrame) -> dict:
 
 def main() -> None:
     paths.ensure_data_dirs()
-    pbp = load_pbp(PBP_SEASONS, columns=PBP_COLUMNS)
+    pbp = load_pbp(PBP_SEASONS, columns=ANALYSIS_COLUMNS)
     print(f"Loaded {pbp.height:,} plays across {len(PBP_SEASONS)} seasons")
 
     results = {"seasons": list(PBP_SEASONS)}

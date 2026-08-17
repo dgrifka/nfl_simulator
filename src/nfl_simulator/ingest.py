@@ -42,6 +42,35 @@ FTN_SEASONS: tuple[int, ...] = tuple(range(2022, 2026))
 
 MANIFEST_VERSION = 1
 
+# The columns every analysis in `research/` reads. Loading this subset instead of
+# all 372 pbp columns cuts the ten-season read from ~1.4 GB to ~90 MB.
+ANALYSIS_COLUMNS: list[str] = [
+    "game_id",
+    "play_id",
+    "season",
+    "week",
+    "home_team",
+    "away_team",
+    "posteam",
+    "defteam",
+    "play_type",
+    "epa",
+    "result",
+    "fumble",
+    "fumble_lost",
+    "fumbled_1_team",
+    "fumble_recovery_1_team",
+    "fumble_out_of_bounds",
+    "aborted_play",
+    "interception",
+    "penalty",
+    "penalty_type",
+    "penalty_team",
+    "field_goal_result",
+    "kick_distance",
+    "spread_line",
+]
+
 
 class IngestError(RuntimeError):
     """Raised when a pull fails validation badly enough to refuse the cache."""
