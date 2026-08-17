@@ -141,21 +141,41 @@ Two consequences worth stating before they surprise anyone:
 ## 3. Per-component treatment table
 
 `w` is computed at the median opportunity count per entity in the fitted sample.
-Rows marked *pending* are resolved by the step-3 attribution round and step-4 FG
-model, and this table is updated with their verdicts before the simulator is
-built.
 
-| Component | Gate A (branch point) | κ | typical n | **w** | Treatment | Source |
+**Updated 2026-08-17 at the end of Phase 3.** Every row below is now
+*neutralized*, *kept*, or *marked unresolvable with the power table that says
+why*. **There are no pending rows left**, which was the closing condition of the
+Phase 3 plan.
+
+| Component | Gate A (branch point) | κ / σ | typical n | **w** | Treatment | Source |
 |---|---|---|---|---|---|---|
 | **Fumble recovery** | **Pass** — loose ball, nobody controls the bounce | 1,408 | 15 / team-season | **0.011** | **Full.** `p` = league rate for the fumble's *class* | 04 |
-| **Field goal** | **Pass** — ball in flight, partly outside the kicker | `sigma` 0.360 | 29 / kicker-season | **0.285** | **Partial** vs that kicker's shrunk make probability at that distance | 05b |
-| **Interception** | **Pass** — given an interception-worthy throw, whether it is caught is partly the defender's luck | 71.5 | 24 / team-season | **0.251** | **Partial, at the team grain.** Step 3a could not attribute the spread to quarterbacks or defenses | 04, step 3a |
+| **Field goal** | **Pass** — ball in flight, partly outside the kicker | `sigma` 0.342 | 29 / kicker-season | **0.285** | **Partial** vs that kicker's shrunk make probability at that distance, **now adjusted for roof, wind and temperature** | 05b §9, §11 |
+| **Extra point** | **Pass** — ball in flight, same structure as a field goal | `sigma` 0.342 shared | 31 / kicker-season | **0.285** | **Partial** vs that kicker's shrunk extra-point probability. Population SD 2.42 pp against a 1.84 pp null bound, so kickers genuinely differ | 09 §8 |
+| **Interception** | **Pass** — given an interception-worthy throw, whether it is caught is partly the defender's luck | 71.5 | 24 / team-season | **0.251** | **None in v1.** Step 3a could not attribute the spread to quarterbacks or defenses, so no entity can carry `w` | 04, step 3a |
+| **Onside kick recovery** | **Pass** — a loose oblong ball in a scrum, structurally the fumble case | *not estimable* | **2 / team-season** | — | **None — unresolvable.** 599 kicks; power flat at **0.115** across a tenfold range of true spread. `w` cannot be measured, and document 05 §1 forbids choosing it | 09 §4, §8 |
 | **Penalty (pre-snap)** | **Fail** — no post-hoc branch | 3,967 | 2,813 plays | (0.415) | **None** | 04, step 3b |
 | **Penalty (judgment)** | **Fail** — officiating discretion measurably does not add noise (12.5% relative spread vs 14.0% pre-snap) | 3,243 | 2,813 plays | (0.465) | **None.** Subtype check closed: holding is *not* random | 04, step 3b |
-| **Return yardage** | **Fail** — a return is a played-out sequence, not a branch resolved by nobody | — | — | — | **None** in v1. No measurable persistence either (r = −0.014) | step 3c |
+| **Return yardage** | **Fail** — a return is a played-out sequence, not a branch resolved by nobody | — | — | — | **None.** No measurable persistence either (r = −0.014), on a test that could only have shown a large effect | step 3c |
+| **Drops** | **Fail** — a receiver's hands, not a coin | — | 437 / team-season | — | **None.** And teams *do* differ: 14.4% relative spread at 86.5% power, so this is a skill finding | 09 §2, §8 |
+| **Fourth-down conversion** | **Fail** — a played-out sequence | — | 21 / team-season | — | **None.** 7.0% relative spread | 09 §2, §8 |
+| **Two-point conversion** | **Fail** — a played-out sequence | — | 4 / team-season | — | **None.** Also unresolvable (power 0.292) | 09 §2, §8 |
+| **Sequencing — red-zone placement** | **Fail** — no branch point; a continuum of outcomes produced by football | — | 160 plays / team-season | — | **None.** It *is* luck (split-half r = −0.034 at 87% power) but it has no coin to replace. Reported separately, never as ledger rows | 08 §6, §9 |
+| **Sequencing — late-down placement** | **Fail** — same | — | 241 plays / team-season | — | **None.** Also luck (r = +0.000 at 92% power) | 08 §6, §9 |
+| **Sequencing — leverage timing** | **Fail** — same | — | 1,065 plays / team-season | — | **None.** And it is **skill**: r = +0.180, surviving a game-state control at +0.144 | 08 §9 |
 
 Parenthesised `w` values are shown to make §2's argument concrete. They are not
 used: those rows failed Gate A.
+
+**Three kinds of "none" appear in that table, and they are not the same claim.**
+
+1. **No branch point** (penalties, returns, drops, fourth down, two point, all
+   three sequencing rows). Gate A rules them out at any value of `w`. Six of
+   these were settled by mechanism before a model was fit.
+2. **A branch point, but no estimable entity** (interceptions, onside kicks).
+   The rule needs `w = n/(n+κ)` and the data cannot supply `κ`. Denied by
+   default, with the power table attached.
+3. **Nothing left to decide** — no row is in this state, which is the point.
 
 **The field-goal row is the one place the dial is genuinely entity-specific.**
 For every other component `w` is one number, because the opportunity counts are
@@ -270,12 +290,12 @@ margin. That is an identity, not a tolerance, and the simulator asserts it.
 
 | Defect | Evidence | Status |
 |---|---|---|
-| The entity's rate is estimated from a sample containing the game being adjudicated | A kicker's game contributes ~2 of ~100+ career attempts; a team-season's game contributes ~1 of ~15 fumbles | **Open, bounded.** Contamination is O(1/n) and always shrinks the measured luck toward zero (self-fulfilling rates), so the bias is conservative. A leave-one-game-out refit is Phase 3 |
+| The entity's rate is estimated from a sample containing the game being adjudicated | A kicker's game contributes ~2 of ~100+ career attempts; a team-season's game contributes ~1 of ~15 fumbles | **Open, bounded.** Contamination is O(1/n) and always shrinks the measured luck toward zero (self-fulfilling rates), so the bias is conservative. A leave-one-game-out refit was named for Phase 3 and **was not done** — Phase 3 spent its budget on the sequencing round, the coin-flip round, weather and interval coverage. Still open, still bounded, still conservative |
 | `points_per_epa` is a single global slope | Document 01 found r² = 0.991, so the residual is small but real (≈0.8% of margin variance) | **Accepted.** The residual is scoring-environment conversion, not luck being adjudicated, so it is deliberately excluded from the DTW interval |
-| Interception entity is unresolved | Team-season pools quarterbacks (document 04) | **Open.** Blocks the INT row of §3; step 3a resolves it |
+| Interception entity is unresolved | Team-season pools quarterbacks (document 04) | **Open, and step 3a could not resolve it** — both crossed factors straddle the design's null bound. The INT row of §3 is therefore *not neutralized* in v1. Needs more FTN seasons, not a better model |
 | Fumble classes are hand-assigned | Our taxonomy from `play_type` × `aborted_play`, not the NFL's | **Open.** Class list is in §3 so it can be argued with |
 | Gate A is a judgment, not a measurement | No statistic can detect the absence of a branch point | **Accepted, by design.** Stated in §2 so it is arguable rather than hidden |
-| Weather is absent from the FG model | Deferred per the handoff plan | **Open.** A windy 50-yarder is priced as a calm one, overstating the kicker's bad luck |
+| Weather is absent from the FG model | Deferred per the handoff plan | **CLOSED in Phase 3** (05b §10–11). Roof, wind and temperature are in the model; 7,507 of 10,731 field-goal ledger entries were repriced, and systematically by roof (+2.8 pp indoors, −0.2 pp outdoors) |
 | Simultaneous luck events are treated as independent coins | Two fumbles in one game are drawn independently | **Accepted.** They are separate physical events; correlation would have to come through the shared `p` draw, which layer 1 already supplies |
 
 ---
@@ -291,8 +311,24 @@ margin. That is an identity, not a tolerance, and the simulator asserts it.
 | `points_per_epa` | fit at simulator build time | `src/nfl_simulator/simulator.py` |
 | Bootstrap replicates | set in step 5, power-checked | `src/nfl_simulator/simulator.py` |
 
-Verdicts for the pending rows land in this document's §3 as step 3 and step 4
-complete. The rule in §1 does not change; only the table does.
+Verdicts for the pending rows landed in §3 as steps 3 and 4 completed, and Phase
+3 closed the remainder. **The rule in §1 never changed; only the table did** —
+which was the claim this document was written to make, and it survived two
+phases of components being added to it.
+
+### Constants added or revised by Phase 3
+
+| Constant | Value | Where it lives |
+|---|---|---|
+| `sigma_kicker` (weather model) | 0.342 | `research/outputs/fg_weather_summary.json` |
+| `beta_wind` | −0.0213 per mph | same — 5.50 pp lost at 45 yd, calm → 15 mph |
+| `beta_temp` | +0.00385 per °F | same — +2.66 pp across a 40 °F swing |
+| Roof effects at 45 yd | dome +4.53 pp · closed +4.66 pp · open +7.69 pp | same |
+| `delta_xp` | +0.167 log-odds | an extra point is easier than a 33-yard field goal |
+| `lambda_xp` | 1.263, interval contains 1 | kicking ability transfers to extra points |
+| Extra-point league rate / swing | 94.41% / 1.020 EPA | `src/nfl_simulator/components.py` (`fit_xp_baseline`) |
+| `WIND_CAP_MPH` | 30.0 | `src/nfl_simulator/fg_model.py` |
+| **`DEFAULT_COIN_DRAWS`** | **800** | `src/nfl_simulator/simulator.py` — a calibration constant, not a performance knob (document 10 §8) |
 
 ---
 

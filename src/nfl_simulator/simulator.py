@@ -23,22 +23,34 @@ so a game with no luck events returns its own result exactly.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
 import polars as pl
 
 from nfl_simulator.components import (
+    ExtraPointBaseline,
     FieldGoalBaseline,
     FumbleBaseline,
     fg_attempt_mask,
     live_fumble_mask,
+    xp_attempt_mask,
 )
-from nfl_simulator.fg_model import FieldGoalModel
+from nfl_simulator.fg_model import FieldGoalModel, Weather, sanitize_weather
 from nfl_simulator.ledger import Ledger, LedgerEntry
 
 DEFAULT_POSTERIOR_DRAWS = 400
-DEFAULT_COIN_DRAWS = 200
+
+# Not a performance knob. `dtw_per_draw` is an average over this many coin
+# flips, so its spread across posterior draws mixes real uncertainty about `p`
+# with Monte Carlo noise from a finite flip count — and the second does not
+# belong in a credible interval. `docs/research/10` §8 measured coverage against
+# this constant: at 100 the nominal 89% interval covered 97% of informative
+# games, and 800 is the smallest swept value that lands inside the
+# pre-registered band. Lowering it widens every reported interval.
+DEFAULT_COIN_DRAWS = 800
+
 DEFAULT_SEED = 20260817
 
 # Document 03's convention, carried through Phase 2.
@@ -188,7 +200,10 @@ def field_goal_events(
         kicker_season = (
             f"{row['season']}_{row['kicker_player_id']}" if row.get("kicker_player_id") else None
         )
-        draws = fg_model.make_probability(kicker_season, float(row["kick_distance"]))
+        weather = _weather_for(row)
+        draws = fg_model.make_probability(
+            kicker_season, float(row["kick_distance"]), weather=weather
+        )
         home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
         events.append(
             LuckEvent(
@@ -199,6 +214,71 @@ def field_goal_events(
                 realized=float(row["made"]),
                 expected_draws=_resample(draws, n_draws, rng),
                 swing=float(row["swing_value"]) * home_sign,
+            )
+        )
+    return events
+
+
+def _weather_for(row: dict) -> Weather | None:
+    """Sanitized conditions for one kick, or None when the frame has no weather.
+
+    A frame without `roof`/`wind`/`temp` is not an error — it is a Phase 2 replay,
+    and it must reproduce the Phase 2 ledger exactly. Returning None there means
+    the model's weather terms never fire.
+    """
+    if "roof" not in row:
+        return None
+    return sanitize_weather(row.get("roof"), row.get("wind"), row.get("temp"))
+
+
+def extra_point_events(
+    plays: pl.DataFrame,
+    baseline: ExtraPointBaseline | None,
+    fg_model: FieldGoalModel | None,
+    n_draws: int,
+    rng: np.random.Generator,
+) -> list[LuckEvent]:
+    """Extra points, neutralized partially against the kicker's shrunk rate.
+
+    Document 09 §2 gave extra points a branch point — a ball in flight, the same
+    structure as a field goal — and §8 measured a 2.422 pp population SD in
+    kicker rates against a 1.840 pp null bound, so kickers genuinely differ and
+    the treatment is partial rather than full.
+
+    `p` comes from the same hierarchical model the field goals use, which is
+    what "folded into the kicker model" means: one `sigma_kicker`, one set of
+    per-kicker effects, and an extra-point intercept offset. The EPA swing still
+    comes from the empirical branch means, because document 05 §4's layer 1
+    draws probabilities, not EPA values.
+    """
+    if baseline is None or "extra_point_attempt" not in plays.columns:
+        return []
+
+    attempts = plays.filter(xp_attempt_mask())
+    events = []
+    for row in attempts.iter_rows(named=True):
+        kicker_season = (
+            f"{row['season']}_{row['kicker_player_id']}" if row.get("kicker_player_id") else None
+        )
+        if fg_model is not None and row.get("kick_distance") is not None:
+            draws = fg_model.make_probability(
+                kicker_season, float(row["kick_distance"]), weather=_weather_for(row)
+            )
+            expected = _resample(draws, n_draws, rng)
+        else:
+            # No fitted model: fall back to the league rate, drawn rather than
+            # fixed, so layer 1 still carries the rate's own uncertainty.
+            expected = _class_rate_draws(baseline.n, baseline.p_make, n_draws, rng)
+        home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
+        events.append(
+            LuckEvent(
+                play_id=float(row["play_id"]),
+                component="extra_point",
+                event_class="extra point",
+                charged_team=row["posteam"],
+                realized=1.0 if row["extra_point_result"] == "good" else 0.0,
+                expected_draws=expected,
+                swing=baseline.swing_value * home_sign,
             )
         )
     return events
@@ -220,6 +300,48 @@ def _resample(draws: np.ndarray, n_draws: int, rng: np.random.Generator) -> np.n
 # --------------------------------------------------------------------------
 
 
+def bootstrap_margins(
+    events: Sequence[LuckEvent],
+    actual_margin: float,
+    points_per_epa: float,
+    n_coin_draws: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Document 05 §4's two-layer bootstrap, as a callable.
+
+    Layer 1 is already done — it is the `expected_draws` vector each event
+    carries. This runs layer 2 on top of it: at every posterior draw of `p`,
+    flip every coin `n_coin_draws` times and recompute the margin.
+
+    Returns ``(margins, dtw_per_draw)`` with shapes
+    ``(n_posterior_draws, n_coin_draws)`` and ``(n_posterior_draws,)``.
+
+    Extracted so the interval-coverage check in `docs/research/10` exercises the
+    simulator's own arithmetic rather than a re-implementation that could drift
+    from it — a calibration check on a copy of the code would prove nothing about
+    the code that ships.
+    """
+    # (posterior draws, events)
+    p = np.column_stack([event.expected_draws for event in events])
+    swing = np.array([event.swing for event in events])
+    realized = np.array([event.realized for event in events])
+
+    uniforms = rng.random((p.shape[0], n_coin_draws, len(events)))
+    replayed = (uniforms < p[:, None, :]).astype(float)
+
+    # The adjustment is `realized - replayed`, NOT `replayed - p`. We are
+    # replacing the branch that happened with one drawn fairly, so the margin
+    # moves by the difference between the two branches. Using the deviation
+    # from expectation instead would have mean zero, which would recentre the
+    # whole distribution on the actual result and quietly neutralize nothing.
+    adjustment = ((realized[None, None, :] - replayed) * swing[None, None, :]).sum(axis=2)
+    margins = actual_margin - adjustment * points_per_epa
+
+    # DTW per posterior draw, so the interval is a genuine credible interval on
+    # the probability rather than a spread of coin-flip noise.
+    return margins, (margins > 0).mean(axis=1)
+
+
 def simulate_game(
     plays: pl.DataFrame,
     *,
@@ -227,6 +349,7 @@ def simulate_game(
     fg_baseline: FieldGoalBaseline,
     fg_model: FieldGoalModel | None,
     points_per_epa: float,
+    xp_baseline: ExtraPointBaseline | None = None,
     n_posterior_draws: int = DEFAULT_POSTERIOR_DRAWS,
     n_coin_draws: int = DEFAULT_COIN_DRAWS,
     seed: int = DEFAULT_SEED,
@@ -245,6 +368,7 @@ def simulate_game(
 
     events = fumble_events(plays, fumble_baseline, n_posterior_draws, rng)
     events += field_goal_events(plays, fg_baseline, fg_model, n_posterior_draws, rng)
+    events += extra_point_events(plays, xp_baseline, fg_model, n_posterior_draws, rng)
 
     ledger = Ledger(tuple(event.to_entry() for event in events))
     total_luck_epa = ledger.total_luck_epa()
@@ -265,26 +389,9 @@ def simulate_game(
             total_luck_epa=total_luck_epa,
         )
 
-    # (posterior draws, events)
-    p = np.column_stack([event.expected_draws for event in events])
-    swing = np.array([event.swing for event in events])
-    realized = np.array([event.realized for event in events])
-
-    # Layer 2: flip every coin `n_coin_draws` times at each posterior draw's p.
-    uniforms = rng.random((n_posterior_draws, n_coin_draws, len(events)))
-    replayed = (uniforms < p[:, None, :]).astype(float)
-
-    # The adjustment is `realized - replayed`, NOT `replayed - p`. We are
-    # replacing the branch that happened with one drawn fairly, so the margin
-    # moves by the difference between the two branches. Using the deviation
-    # from expectation instead would have mean zero, which would recentre the
-    # whole distribution on the actual result and quietly neutralize nothing.
-    adjustment = ((realized[None, None, :] - replayed) * swing[None, None, :]).sum(axis=2)
-    margins = actual_margin - adjustment * points_per_epa
-
-    # DTW per posterior draw, so the interval is a genuine credible interval on
-    # the probability rather than a spread of coin-flip noise.
-    dtw_per_draw = (margins > 0).mean(axis=1)
+    margins, dtw_per_draw = bootstrap_margins(
+        events, actual_margin, points_per_epa, n_coin_draws, rng
+    )
 
     return SimulationResult(
         game_id=game_id,

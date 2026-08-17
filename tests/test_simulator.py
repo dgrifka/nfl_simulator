@@ -346,3 +346,311 @@ def test_interceptions_are_never_neutralized_in_v1(baselines, fg_model):
     rows = [play(1.0, interception=1, epa=-4.0)]
     result = run(rows, baselines, fg_model)
     assert len(result.ledger) == 0
+
+
+# --------------------------------------------------------------------------
+# extra points — docs/research/09 §8, and weather — docs/research/05b §10
+# --------------------------------------------------------------------------
+
+
+from nfl_simulator.components import fit_xp_baseline  # noqa: E402
+
+
+def xp_play(play_id: float, *, kicker: str, made: bool, team: str = HOME, **overrides) -> dict:
+    return play(
+        play_id,
+        posteam=team,
+        play_type="extra_point",
+        epa=0.07 if made else -0.95,
+        extra_point_attempt=1,
+        extra_point_result="good" if made else "failed",
+        kick_distance=33.0,
+        kicker_player_id=kicker,
+        **overrides,
+    )
+
+
+@pytest.fixture
+def xp_baseline():
+    """A synthetic corpus with a deliberately non-league 80% make rate.
+
+    Not 94%, so a test cannot pass by accidentally agreeing with the real rate.
+    """
+    rows = [xp_play(9000.0 + i, kicker="K1", made=i < 80) for i in range(100)]
+    return fit_xp_baseline(frame(rows), min_attempts=10)
+
+
+def test_the_extra_point_baseline_recovers_its_make_rate(xp_baseline):
+    assert xp_baseline.p_make == pytest.approx(0.80)
+
+
+def test_the_extra_point_baseline_swing_is_the_gap_between_the_branches(xp_baseline):
+    assert xp_baseline.swing_value == pytest.approx(0.07 - -0.95)
+
+
+def test_a_made_extra_point_books_good_luck_for_the_kicking_team(baselines, fg_model, xp_baseline):
+    result = run(
+        [play(1.0), xp_play(2.0, kicker="K_UNKNOWN", made=True)],
+        baselines,
+        fg_model,
+        xp_baseline=xp_baseline,
+    )
+    entries = [e for e in result.ledger if e.component == "extra_point"]
+    assert len(entries) == 1
+    assert entries[0].luck_epa > 0
+
+
+def test_a_missed_extra_point_books_bad_luck_for_the_kicking_team(baselines, fg_model, xp_baseline):
+    result = run(
+        [play(1.0), xp_play(2.0, kicker="K_UNKNOWN", made=False)],
+        baselines,
+        fg_model,
+        xp_baseline=xp_baseline,
+    )
+    entries = [e for e in result.ledger if e.component == "extra_point"]
+    assert entries[0].luck_epa < 0
+
+
+def test_the_away_teams_extra_point_luck_carries_the_opposite_sign(
+    baselines, fg_model, xp_baseline
+):
+    home = run(
+        [play(1.0), xp_play(2.0, kicker="K", made=True, team=HOME)],
+        baselines,
+        fg_model,
+        xp_baseline=xp_baseline,
+    )
+    away = run(
+        [play(1.0), xp_play(2.0, kicker="K", made=True, team=AWAY)],
+        baselines,
+        fg_model,
+        xp_baseline=xp_baseline,
+    )
+    home_luck = next(e for e in home.ledger if e.component == "extra_point").luck_epa
+    away_luck = next(e for e in away.ledger if e.component == "extra_point").luck_epa
+    assert home_luck == pytest.approx(-away_luck)
+
+
+def test_a_good_kicker_is_charged_less_bad_luck_for_the_same_missed_extra_point(
+    baselines, fg_model, xp_baseline
+):
+    """Document 09 §8 assigned extra points PARTIAL neutralization, so the
+    kicker's own rate has to reach the number."""
+    good = run(
+        [play(1.0), xp_play(2.0, kicker="K_GOOD", made=False)],
+        baselines,
+        fg_model,
+        xp_baseline=xp_baseline,
+    )
+    bad = run(
+        [play(1.0), xp_play(2.0, kicker="K_BAD", made=False)],
+        baselines,
+        fg_model,
+        xp_baseline=xp_baseline,
+    )
+    good_luck = next(e for e in good.ledger if e.component == "extra_point").luck_epa
+    bad_luck = next(e for e in bad.ledger if e.component == "extra_point").luck_epa
+    assert good_luck < bad_luck
+
+
+def test_extra_points_are_skipped_when_no_baseline_is_supplied(baselines, fg_model):
+    """Phase 2 reproducibility: without an extra-point baseline, nothing is booked."""
+    result = run([play(1.0), xp_play(2.0, kicker="K", made=False)], baselines, fg_model)
+    assert [e for e in result.ledger if e.component == "extra_point"] == []
+
+
+def test_the_ledger_still_sums_with_extra_points_in_it(baselines, fg_model, xp_baseline):
+    result = run(
+        [
+            play(1.0),
+            fumble_play(2.0, fumbler=HOME, recoverer=AWAY),
+            fg_play(3.0, kicker="K_GOOD", distance=47.0, made=False),
+            xp_play(4.0, kicker="K_GOOD", made=False),
+        ],
+        baselines,
+        fg_model,
+        xp_baseline=xp_baseline,
+        points_per_epa=0.6,
+    )
+    applied = result.actual_margin - result.deserved_margin
+    assert applied == pytest.approx(result.ledger.total_luck_epa() * 0.6)
+
+
+def test_a_windy_field_goal_is_charged_less_bad_luck_than_a_calm_one(baselines):
+    """Document 05b §10's whole point: a windy 50-yarder must not be priced as calm."""
+    windy_model = FieldGoalModel(
+        alpha=np.full(50, 1.9),
+        beta=np.full(50, -0.115),
+        gamma=np.full(50, 0.13),
+        kicker_effects={},
+        roof_effects={"dome": np.full(50, 0.3)},
+        beta_wind=np.full(50, -0.02),
+        beta_temp=np.full(50, 0.004),
+        wind_centre=8.0,
+        temp_centre=58.0,
+    )
+    calm = run(
+        [
+            play(1.0),
+            fg_play(
+                2.0, kicker="K", distance=50.0, made=False, roof="outdoors", wind=0.0, temp=58.0
+            ),
+        ],
+        baselines,
+        windy_model,
+    )
+    windy = run(
+        [
+            play(1.0),
+            fg_play(
+                2.0, kicker="K", distance=50.0, made=False, roof="outdoors", wind=25.0, temp=58.0
+            ),
+        ],
+        baselines,
+        windy_model,
+    )
+    calm_luck = next(e for e in calm.ledger if e.component == "field_goal").luck_epa
+    windy_luck = next(e for e in windy.ledger if e.component == "field_goal").luck_epa
+    # Both are bad luck (negative); the windy miss must be charged less of it.
+    assert windy_luck > calm_luck
+
+
+def test_a_dome_kick_is_charged_more_bad_luck_for_the_same_miss(baselines):
+    windy_model = FieldGoalModel(
+        alpha=np.full(50, 1.9),
+        beta=np.full(50, -0.115),
+        gamma=np.full(50, 0.13),
+        kicker_effects={},
+        roof_effects={"dome": np.full(50, 0.3)},
+        beta_wind=np.full(50, -0.02),
+        beta_temp=np.full(50, 0.004),
+        wind_centre=8.0,
+        temp_centre=58.0,
+    )
+    dome = run(
+        [
+            play(1.0),
+            fg_play(2.0, kicker="K", distance=50.0, made=False, roof="dome", wind=None, temp=None),
+        ],
+        baselines,
+        windy_model,
+    )
+    outdoors = run(
+        [
+            play(1.0),
+            fg_play(
+                2.0, kicker="K", distance=50.0, made=False, roof="outdoors", wind=8.0, temp=58.0
+            ),
+        ],
+        baselines,
+        windy_model,
+    )
+    dome_luck = next(e for e in dome.ledger if e.component == "field_goal").luck_epa
+    outdoor_luck = next(e for e in outdoors.ledger if e.component == "field_goal").luck_epa
+    assert dome_luck < outdoor_luck
+
+
+def test_weather_columns_may_be_absent_entirely(baselines, fg_model):
+    """A frame without roof/temp/wind must still simulate, for Phase 2 replay."""
+    result = run(
+        [play(1.0), fg_play(2.0, kicker="K", distance=50.0, made=False)], baselines, fg_model
+    )
+    assert len(result.ledger) == 1
+
+
+# --------------------------------------------------------------------------
+# the two-layer bootstrap, as a callable — docs/research/10
+# --------------------------------------------------------------------------
+
+
+from nfl_simulator.simulator import LuckEvent, bootstrap_margins  # noqa: E402
+
+
+def coin(p: float, *, realized: float, swing: float = 1.0, draws: int = 200) -> LuckEvent:
+    return LuckEvent(
+        play_id=1.0,
+        component="test",
+        event_class="test",
+        charged_team=HOME,
+        realized=realized,
+        expected_draws=np.full(draws, p),
+        swing=swing,
+    )
+
+
+def test_bootstrap_returns_one_dtw_per_posterior_draw():
+    margins, dtw = bootstrap_margins(
+        [coin(0.5, realized=1.0, draws=37)],
+        actual_margin=3.0,
+        points_per_epa=1.0,
+        n_coin_draws=11,
+        rng=np.random.default_rng(0),
+    )
+    assert margins.shape == (37, 11)
+    assert dtw.shape == (37,)
+
+
+def test_bootstrap_leaves_the_margin_alone_when_the_coin_lands_where_it_did():
+    """A certain event that happened cannot move the margin: p = 1, realized = 1."""
+    margins, _ = bootstrap_margins(
+        [coin(1.0, realized=1.0, swing=5.0)],
+        actual_margin=3.0,
+        points_per_epa=2.0,
+        n_coin_draws=20,
+        rng=np.random.default_rng(0),
+    )
+    np.testing.assert_allclose(margins, 3.0)
+
+
+def test_bootstrap_removes_the_full_swing_when_a_certain_event_did_not_happen():
+    """p = 0 but it happened: every replay takes it back, at swing x points_per_epa."""
+    margins, _ = bootstrap_margins(
+        [coin(0.0, realized=1.0, swing=5.0)],
+        actual_margin=3.0,
+        points_per_epa=2.0,
+        n_coin_draws=20,
+        rng=np.random.default_rng(0),
+    )
+    np.testing.assert_allclose(margins, 3.0 - 5.0 * 2.0)
+
+
+def test_bootstrap_dtw_is_a_probability_per_draw():
+    _, dtw = bootstrap_margins(
+        [coin(0.5, realized=1.0, swing=8.0)],
+        actual_margin=1.0,
+        points_per_epa=1.0,
+        n_coin_draws=500,
+        rng=np.random.default_rng(3),
+    )
+    assert np.all((dtw >= 0.0) & (dtw <= 1.0))
+
+
+def test_the_default_coin_draw_count_is_the_calibrated_one():
+    """A calibration-critical constant, not a performance knob.
+
+    `docs/research/10` §8 measured the DTW interval's coverage as a function of
+    this number and found it must be at least 800: below that, Monte Carlo noise
+    in the coin flips inflates the reported interval and the 89% band covers
+    ~97% of the time on informative games. Lowering it for speed would silently
+    break the interval's meaning, which is what this test exists to stop.
+    """
+    from nfl_simulator.simulator import DEFAULT_COIN_DRAWS
+
+    assert DEFAULT_COIN_DRAWS >= 800
+
+
+def test_more_coin_draws_produce_a_narrower_dtw_interval():
+    """The mechanism behind that constant: excess width is Monte Carlo noise."""
+    events = [coin(0.5, realized=1.0, swing=6.0, draws=400)]
+
+    def width(n_coin_draws: int) -> float:
+        _, dtw = bootstrap_margins(
+            events,
+            actual_margin=1.0,
+            points_per_epa=1.0,
+            n_coin_draws=n_coin_draws,
+            rng=np.random.default_rng(7),
+        )
+        return float(np.percentile(dtw, 94.5) - np.percentile(dtw, 5.5))
+
+    assert width(1600) < width(50)
