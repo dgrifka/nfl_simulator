@@ -556,3 +556,70 @@ def test_weather_columns_may_be_absent_entirely(baselines, fg_model):
         [play(1.0), fg_play(2.0, kicker="K", distance=50.0, made=False)], baselines, fg_model
     )
     assert len(result.ledger) == 1
+
+
+# --------------------------------------------------------------------------
+# the two-layer bootstrap, as a callable — docs/research/10
+# --------------------------------------------------------------------------
+
+
+from nfl_simulator.simulator import LuckEvent, bootstrap_margins  # noqa: E402
+
+
+def coin(p: float, *, realized: float, swing: float = 1.0, draws: int = 200) -> LuckEvent:
+    return LuckEvent(
+        play_id=1.0,
+        component="test",
+        event_class="test",
+        charged_team=HOME,
+        realized=realized,
+        expected_draws=np.full(draws, p),
+        swing=swing,
+    )
+
+
+def test_bootstrap_returns_one_dtw_per_posterior_draw():
+    margins, dtw = bootstrap_margins(
+        [coin(0.5, realized=1.0, draws=37)],
+        actual_margin=3.0,
+        points_per_epa=1.0,
+        n_coin_draws=11,
+        rng=np.random.default_rng(0),
+    )
+    assert margins.shape == (37, 11)
+    assert dtw.shape == (37,)
+
+
+def test_bootstrap_leaves_the_margin_alone_when_the_coin_lands_where_it_did():
+    """A certain event that happened cannot move the margin: p = 1, realized = 1."""
+    margins, _ = bootstrap_margins(
+        [coin(1.0, realized=1.0, swing=5.0)],
+        actual_margin=3.0,
+        points_per_epa=2.0,
+        n_coin_draws=20,
+        rng=np.random.default_rng(0),
+    )
+    np.testing.assert_allclose(margins, 3.0)
+
+
+def test_bootstrap_removes_the_full_swing_when_a_certain_event_did_not_happen():
+    """p = 0 but it happened: every replay takes it back, at swing x points_per_epa."""
+    margins, _ = bootstrap_margins(
+        [coin(0.0, realized=1.0, swing=5.0)],
+        actual_margin=3.0,
+        points_per_epa=2.0,
+        n_coin_draws=20,
+        rng=np.random.default_rng(0),
+    )
+    np.testing.assert_allclose(margins, 3.0 - 5.0 * 2.0)
+
+
+def test_bootstrap_dtw_is_a_probability_per_draw():
+    _, dtw = bootstrap_margins(
+        [coin(0.5, realized=1.0, swing=8.0)],
+        actual_margin=1.0,
+        points_per_epa=1.0,
+        n_coin_draws=500,
+        rng=np.random.default_rng(3),
+    )
+    assert np.all((dtw >= 0.0) & (dtw <= 1.0))

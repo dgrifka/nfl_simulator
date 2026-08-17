@@ -23,6 +23,7 @@ so a game with no luck events returns its own result exactly.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -290,6 +291,48 @@ def _resample(draws: np.ndarray, n_draws: int, rng: np.random.Generator) -> np.n
 # --------------------------------------------------------------------------
 
 
+def bootstrap_margins(
+    events: Sequence[LuckEvent],
+    actual_margin: float,
+    points_per_epa: float,
+    n_coin_draws: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Document 05 §4's two-layer bootstrap, as a callable.
+
+    Layer 1 is already done — it is the `expected_draws` vector each event
+    carries. This runs layer 2 on top of it: at every posterior draw of `p`,
+    flip every coin `n_coin_draws` times and recompute the margin.
+
+    Returns ``(margins, dtw_per_draw)`` with shapes
+    ``(n_posterior_draws, n_coin_draws)`` and ``(n_posterior_draws,)``.
+
+    Extracted so the interval-coverage check in `docs/research/10` exercises the
+    simulator's own arithmetic rather than a re-implementation that could drift
+    from it — a calibration check on a copy of the code would prove nothing about
+    the code that ships.
+    """
+    # (posterior draws, events)
+    p = np.column_stack([event.expected_draws for event in events])
+    swing = np.array([event.swing for event in events])
+    realized = np.array([event.realized for event in events])
+
+    uniforms = rng.random((p.shape[0], n_coin_draws, len(events)))
+    replayed = (uniforms < p[:, None, :]).astype(float)
+
+    # The adjustment is `realized - replayed`, NOT `replayed - p`. We are
+    # replacing the branch that happened with one drawn fairly, so the margin
+    # moves by the difference between the two branches. Using the deviation
+    # from expectation instead would have mean zero, which would recentre the
+    # whole distribution on the actual result and quietly neutralize nothing.
+    adjustment = ((realized[None, None, :] - replayed) * swing[None, None, :]).sum(axis=2)
+    margins = actual_margin - adjustment * points_per_epa
+
+    # DTW per posterior draw, so the interval is a genuine credible interval on
+    # the probability rather than a spread of coin-flip noise.
+    return margins, (margins > 0).mean(axis=1)
+
+
 def simulate_game(
     plays: pl.DataFrame,
     *,
@@ -337,26 +380,9 @@ def simulate_game(
             total_luck_epa=total_luck_epa,
         )
 
-    # (posterior draws, events)
-    p = np.column_stack([event.expected_draws for event in events])
-    swing = np.array([event.swing for event in events])
-    realized = np.array([event.realized for event in events])
-
-    # Layer 2: flip every coin `n_coin_draws` times at each posterior draw's p.
-    uniforms = rng.random((n_posterior_draws, n_coin_draws, len(events)))
-    replayed = (uniforms < p[:, None, :]).astype(float)
-
-    # The adjustment is `realized - replayed`, NOT `replayed - p`. We are
-    # replacing the branch that happened with one drawn fairly, so the margin
-    # moves by the difference between the two branches. Using the deviation
-    # from expectation instead would have mean zero, which would recentre the
-    # whole distribution on the actual result and quietly neutralize nothing.
-    adjustment = ((realized[None, None, :] - replayed) * swing[None, None, :]).sum(axis=2)
-    margins = actual_margin - adjustment * points_per_epa
-
-    # DTW per posterior draw, so the interval is a genuine credible interval on
-    # the probability rather than a spread of coin-flip noise.
-    dtw_per_draw = (margins > 0).mean(axis=1)
+    margins, dtw_per_draw = bootstrap_margins(
+        events, actual_margin, points_per_epa, n_coin_draws, rng
+    )
 
     return SimulationResult(
         game_id=game_id,
