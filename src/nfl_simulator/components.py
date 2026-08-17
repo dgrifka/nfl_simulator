@@ -271,6 +271,61 @@ def _fill_sparse_fg_bins(table: pl.DataFrame, min_bin_size: int) -> pl.DataFrame
 
 
 # --------------------------------------------------------------------------
+# extra points
+# --------------------------------------------------------------------------
+
+
+def xp_attempt_mask() -> pl.Expr:
+    return (pl.col("extra_point_attempt") == 1) & pl.col("extra_point_result").is_not_null()
+
+
+@dataclass
+class ExtraPointBaseline:
+    """League make rate and the EPA value of a made versus a missed extra point.
+
+    A single rate rather than a table of bins, because 98.5% of extra points are
+    snapped from the same 33 yards — the 2015 rule change fixed the distance, and
+    the handful at other distances were moved by a penalty. There is no curve to
+    fit, which is exactly why document 05b §2 kept them out of the field-goal
+    distance model.
+    """
+
+    n: int
+    p_make: float
+    epa_made: float
+    epa_missed: float
+
+    @property
+    def swing_value(self) -> float:
+        return self.epa_made - self.epa_missed
+
+
+def fit_xp_baseline(pbp: pl.DataFrame, min_attempts: int = 30) -> ExtraPointBaseline | None:
+    """Empirical make rate and branch EPA means for extra points.
+
+    Returns ``None`` when the frame holds too few attempts to estimate either
+    branch, so a caller can simply skip the component rather than book luck
+    against a rate measured on a handful of kicks.
+    """
+    if "extra_point_attempt" not in pbp.columns:
+        return None
+    attempts = pbp.filter(xp_attempt_mask()).with_columns(
+        (pl.col("extra_point_result") == "good").cast(pl.Int8).alias("made")
+    )
+    made = attempts.filter(pl.col("made") == 1)["epa"]
+    missed = attempts.filter(pl.col("made") == 0)["epa"]
+    if attempts.height < min_attempts or made.len() == 0 or missed.len() == 0:
+        return None
+
+    return ExtraPointBaseline(
+        n=attempts.height,
+        p_make=float(attempts["made"].mean()),
+        epa_made=float(made.mean()),
+        epa_missed=float(missed.mean()),
+    )
+
+
+# --------------------------------------------------------------------------
 # play-level decomposition
 # --------------------------------------------------------------------------
 

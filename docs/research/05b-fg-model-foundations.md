@@ -646,3 +646,225 @@ pass exposed the distance-adjusted make rate by weather bucket. **The thresholds
 above come from the null simulation and could not have been moved by those
 numbers**, but the exposure is recorded here rather than left unsaid, as
 document 08 §7 records the equivalent for the sequencing round.
+
+---
+
+## 11. Weather and extra points — results
+
+*Script: `research/14_fg_weather_model.py`. Design, priors and gates fixed by §10
+above, committed at `8e0b50e` before this script existed. Results in
+`research/outputs/fg_weather_summary.json`.*
+
+### Gate outcomes, stated first
+
+| Gate | Quadratic (pre-registered) | Cubic (fallback) |
+|---|---|---|
+| **W-1** sampler health | **PASS** | **PASS** |
+| **W-2** weather calibration | **PASS** — 1.970 vs 2.595 | **PASS** — 1.995 vs 2.739 |
+| **W-3** wind resolvable | **PASS** | **PASS** |
+| **W-4** distance calibration | **FAIL** — 2.863 vs 2.658 | **PASS** — 2.102 vs 2.674 |
+| **W-5** posterior predictive | **PASS** | **PASS** |
+| W-6 extra-point transfer | reported | reported |
+| W-7 temperature | reported | reported |
+
+**The pre-registered quadratic curve failed Gate W-4, and the fallback §9 named
+in advance was applied** — *"a spline or a monotone fit is the Phase 3 option"* —
+as a cubic term in centred distance. Both arms are kept in the record. **Adopted
+arm: cubic.**
+
+23,549 kicks (10,731 field goals, 12,818 extra points), 433 kicker-seasons.
+
+### Why the quadratic failed W-4, and why it is not weather's fault
+
+The temptation is to read this as "adding weather broke the distance curve". It
+did not, and the per-bin table says so:
+
+| Distance bin | Attempts | of which XP | Observed | Predicted | Miss | Standardized |
+|---|---|---|---|---|---|---|
+| 20–24 | 1,025 | 1 | 98.8% | 98.7% | +0.15 pp | 0.43 |
+| 25–29 | 1,435 | 35 | 96.9% | 97.3% | −0.32 | 0.75 |
+| 30–34 | 14,124 | 12,627 | 94.6% | 94.5% | +0.12 | 0.62 |
+| 35–39 | 1,664 | 101 | 89.8% | 90.2% | −0.38 | 0.53 |
+| 40–44 | 1,585 | 16 | 82.9% | 83.9% | −0.97 | 1.06 |
+| 45–49 | 1,637 | 38 | 74.0% | 75.7% | −1.63 | 1.55 |
+| **50–54** | **1,392** | **0** | **71.0%** | **67.4%** | **+3.57** | **2.86** |
+| 55–59 | 540 | 0 | 60.0% | 60.3% | −0.33 | 0.16 |
+
+The failure is **entirely the 50–54 yard bin**, which contains **zero extra
+points** and no weather-driven reweighting. It is the same bin §9 already
+flagged: *"The 50–54 bin does not improve, and that is worth saying plainly. It
+still sits 3.4 points above prediction under both models."* It was **+3.4 pp
+then and +3.57 pp now.**
+
+What changed is the *bar*, not the miss. §9 recorded Gate FG-2 as passing
+**narrowly** — 2.716 against 2.755 — and named the risk: *"the quadratic is
+adequate, not comfortably right."* Adding 12,818 observations tightened the
+posterior predictive reference from 2.755 to 2.658, and a defect that was
+already on the register crossed the line.
+
+**This is what a defect register is for.** The row was written in Phase 2, the
+fallback was named in Phase 2, and Phase 3 executed it without improvising.
+
+The field-goals-only variant of the statistic is identical (2.863 against a
+2.649 reference), which settles the other candidate explanation: extra points
+are not what broke it. §10's wording did not specify whether W-4 ran on all
+kicks or on field goals alone; both are reported, they agree, and the ambiguity
+is recorded as a defect rather than resolved after seeing which one passed.
+
+The cubic fixes it — the 50–54 bin falls from +3.57 pp to +2.60 pp (standardized
+2.86 → 2.10) at the cost of the 45–49 bin drifting from −1.63 to −2.14 pp. The
+curve is redistributed rather than rescued, and the 50–54 selection hypothesis
+from §9 remains the better explanation of what is left.
+
+### The fitted model
+
+| Parameter | Mean | 89% interval |
+|---|---|---|
+| `alpha` (log-odds at 40 yd) | 1.747 | 1.70 – 1.80 |
+| `beta` (per yard) | −0.108 | −0.117 – −0.099 |
+| `gamma` (quadratic / 100) | 0.204 | 0.13 – 0.27 |
+| `delta_cubic` (cubic / 1000) | −0.068 | −0.11 – −0.026 |
+| **`sigma_kicker`** | **0.342** | **0.268 – 0.417** |
+| `roof[dome]` | +0.285 | +0.176 – +0.393 |
+| `roof[closed]` | +0.294 | +0.180 – +0.411 |
+| `roof[open]` | +0.529 | +0.238 – +0.830 |
+| **`beta_wind`** (per mph) | **−0.0213** | **−0.0305 – −0.0119** |
+| `beta_temp` (per °F) | +0.00385 | +0.00122 – +0.00655 |
+| `delta_xp` | +0.167 | +0.050 – +0.284 |
+| `lambda_xp` | 1.263 | 0.862 – 1.725 |
+
+**`sigma_kicker` barely moved** — 0.360 in Phase 2, 0.342 now. That is the check
+that mattered most and it is easy to overlook: if adding weather had collapsed
+the kicker spread, the previous model would have been attributing conditions to
+kickers, and every Phase 2 kicker estimate would have been contaminated. It did
+not. Kicker skill and kicking conditions are close to orthogonal, which is what
+you would expect when kickers work in varied venues.
+
+### Gate W-3 — wind is real, and about as large as the raw data suggested
+
+> `beta_wind` = **−0.0213** per mph, 89% interval −0.0305 to −0.0119, against a
+> pre-registered threshold of +0.00268. The interval's *upper* bound clears it by
+> a wide margin.
+>
+> **At 45 yards, going from calm to a 15 mph wind costs 5.50 percentage points of
+> make probability (89% interval 3.08 – 7.91).**
+
+That lands above the 4 pp effect §10's power table put at 0.800 power, so this
+is a result the design was built to resolve rather than one scraped off its
+edge. The 5.5 pp figure is close to the ~5 pp gap the raw distance-adjusted bins
+showed between calm and 10–14 mph, which is corroboration from a completely
+different direction.
+
+### Roof — indoor kicking is materially easier
+
+| Roof | Make-rate change at 45 yd |
+|---|---|
+| Dome | **+4.53 pp** |
+| Closed retractable | **+4.66 pp** |
+| Open retractable | **+7.69 pp** |
+
+Dome and closed are statistically indistinguishable from each other and both
+exclude zero decisively — a roof is a roof. "Open" is larger but rests on 204
+attempts and its interval is correspondingly wide (+0.238 to +0.830 log-odds);
+it is also the one level where a selection story is plausible, since a
+retractable roof is *opened* on pleasant days.
+
+### Gate W-7 — temperature does something, and it is small
+
+> `beta_temp` = **+0.00385** per °F, 89% interval +0.00122 to +0.00655. Its lower
+> bound clears the null bound of −0.00084, so **the pre-registered reporting rule
+> permits a claim.**
+>
+> **Across a 40 °F swing, +2.66 percentage points of make probability at 45
+> yards.** Warmer is easier.
+
+This was the term least expected to survive — the raw distance-adjusted temp
+buckets showed no monotone trend at all. The reason it appears here and not
+there is that the raw buckets confound temperature with wind and roof, and cold
+games are windier. Conditioning on both isolates it.
+
+### Gate W-6 — extra points, and what "folded in" turned out to mean
+
+> `lambda_xp` = **1.263**, 89% interval **0.862 – 1.725**. **The interval
+> contains 1**, so per the reporting rule committed in §10, **no claim is made
+> that extra-point ability differs from field-goal ability.**
+
+That is the useful answer: a kicker's field-goal ability transfers to extra
+points, and the point estimate above 1 is not resolvable from noise. Sharing one
+kicker effect is therefore supported rather than assumed — which is exactly what
+`lambda_xp` was added to test.
+
+> `delta_xp` = **+0.167** log-odds, 89% interval +0.050 to +0.284, **excluding
+> zero.**
+
+An extra point is genuinely easier than a field goal *from the same 33 yards* —
+about **+0.9 pp** at that base rate. A plausible mechanism is that a PAT is a
+routine, uncontested snap-hold-kick where a 33-yard field goal is a live
+scrimmage play with a rush. The offset earns its place, and §10's pre-registered
+check on it — *"the XP offset must be estimated, not assumed zero"* — resolves in
+favour of keeping it.
+
+### Gate W-8 — what actually changed in the ledgers
+
+*Script: `research/15_simulator_v11.py`. v1's artifacts are left untouched, since
+document 07's validation was run against them.*
+
+| Quantity | v1 | v1.1 |
+|---|---|---|
+| Ledger entries | 16,645 | **29,463** |
+| — fumble | 5,914 | 5,914 |
+| — field goal | 10,731 | 10,731 |
+| — **extra point** | **0** | **12,818** |
+
+**Field goals repriced: 7,507 of 10,731** moved by more than half a point of
+make probability. Mean absolute shift **2.27 pp**, maximum **23.07 pp**.
+
+**And the direction is systematic, which was the entire argument for doing
+this:**
+
+| Roof | Attempts | Mean change in make probability |
+|---|---|---|
+| Open retractable | 204 | **+4.94 pp** |
+| Closed retractable | 1,500 | **+2.85 pp** |
+| Dome | 1,700 | **+2.79 pp** |
+| Outdoors | 7,327 | **−0.22 pp** |
+
+Indoor kicks are now priced as the easier kicks they are, so a missed dome kick
+is charged *more* bad luck and an outdoor miss slightly less. Under v1 every
+one of those 3,404 indoor attempts was mispriced in the same direction, for ten
+seasons — precisely the systematic error §7 predicted.
+
+Game-level effect:
+
+| Quantity | Value |
+|---|---|
+| Mean absolute change in deserved margin | **0.355 points** (max 3.10) |
+| Mean absolute change in DTW% | **0.0148** (max 0.403) |
+| Games whose DTW winner flipped | **47 of 2,761 (1.70%)** |
+
+### The re-validation
+
+The treatment table changed, so document 06's Gate 1 had to be **re-earned
+rather than inherited**. Same 531 pairs, same statistic, same +0.010
+non-inferiority margin, same seed.
+
+> **Mean paired Δ log loss = −0.00133, SE 0.00277, 95% CI
+> [−0.00675, +0.00409]. PASS.**
+>
+> Document 07 measured −0.00159 (SE 0.00273) on v1.
+
+Essentially unchanged, and still non-inferior. The weather adjustment and the
+extra-point component together move 47 games' verdicts without degrading the
+predictive content of a game by any amount this design would call meaningful.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **The 50–54 yard bin still misses by +2.6 pp** | Worst bin under all three curves now fitted | **Open.** The §9 attempt-selection hypothesis is untested; the cubic reduces the miss without explaining it |
+| The cubic has no mechanism story | Added to fix a calibration failure, like `gamma` before it | **Open.** It is a curvature correction and must not be read as a theory of kicking |
+| §10 did not say whether W-4 ran on all kicks or field goals only | Both computed; they agree | **Closed** by reporting both, but the wording was a gap |
+| Wind direction is not in the data | A 20 mph crosswind and a 20 mph tailwind are recorded identically | **Open, and it caps how well any wind term can do.** It biases toward finding *less* wind effect, so −0.0213 is a floor |
+| "Open" roof rests on 204 attempts | +7.69 pp with a wide interval | **Open.** Plausibly selection — retractable roofs open on pleasant days |
+| Extra points are inside `core` in the Phase 1 decomposition | `components.py` buckets `extra_point` plays into `core`, while the simulator now books them as their own ledger rows | **Open, and self-consistent.** The simulator anchors on the actual margin rather than on the decomposition, so the ledger identity still holds exactly; but the two views of a game disagree about where XP luck lives |
+| Kicker-season rows still not independent across seasons | Unchanged from §7 | **Open** |

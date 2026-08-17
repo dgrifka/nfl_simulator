@@ -184,6 +184,29 @@ def design_matrix(attempts: pl.DataFrame, report: dict) -> tuple[np.ndarray, lis
 # --------------------------------------------------------------------------
 
 
+def fit_and_intervals(x: np.ndarray, y: np.ndarray, indices: dict[str, int]) -> dict:
+    """89% intervals for several coefficients from one fit.
+
+    Gate W-7's pre-registered reporting rule requires a temperature null bound
+    "built the same way Gate W-3's was", so the null simulation records both
+    coefficients rather than only wind. Both are generated with a true value of
+    zero, so neither bound is informed by the other.
+    """
+    beta = _rematch.fit_logistic(x, y)
+    p = 1.0 / (1.0 + np.exp(-np.clip(x @ beta, -30, 30)))
+    w = np.clip(p * (1.0 - p), 1e-9, None)
+    covariance = np.linalg.inv(x.T @ (x * w[:, None]) + 1e-9 * np.eye(x.shape[1]))
+    z = 1.5982  # 89% equal-tailed, the project's convention
+    return {
+        name: (
+            float(beta[i]),
+            float(beta[i] - z * np.sqrt(covariance[i, i])),
+            float(beta[i] + z * np.sqrt(covariance[i, i])),
+        )
+        for name, i in indices.items()
+    }
+
+
 def fit_and_interval(x: np.ndarray, y: np.ndarray, index: int) -> tuple[float, float, float]:
     """Coefficient, and its 89% equal-tailed interval from the observed information.
 
@@ -259,20 +282,31 @@ def main() -> None:
     )
 
     # ---- null: what does a true zero produce? ----------------------------
-    print(f"\n=== Null: true wind effect = 0 ({DATASETS} datasets) ===")
+    print(f"\n=== Null: true wind and temperature effects = 0 ({DATASETS} datasets) ===")
+    indices = {"wind": wind_index, "temp": names.index("beta_temp")}
     null_upper = np.empty(DATASETS)
+    null_temp_lower = np.empty(DATASETS)
     for i in range(DATASETS):
         rng = np.random.default_rng(RANDOM_SEED + i)
         y = simulate(x, kicker_idx, len(kicker_levels), 0.0, rng)
-        _, _, upper = fit_and_interval(x, y, wind_index)
-        null_upper[i] = upper
+        fitted = fit_and_intervals(x, y, indices)
+        null_upper[i] = fitted["wind"][2]
+        null_temp_lower[i] = fitted["temp"][1]
     threshold = float(np.percentile(null_upper, 10))
+    # Wind is expected negative, so its gate is on the upper bound. Temperature
+    # has no expected sign, so the mirror bound is recorded too: the 90th
+    # percentile of the 89% LOWER bound, which a positive effect must clear.
+    temp_threshold = float(np.percentile(null_temp_lower, 90))
     print(
         f"  89% upper bound on beta_wind under a true zero: "
         f"mean {null_upper.mean():+.5f}, 10th pct {threshold:+.5f}"
     )
     print(
-        "  Gate threshold is that 10th percentile, so a true-zero design clears it\n"
+        f"  89% lower bound on beta_temp under a true zero: "
+        f"mean {null_temp_lower.mean():+.6f}, 90th pct {temp_threshold:+.6f}"
+    )
+    print(
+        "  Each gate threshold is that percentile, so a true-zero design clears it\n"
         "  10% of the time by construction — the same construction Gate FG-3 used."
     )
 
@@ -302,7 +336,9 @@ def main() -> None:
         "datasets": DATASETS,
         "coefficient_names": names,
         "gate_w3_threshold": threshold,
+        "gate_w7_temp_threshold": temp_threshold,
         "null_mean_upper_bound": float(null_upper.mean()),
+        "null_mean_temp_lower_bound": float(null_temp_lower.mean()),
         "power": rows,
         "published_incumbent": {
             "alpha": ALPHA,

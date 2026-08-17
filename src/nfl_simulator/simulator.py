@@ -29,12 +29,14 @@ import numpy as np
 import polars as pl
 
 from nfl_simulator.components import (
+    ExtraPointBaseline,
     FieldGoalBaseline,
     FumbleBaseline,
     fg_attempt_mask,
     live_fumble_mask,
+    xp_attempt_mask,
 )
-from nfl_simulator.fg_model import FieldGoalModel
+from nfl_simulator.fg_model import FieldGoalModel, Weather, sanitize_weather
 from nfl_simulator.ledger import Ledger, LedgerEntry
 
 DEFAULT_POSTERIOR_DRAWS = 400
@@ -188,7 +190,10 @@ def field_goal_events(
         kicker_season = (
             f"{row['season']}_{row['kicker_player_id']}" if row.get("kicker_player_id") else None
         )
-        draws = fg_model.make_probability(kicker_season, float(row["kick_distance"]))
+        weather = _weather_for(row)
+        draws = fg_model.make_probability(
+            kicker_season, float(row["kick_distance"]), weather=weather
+        )
         home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
         events.append(
             LuckEvent(
@@ -199,6 +204,71 @@ def field_goal_events(
                 realized=float(row["made"]),
                 expected_draws=_resample(draws, n_draws, rng),
                 swing=float(row["swing_value"]) * home_sign,
+            )
+        )
+    return events
+
+
+def _weather_for(row: dict) -> Weather | None:
+    """Sanitized conditions for one kick, or None when the frame has no weather.
+
+    A frame without `roof`/`wind`/`temp` is not an error — it is a Phase 2 replay,
+    and it must reproduce the Phase 2 ledger exactly. Returning None there means
+    the model's weather terms never fire.
+    """
+    if "roof" not in row:
+        return None
+    return sanitize_weather(row.get("roof"), row.get("wind"), row.get("temp"))
+
+
+def extra_point_events(
+    plays: pl.DataFrame,
+    baseline: ExtraPointBaseline | None,
+    fg_model: FieldGoalModel | None,
+    n_draws: int,
+    rng: np.random.Generator,
+) -> list[LuckEvent]:
+    """Extra points, neutralized partially against the kicker's shrunk rate.
+
+    Document 09 §2 gave extra points a branch point — a ball in flight, the same
+    structure as a field goal — and §8 measured a 2.422 pp population SD in
+    kicker rates against a 1.840 pp null bound, so kickers genuinely differ and
+    the treatment is partial rather than full.
+
+    `p` comes from the same hierarchical model the field goals use, which is
+    what "folded into the kicker model" means: one `sigma_kicker`, one set of
+    per-kicker effects, and an extra-point intercept offset. The EPA swing still
+    comes from the empirical branch means, because document 05 §4's layer 1
+    draws probabilities, not EPA values.
+    """
+    if baseline is None or "extra_point_attempt" not in plays.columns:
+        return []
+
+    attempts = plays.filter(xp_attempt_mask())
+    events = []
+    for row in attempts.iter_rows(named=True):
+        kicker_season = (
+            f"{row['season']}_{row['kicker_player_id']}" if row.get("kicker_player_id") else None
+        )
+        if fg_model is not None and row.get("kick_distance") is not None:
+            draws = fg_model.make_probability(
+                kicker_season, float(row["kick_distance"]), weather=_weather_for(row)
+            )
+            expected = _resample(draws, n_draws, rng)
+        else:
+            # No fitted model: fall back to the league rate, drawn rather than
+            # fixed, so layer 1 still carries the rate's own uncertainty.
+            expected = _class_rate_draws(baseline.n, baseline.p_make, n_draws, rng)
+        home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
+        events.append(
+            LuckEvent(
+                play_id=float(row["play_id"]),
+                component="extra_point",
+                event_class="extra point",
+                charged_team=row["posteam"],
+                realized=1.0 if row["extra_point_result"] == "good" else 0.0,
+                expected_draws=expected,
+                swing=baseline.swing_value * home_sign,
             )
         )
     return events
@@ -227,6 +297,7 @@ def simulate_game(
     fg_baseline: FieldGoalBaseline,
     fg_model: FieldGoalModel | None,
     points_per_epa: float,
+    xp_baseline: ExtraPointBaseline | None = None,
     n_posterior_draws: int = DEFAULT_POSTERIOR_DRAWS,
     n_coin_draws: int = DEFAULT_COIN_DRAWS,
     seed: int = DEFAULT_SEED,
@@ -245,6 +316,7 @@ def simulate_game(
 
     events = fumble_events(plays, fumble_baseline, n_posterior_draws, rng)
     events += field_goal_events(plays, fg_baseline, fg_model, n_posterior_draws, rng)
+    events += extra_point_events(plays, xp_baseline, fg_model, n_posterior_draws, rng)
 
     ledger = Ledger(tuple(event.to_entry() for event in events))
     total_luck_epa = ledger.total_luck_epa()
