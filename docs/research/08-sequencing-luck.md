@@ -413,8 +413,9 @@ cannot breach it.**
 So a luck verdict routes to a **second number reported alongside DTW%**, not
 into it: a drive-level bootstrap answering *"how often does this set of drive
 qualities produce a win?"* Its design is step 2 of this phase and is
-pre-registered in §8 below, after the results are in, because its shape depends
-on which channels came back as luck. Its relationship to DTW% is fixed now:
+pre-registered in §10 below, after these results are in, because its shape
+depends on which channels came back as luck. Its relationship to DTW% is fixed
+now:
 
 > **DTW% and the sequencing measure are two complementary numbers about one
 > game, and neither is a component of the other.** DTW% asks *"given the plays
@@ -459,3 +460,245 @@ on which channels came back as luck. Its relationship to DTW% is fixed now:
 | Team-seasons / team-games | 320 / 5,522 | measured, §2 |
 
 Results are written back into this document as §9.
+
+---
+
+## 9. Results
+
+*Script: `research/10_sequencing.py`. Design, statistics and thresholds fixed by
+§§1–8 above, committed at `9d6f11d` before this script produced a result.
+Results in `research/outputs/10_sequencing.json`.*
+
+### Gate outcomes, stated first
+
+| Gate | Rule | Result |
+|---|---|---|
+| **S-1 — positive control** | S0 far above the null 99th pct (0.0917) | **PASS** — r = **+0.601** |
+| **S-2 — S1 red-zone gap** | r > 0.0703 | **FAIL** — r = **−0.034** → **luck** |
+| **S-2 — S2 late-down gap** | r > 0.0689 | **FAIL** — r = **+0.000** → **luck** |
+| **S-2 — S3 WPA−EPA gap** | r > 0.0648 | **PASS** — r = **+0.180** → **skill** |
+| **S-3 — interpretability** | power ≥ 0.80 at r = 0.12 | **PASS** on all three (0.87 / 0.92 / 0.92) |
+
+320 team-seasons, 5,522 team-games, 343,543 scrimmage plays. Nothing below was
+chosen after seeing a number.
+
+### The full table
+
+| Measure | Split-half r | 5th–95th pct | Gate S-2 threshold | Verdict |
+|---|---|---|---|---|
+| S0 overall offensive EPA/play *(control)* | **+0.601** | +0.560 … +0.641 | — | harness works |
+| S1 red-zone gap | **−0.034** | −0.104 … +0.025 | 0.0703 | **luck** |
+| S2 late-down gap | **+0.000** | −0.071 … +0.065 | 0.0689 | **luck** |
+| S3 WPA−EPA gap | **+0.180** | +0.121 … +0.238 | 0.0648 | **skill** |
+
+Document 02's own per-game-averaged estimator, run as the pre-registered
+secondary so the numbers stay comparable to its published table, agrees on every
+row: +0.597, −0.020, +0.013, +0.176.
+
+### Gate S-1 — the harness works, and then some
+
+Offensive EPA per play splits at **r = +0.601**, against document 02's +0.519 for
+the core EPA *differential*. The gap between those two is expected and is worth
+one sentence: document 02 measured a differential, which folds a team's defense
+in alongside its offense and therefore carries two sources of noise. This measure
+is offense-only, so it is the more reliable of the two. The harness is live.
+
+### S1 and S2 — where production lands is not a team property
+
+**Red-zone finishing does not persist. It is, if anything, mildly
+anti-persistent** — a team that outperformed its own baseline inside the 20 in
+one random half of its season was very slightly *worse* than its baseline in the
+other half. −0.034 sits comfortably inside the null's body (null mean +0.000,
+SD 0.042), so the negative sign is noise rather than a finding; what matters is
+that it is nowhere near the 0.0703 the gate required.
+
+**Late-down conversion over baseline is a dead flat zero.** +0.0005. It is
+difficult to construct a cleaner null result.
+
+These are the two claims most often made about "clutch" offenses, and this design
+had **87% and 92% power** to detect an effect the size of the smallest one this
+project has ever called real. So per §6's decision rule this is **evidence of
+absence, not absence of evidence** — the first time in the project that
+distinction has been available, and it is available only because the power
+calculation ran first.
+
+What it does *not* say: that red-zone offense is unimportant, or that teams do
+not differ in red-zone EPA. They do — but they differ there in the same
+proportion they differ everywhere else. The **gap** is what carries no signal.
+A good red-zone offense is a good offense, measured in a small window.
+
+### S3 — leverage timing is real, and it is the round's surprise
+
+**r = +0.180**, with a 5th–95th band of +0.121 to +0.238 that never approaches
+the 0.0648 threshold. This is larger than any of document 02's middle three
+(interceptions +0.164, field goals +0.145, penalties +0.121) and it sits on a
+channel nobody in this project had measured.
+
+Restated in football: teams differ, repeatably, in how much win probability they
+extract from a fixed amount of expected-points production. Two offenses can
+generate identical EPA and one of them converts it into meaningfully more
+winning, because its production lands in moments that decide games.
+
+### What S3 is actually measuring — exploratory, not pre-registered
+
+**Labelled exploratory because it was added after seeing the S-2 result**, per
+the precedent document 07 set for its DTW% arm. It changes no verdict: §6's
+decision rule already says an S-2 pass changes nothing about the simulator. It
+changes only what may honestly be *said* about the number.
+
+The obvious rival explanation is dull: win probability moves fast in a one-score
+game and barely at all once a game is decided, so a team whose games stay close
+converts EPA into WPA at a higher rate than the league slope **regardless of when
+inside the game its production landed.** "Plays close games" is itself a stable
+team property, so it would manufacture exactly this persistence with no timing
+skill existing at all.
+
+| Check | Result | Reading |
+|---|---|---|
+| corr(season S3, season S0 offensive quality) | **−0.008** | S3 is orthogonal to being good at offense. It is not a disguised quality measure |
+| corr(season S3, mean \|score differential\|) | **−0.205** | The game-state confound is real but modest — closer games do give higher S3 |
+| **S3 on competitive plays only** (\|score diff\| ≤ 8, 294,976 plays, 65% of the sample, slope refit to 0.03086) | **r = +0.144** | **It survives.** |
+
+The third row is the decisive one. Restricting to one-score game states removes
+the blowout-versus-nailbiter distinction by construction, and refitting the
+slope on that subset removes the constant offset that would otherwise
+manufacture a correlation. Persistence falls from +0.180 to **+0.144** — still
+more than double the 0.0648 threshold, and still above document 02's penalty
+figure.
+
+**So roughly a fifth of S3's persistence was game state and four-fifths was not.**
+Leverage timing is a real, repeatable team property inside competitive football.
+That is a genuine finding and it is also, deliberately, a finding that changes
+nothing the simulator does: it is skill, it already lives in `core`, and
+document 05's Gate A would have kept it out of the ledger even if it had not.
+
+### What this changes
+
+1. **Nothing in document 05's treatment table.** No sequencing channel earns a
+   ledger row, because none of them has a branch point. The rule was committed
+   in §6 before the results existed and it holds in both directions.
+2. **Red-zone and late-down finishing become a reported measure, not an
+   adjustment.** They are luck, on a properly powered test, and §10 pre-registers
+   the drive-outcome resampling that reports them.
+3. **The 70% "core" block is no longer a single indivisible thing.** Two of its
+   three tested sub-channels are noise. That does not shrink core's *variance
+   share* — the production is still real — but it does mean a meaningful slice
+   of what looks like offensive quality in a single game is placement rather than
+   ability.
+4. **S3 is a candidate for a future product surface**, and explicitly not for the
+   simulator. A "this team converts production into wins" number is interesting
+   on its own terms; folding it into DTW% would be double-counting.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| S3's mechanism is unidentified | Persistence survives the game-state control, but *why* teams differ — coaching, quarterback, situational scheme — is untested | **Open.** A crossed QB × coach model is the natural next step and is out of Phase 3's scope |
+| The competitive-play control is exploratory | Added after seeing the result | **Open, labelled.** Excluded from every gate |
+| S1's point estimate is negative | −0.034, inside the null's body | **Accepted.** Reported as a null result, not as anti-persistence |
+| Sequencing is tested only at the team-season grain | A team changes coordinators mid-season | **Open.** Same limitation document 04 recorded for interceptions |
+
+---
+
+## 10. The drive-outcome resampling — pre-registered
+
+*Written after §9's results and **before `research/11_drive_bootstrap.py` exists**.
+This is the "separate reported measure" §6 committed to in advance; its shape,
+but not its existence, waited on which channels came back as luck.*
+
+### What it is
+
+S1 and S2 say that **where a team's production landed relative to the red zone
+and relative to third down is noise.** So the measure holds fixed how far each
+drive advanced the ball — which is production, and skill — and re-draws whether
+that advance became points.
+
+```
+for each offensive drive:
+    depth   = min(yardline_100 at the SNAP of any play in the drive)   # observed
+    points* ~ League P(drive points | depth bin)                       # resampled
+
+DQ margin = sum(home points*) - sum(away points*) + non-offensive scoring (observed)
+DQW%      = P(DQ margin > 0) over replicates
+```
+
+**Depth is taken at the snap, never at the end of the play**, and that is the
+single most important line in this section. A touchdown drive necessarily ends at
+`yardline_100 = 0`, so defining depth by where the drive *finished* would encode
+the outcome into the conditioning variable and make the resampling vacuous.
+Taking the deepest snap makes a drive that scored from the 3 and a drive that was
+stopped at the 3 exchangeable, which is exactly the comparison S1's null result
+licenses.
+
+### What is resampled and what is not
+
+| Quantity | Treatment | Why |
+|---|---|---|
+| Depth reached by each drive | **Observed, never resampled** | It is the production. That is the skill S0 confirmed persists |
+| Offensive points given depth | **Resampled** at the league conditional rate | S1 says finishing relative to baseline is noise |
+| Non-offensive scoring (pick-sixes, return TDs, safeties) | **Observed** | Interceptions and returns are not neutralized anywhere in this project (document 05 §3) |
+| Number of drives, drive start position | **Observed** | Both are consequences of the two teams' play, not of a branch |
+| Play calling, drive continuation, clock | **Not modelled at all** | `CLAUDE.md` puts full play-level re-simulation out of scope, and this design respects that: no play is ever replayed |
+
+### Gates
+
+**Gate D-1 — the resampling is unbiased on the league.**
+*Pass rule:* the mean resampled offensive points per drive, pooled over all
+drives in the sample, is within 0.01 points of the observed mean. This is an
+identity check, not a hypothesis: resampling from the league's own conditional
+distribution must reproduce the league's own mean. Failure means the conditional
+table or the depth definition is wrong.
+
+**Gate D-2 — non-inferiority on the rematch harness.**
+*Incumbent:* game 1's actual margin, in the identical logistic model document 06
+§1 specifies.
+*Statistic:* mean out-of-fold log loss, drive-quality margin minus actual margin,
+paired at the rematch pair, 10-fold CV, `random_seed = 20260817`.
+*Pass rule:* the **upper** bound of the 95% CI lies below **+0.010 log loss** —
+the same margin document 06 §4 pre-registered, on the same 531 pairs, with the
+same measured false-alarm rate of 0.008 and 88.9% power against a predictor that
+is 15% noise.
+
+The **drive-quality margin** is the primary predictor and **DQW%** the secondary,
+in that order, because document 07 measured that a probability compressed toward
+0 and 1 discards margin information and carries a larger standard error. Fixing
+the order now prevents choosing the better-looking arm later.
+
+**No superiority gate, and the reason is on record.** Document 06 §3 computed the
+minimum detectable luck share at 80% power as **52% of margin variance**. This
+resampling removes more variance than the fumble-plus-FG neutralization does, but
+nothing this project can build reaches 52%. A superiority test would fail
+regardless of quality and its failure would carry no information.
+
+**Gate D-3 — DQW% and DTW% are distinct, reported descriptively.**
+*Statistic:* the correlation between DQW% and DTW% across all games, and the
+count of games where they disagree about the winner.
+*No pass rule.* This is reported so a reader can see for themselves that the two
+numbers are answering different questions. If they were to correlate above ~0.95
+the honest conclusion would be that reporting both is redundant, and that
+conclusion is admissible in advance.
+
+### Their relationship, restated for the product
+
+**Two complementary numbers about one game, and neither is a component of the
+other.**
+
+- **DTW%** — *"once the coin flips are set to their expectations, who deserved to
+  win?"* Holds the sequencing fixed; re-draws the fumbles and the field goals.
+- **DQW%** — *"given the drives this team produced, how often does that
+  production win?"* Holds the coin flips fixed; re-draws the finishing.
+
+They are not to be multiplied, averaged, or combined into a single index. Doing
+so would count the same game twice through two different lenses, and the
+per-component ledger — the thing that makes DTW% auditable — has no equivalent
+for a quantity built by averaging two bootstraps.
+
+### Known defects, stated before the build
+
+| Defect | Evidence | Status |
+|---|---|---|
+| Conditioning on depth understates offenses that score from distance | A 45-yard touchdown has depth 45, where the league TD rate is low, so the drive is scored as fortunate | **Open, and the largest defect.** It conflates explosive-play ability with finishing luck. Direction is stated wherever the measure is reported |
+| S1 licenses the resampling *inside* the red zone; outside it the extension is an assumption | S1 is defined on `yardline_100 <= 20` | **Open, stated.** Reported with a red-zone-drives-only variant so the licensed part is separable |
+| Touchdowns are valued at the league average points-per-TD | Two-point conversions and missed extra points are folded into one constant | **Accepted.** Extra points are document 09's question, and a per-drive XP model would be a larger build than the measure warrants |
+| Drives are resampled independently | Two drives in one game are drawn independently | **Accepted.** Same reasoning as document 05 §5's row on simultaneous luck events |
+| The game being adjudicated is inside the league conditional table | ~10 drives of ~22,000 | **Open, bounded** at O(1/n), an order of magnitude smaller than the FG model's contamination |
