@@ -16,6 +16,8 @@ dependencies = [
     # arviz-plots). Code written against the 0.x `az.plot_*` API will not import.
     "pymc>=6.0",
     "arviz>=1.1",
+    # PyMC 6 auto-selects nutpie when present; 2-5x faster than the PyMC sampler.
+    "nutpie>=0.13",
     "matplotlib>=3.9",
     "plotly>=5.22",
 ]
