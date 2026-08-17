@@ -148,7 +148,10 @@ def fit_grid(
 
     # Beta(2,2) on mu, transformed to logit(mu): multiply by |dmu/dtheta| = mu(1-mu).
     log_prior_mu = (
-        (MU_PRIOR_A - 1) * np.log(mu) + (MU_PRIOR_B - 1) * np.log1p(-mu) + np.log(mu) + np.log1p(-mu)
+        (MU_PRIOR_A - 1) * np.log(mu)
+        + (MU_PRIOR_B - 1) * np.log1p(-mu)
+        + np.log(mu)
+        + np.log1p(-mu)
     )
     log_prior_kappa = -0.5 * ((log_kappa_grid - LOG_KAPPA_PRIOR_MEAN) / LOG_KAPPA_PRIOR_SD) ** 2
 
