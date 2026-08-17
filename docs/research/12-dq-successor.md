@@ -515,3 +515,179 @@ quantity built by averaging two bootstraps.
 | Resampled drives / team-games | 38,807 / 5,520 | measured, §2 |
 
 Results are written back into this document as §11.
+
+---
+
+## 11. Results
+
+*Script: `research/20_dq_successor.py`. Design, criteria and thresholds fixed by
+§§1–10 above, committed at `b0bc656` before this script existed. Results in
+`research/outputs/20_dq_successor.json`.*
+
+### Outcome, stated first
+
+| Criterion | Rule | Result |
+|---|---|---|
+| **SC-1 — residual must not persist** *(binding)* | r ≤ 0.0669 | **PASS** — r = **−0.029** [−0.090, +0.029] |
+| **SC-2 — spread must survive** | retention ≥ 0.95 | **PASS** — **97.4%** |
+| **SC-3 — excess quality correlation** | excess ≤ 0.0559 | **FAIL** — **+0.0710** |
+| **SC-4 — not vacuous** | ≥ 1.0 pt and ≥ 5% of games | **FAIL** — 1.68 pts, **4.6%** of games |
+
+> **Verdict: DOES NOT SHIP.** Two of four sufficiency criteria fail, so per §8's
+> decision rule the measure does not become a reported number. Gate E-2 was run
+> anyway and reported below, because a failure a reader cannot see the size of is
+> not a report — but nothing in it can license shipping, and §5 already committed
+> to that reading in advance.
+
+### SC-1 — the design's central claim is confirmed
+
+> **The touchdown-valuation residual does not persist: r = −0.029, against a
+> 0.0669 threshold and with 89% power at the r = 0.12 reference.**
+
+This is the finding document 11 §10's channel split predicted, now measured on
+the successor's own universe, its own denominators and its own permutation null.
+Compare the pooled valuation that failed there (+0.108) and the field-goal
+channel (+0.229). **Removing field goals from the resampled quantity did exactly
+what it was supposed to do.**
+
+Because the design detects r = 0.12 with 89% power, this is evidence of absence
+rather than absence of evidence.
+
+### SC-2 — and the spread survives, decisively
+
+| Instrument | Between-team SD of offensive points per game | **Retained** |
+|---|---|---|
+| Observed | 4.06 | — |
+| **Successor** | 3.96 | **97.4%** |
+| Document 08's depth-bin instrument, same units | 2.80 (from 4.11) | **68.1%** |
+
+Document 08's instrument destroyed **31.9%** of the difference between NFL
+offenses. The successor destroys **2.6%** — a twelvefold improvement, and well
+inside the 5% the §6 impact argument allowed.
+
+### SC-3 — and yet the excess correlation is no better than the incumbent's
+
+> **corr(quality, residual) = +0.299 against a mechanical floor of 0.228.
+> Excess +0.0710, above the 0.0559 threshold. FAIL.**
+
+This is the round's most interesting number, and it is only visible because
+document 11 §10 discovered the floor:
+
+| Instrument | Raw correlation | Mechanical floor | **Excess** |
+|---|---|---|---|
+| Document 08's depth-bin instrument | −0.784 | 0.709 | **+0.075** |
+| **The successor** | **+0.299** | 0.228 | **+0.071** |
+
+The raw correlation improved from 0.784 to 0.299 and the retention improved from
+68% to 97%, and **the excess barely moved.** Almost the whole of the −0.784 that
+killed DQW% was the arithmetic identity, exactly as document 11 §10 warned; what
+remains after subtracting it is a small, stubborn residue that both designs
+carry in equal measure.
+
+**Stated plainly: the criterion the Phase 4 plan named as the design requirement
+— "the per-drive adjustment must be ~uncorrelated with offensive quality, the
+−0.784 failure diagnostic" — is the one the successor fails, and it fails it at
+the same magnitude as the design it was built to replace.** Being able to say
+that required correcting the diagnostic for its floor first.
+
+### SC-4 — and the measure is very nearly doing nothing
+
+> **Mean |DQ margin − actual margin| = 1.68 points (floor 1.0, passes). The
+> named winner differs in 4.6% of 2,761 games, against a 5% floor. FAIL.**
+
+It misses by four tenths of a percentage point, which is close enough that the
+honest description is *near-vacuous* rather than *vacuous*.
+
+The mechanism is visible in the conditional table and it is a direct, unintended
+consequence of the design's defining move. Removing field-goal drives leaves a
+universe that is **nearly separable**: among touchdown, punt and turnover-on-downs
+drives, the median deepest snap is the **6-yard line for touchdowns and the
+63-yard line for everything else**, because a drive that got deep and did not
+score a touchdown normally attempted a field goal — and those drives are exactly
+the ones now held out.
+
+So the conditional mean reaches an out-of-fold R² of **0.952**, and 12 of the 20
+prediction bins hold drives with a touchdown rate below 0.2%:
+
+| Bin | n | Mean predicted | Mean observed | Touchdown rate |
+|---|---|---|---|---|
+| 0–11 | 1,940 each | ≈ 0.00 | ≈ 0.00 | ≤ 0.2% |
+| 12 | 1,940 | 0.91 | 0.43 | **6.2%** |
+| 13 | 1,940 | 5.56 | 6.00 | **86.6%** |
+| 14–19 | 1,940 each | 6.6 – 7.3 | 6.85 – 6.95 | ≥ 98.7% |
+
+Only bins 12 and 13 — 10% of the universe — carry real uncertainty for the
+resampling to work on. §3's emergent-behaviour note anticipated degenerate bins
+in the abstract; it did not anticipate that **holding field goals out is what
+makes them degenerate.**
+
+### Gates E-1 to E-3, reported for completeness
+
+| Gate | All drives | Red-zone trips only |
+|---|---|---|
+| **E-1 — unbiased** | **PASS** (−0.00009 pts/drive) | **FAIL** (−0.0286) |
+| **E-2 — non-inferiority, DQ margin** *(primary)* | **PASS** — +0.00080, 95% CI [−0.0033, +0.0049] | **PASS** — +0.00196, CI [−0.0018, +0.0057] |
+| **E-2 — non-inferiority, DQW%** *(secondary)* | **FAIL** — +0.00708, CI [−0.0045, **+0.0186**] | **FAIL** — +0.00822, CI [−0.0035, +0.0199] |
+| coefficient sanity | **PASS** b1 = +0.448 | **PASS** b1 = +0.436 |
+| **E-3 — distinctness** | r(DQW%, DTW%) = 0.834, different winners in 350 games (12.7%) | r = 0.833, 343 games (12.4%) |
+
+**The primary rematch arm passes, and §5 committed in advance to what that is
+worth.** The gate has zero power against a predictor erasing 10% of team
+strength. Compare document 08 §11's failing arm at +0.0070 with an upper bound of
++0.0183: the successor's +0.0008 with an upper bound of +0.0049 is genuinely
+better, and it is better mostly because the measure moves the margin by 1.68
+points instead of 6.79. **A gate that a near-identity function passes is not
+evidence the measure is sound**, which is precisely why the sufficiency criteria
+run first.
+
+**Gate E-1 fails on the red-zone arm, and the cause is an inherited ruling.** The
+resampling pool is built from every league drive in a bin even when only a subset
+is redrawn — document 08 §10's implementation made that choice so a subset could
+not truncate its own donor distribution. That is correct when the subset is
+*random* within the bin, and the red-zone subset is not: within a bin, drives that
+reached the red zone score more than those that did not, so drawing them from the
+full-bin pool marks them down by 0.029 points per drive. The ruling and the
+subset selection are individually defensible and jointly wrong. Recorded below.
+
+### What this changes
+
+1. **DQW% has no successor, and the line is closed for Phase 4.** Two
+   pre-registered sufficiency criteria fail. Building a third design after seeing
+   which criteria these two failed, and re-running the same gate, is precisely
+   the goalpost-moving document 08 §11 refused and this document exists to
+   prevent.
+2. **The design's central hypothesis was nonetheless confirmed.** SC-1 and SC-2
+   both pass, decisively — the finishing residual really does stop persisting
+   once field goals leave the resampled quantity, and between-team spread really
+   does survive at 97.4%. **The measure fails on being uninformative, not on
+   being wrong.**
+3. **The rematch gate's blindness is now a documented property of this project's
+   validation harness**, not a speculation. Every future measure validated on it
+   inherits §5's table: zero power below 10% skill erasure, 63% at 20%. Document
+   07's list of "what this validation does not establish" gains a line.
+4. **`corr(quality, adjustment)` should not be used as a design criterion in its
+   raw form again.** Document 08's −0.784 and the successor's +0.299 differ by a
+   factor of 2.6 and describe *the same* excess. Any future statement of it is
+   stated net of √(1 − retention²).
+5. **Nothing in document 05's treatment table moves**, and no ledger row was ever
+   at stake. Gate A held throughout, as it was committed to in document 08 §6
+   before any of this existed.
+
+Worth stating plainly, because it is the case for the ordering: **the primary
+rematch arm passed.** Under document 08 §10's protocol — where the rematch gate
+was the only check — this measure would have shipped as a second reported number
+that changes the named winner in 4.6% of games and whose residual quality
+correlation is no cleaner than its predecessor's. The sufficiency criteria caught
+it, and they only exist because the instrument characterization in §5 showed the
+gate could not.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **Holding field-goal drives makes the remaining universe nearly separable** | Median depth 6 for touchdowns, 63 for the rest; OOF R² 0.952; 12 of 20 bins below a 0.2% scoring rate | **Open, and fatal to this instrument.** The move that fixed SC-1 is the move that broke SC-4 |
+| **Gate E-1 fails on a non-random subset drawn from a full-bin pool** | Red-zone arm, −0.0286 pts/drive against a 0.01 tolerance | **New.** Document 08 §10's pool ruling is only valid for subsets that are random within the bin; a subset selected on anything correlated with the outcome needs its own pool, and its own unbiasedness proof |
+| The successor's excess quality correlation matches the incumbent's | +0.071 against +0.075 | **Open, unexplained.** Both designs leave the same small residue; what it is has not been identified |
+| Whether a drive attempted a field goal is itself an outcome | §9, restated with a measured consequence | **Open, and now sized.** It is the selection that produced the separability above |
+| The conditional mean is fitted on features that are weakly outcome-entangled | `first_downs` correlates +0.775 with a touchdown, `max_gain` +0.639 | **Open.** Document 11 §8 recorded it; here it contributes to the 0.952 R² |
+| Only 10% of drives sit in a bin with real uncertainty | Bins 12 and 13 | **Open.** Any successor must report this share as a design statistic before its gates, not discover it afterwards |
