@@ -149,10 +149,10 @@ built.
 |---|---|---|---|---|---|---|
 | **Fumble recovery** | **Pass** — loose ball, nobody controls the bounce | 1,408 | 15 / team-season | **0.011** | **Full.** `p` = league rate for the fumble's *class* | 04 |
 | **Field goal** | **Pass** — ball in flight, partly outside the kicker | pending | ~30 / kicker-season | pending | **Partial** vs that kicker's shrunk make probability at that distance | step 4 |
-| **Interception** | **Pass** — given an interception-worthy throw, whether it is caught is partly the defender's luck | 71.5 | 24 / team-season | **0.251** | **Partial**, pending re-attribution — see below | 04, step 3a |
+| **Interception** | **Pass** — given an interception-worthy throw, whether it is caught is partly the defender's luck | 71.5 | 24 / team-season | **0.251** | **Partial, at the team grain.** Step 3a could not attribute the spread to quarterbacks or defenses | 04, step 3a |
 | **Penalty (pre-snap)** | **Fail** — no post-hoc branch | 3,967 | 2,813 plays | (0.415) | **None** | 04, step 3b |
-| **Penalty (judgment)** | **Fail** — officiating discretion measurably does not add noise (12.5% relative spread vs 14.0% pre-snap) | 3,243 | 2,813 plays | (0.465) | **None**, pending subtype check | 04, step 3b |
-| **Return yardage** | pending | pending | pending | pending | pending | step 3c |
+| **Penalty (judgment)** | **Fail** — officiating discretion measurably does not add noise (12.5% relative spread vs 14.0% pre-snap) | 3,243 | 2,813 plays | (0.465) | **None.** Subtype check closed: holding is *not* random | 04, step 3b |
+| **Return yardage** | **Fail** — a return is a played-out sequence, not a branch resolved by nobody | — | — | — | **None** in v1. No measurable persistence either (r = −0.014) | step 3c |
 
 Parenthesised `w` values are shown to make §2's argument concrete. They are not
 used: those rows failed Gate A.
@@ -426,3 +426,115 @@ resolvable with ten seasons"* rather than to a verdict.
 | 3a null bound, QB / defense grain | 6.85 / 6.03 pp | power check |
 | 3c correlation detectability floor | ±0.11 | this section |
 | Reference relative spread | 12.5% | document 04, pooled judgment penalties |
+
+---
+
+## 8. Attribution round — results
+
+*Script: `research/06_attribution.py`. Gates pre-registered in §7 above, committed
+at `c1b454f` before any of these models existed. Results in
+`research/outputs/06_attribution.json`.*
+
+### Outcomes, stated first
+
+| Question | Outcome |
+|---|---|
+| 3a — whose skill is the interception spread? | **Unresolved.** Quarterbacks and defenses carry statistically indistinguishable spreads and neither clears the design's null bound |
+| 3b — is offensive holding random? | **Hypothesis rejected, decisively.** Holding is as repeatable as any other penalty class |
+| 3c — does return yardage persist? | **No measurable persistence**, on a test that could only have detected a large effect |
+
+### 3a — the interception spread is shared, and the design cannot split it
+
+The crossed model needed 3,000 tune / 3,000 draws. At the standard 1,000/1,000
+it returned `ess_bulk` 289 and `r_hat` 1.0138 with **zero divergences** — the
+signature of slow mixing rather than bad geometry, because the two crossed scales
+trade off along a ridge the chains cross slowly. More draws is the honest fix;
+raising `target_accept` to quiet the warning is what document 03 §5 forbids. The
+final fit passes Gate 1 at `r_hat` 1.0064, `ess_bulk` 959, zero divergences, and
+the estimates moved by less than 0.15 pp from the failed attempt — which is
+itself evidence the first failure was mixing speed, not a wrong answer.
+
+| Factor | Log-odds SD | Rate-scale SD | 89% interval | Relative | Design's null bound |
+|---|---|---|---|---|---|
+| Quarterback-season | 0.250 [0.090, 0.375] | **6.11 pp** | 2.24 – 9.07 | 12.6% | 6.85 pp |
+| Defense-season | 0.243 [0.118, 0.352] | **5.97 pp** | 2.94 – 8.54 | 12.3% | 6.03 pp |
+
+`P(quarterback spread > defense spread) = 0.530` — a coin flip.
+
+**Per the reporting rule pre-registered in §7, this is a null attribution.** The
+rule required one factor's interval to clear the null bound while the other's
+failed to. Neither clears it: both 89% intervals straddle the bound the design
+would produce under a true zero. So the honest statement is not "the skill is
+shared equally" — it is **"2,999 charted throws cannot tell these two apart."**
+
+That was foreseeable and was foreseen: §7 recorded in advance that neither grain
+could rule out a spread below about 10% relative, and both estimates land right
+at 12%. The consequence for the simulator is concrete — **the interception row
+stays at the team grain with `w = 0.251`.** Splitting to a quarterback-specific
+rate would assert an attribution the data does not support.
+
+### 3b — offensive holding is not random, and this test had the power to say so
+
+| Penalty | Team-seasons | Calls | League rate | Population SD | 89% interval | Relative |
+|---|---|---|---|---|---|---|
+| **Offensive holding** | 320 | 6,597 | 0.7196% | **0.1110 pp** | 0.0883 – 0.1327 | **15.4%** |
+| False start (benchmark) | 320 | 6,044 | 0.6593% | 0.1171 pp | 0.0968 – 0.1372 | 17.8% |
+
+> **Gate 3b: FAIL.** The 89% upper bound is 0.1327 pp against a pre-registered
+> threshold of 0.0837 pp. The interval's *lower* bound, 0.0883 pp, already sits
+> above the threshold.
+
+The hypothesis was that holding is random because it occurs on most plays and
+the flag is a sampling of it. It is wrong, and unlike document 04's Gate 2 this
+failure is informative rather than a data-volume artifact — the power check gave
+this test **99.3% power** against a 12.5%-relative effect, on 916,700 plays.
+Holding at 15.4% relative sits between pooled judgment calls (12.5%) and false
+starts (17.8%). Teams differ in how often they are flagged for holding, and they
+differ about as much as they differ in false starts.
+
+**Nothing in the treatment table changes.** Penalties already failed Gate A, and
+the one subtype that might have earned an exception did not.
+
+Both fits agree with the exact grid posterior to within 0.0002 pp, which is an
+independent check on convergence.
+
+### 3c — return yardage does not persist, on a test that could barely have shown it
+
+**Split-half correlation of mean interception return yards**, 314 defense-seasons
+with 6+ interceptions, 200 random within-season splits:
+
+> **r = −0.014, 5th–95th percentile [−0.088, +0.068]**
+
+Flat against a detectability floor of ±0.11. Comparable numbers already on
+record: fumble recovery +0.055, interception EPA +0.164 (document 02).
+
+The **pick-six rate** model needs its power table to read correctly, and this is
+the clearest example in the project of why:
+
+| | Value |
+|---|---|
+| League pick-six rate | 8.90% |
+| Population SD | 1.37 pp, 89% interval 0.46 – 2.59 |
+| Upper bound a **true zero** typically produces | **2.91 pp** |
+
+The interval excludes zero, and that looks like evidence until it is compared
+with the right reference. The observed upper bound of 2.59 pp is *below* the
+2.91 pp a genuinely skill-free league produces on this many interceptions. The
+lower bound never reaches zero because `log_kappa ~ Normal(4, 2)` keeps `kappa`
+finite, so "the interval excludes zero" is a property of the parameterization
+here, not a finding. **There is no evidence of pick-six skill.**
+
+**Verdict for the table:** return yardage is not neutralized in v1. It fails
+Gate A — a return is a played-out sequence with blocking and tackling, not a
+branch resolved by nobody — and there is no persistence signal that would push
+back against that reading. Neutralizing it would also require an expected-return
+model conditional on field position, which is a larger build than v1 warrants.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| Interception attribution unresolved | Both crossed factors straddle the design's null bound | **Open.** Needs more FTN seasons, not a better model. Blocks any player-level neutralization |
+| Crossed model mixes slowly | ess_bulk 289 at 1,000 draws, 959 at 3,000 | **Closed** by more draws; recorded because the fix was not the model |
+| 3c cannot resolve realistic effects | Only a 45%-relative spread is detectable | **Accepted**, pre-registered in §7 |
+| `population_sd` has a non-zero lower bound by construction | `log_kappa ~ Normal(4, 2)` keeps `kappa` finite | **Open.** Interpret against the simulated null bound, never against zero |
