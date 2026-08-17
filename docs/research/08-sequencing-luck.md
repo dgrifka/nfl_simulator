@@ -702,3 +702,116 @@ for a quantity built by averaging two bootstraps.
 | Touchdowns are valued at the league average points-per-TD | Two-point conversions and missed extra points are folded into one constant | **Accepted.** Extra points are document 09's question, and a per-drive XP model would be a larger build than the measure warrants |
 | Drives are resampled independently | Two drives in one game are drawn independently | **Accepted.** Same reasoning as document 05 §5's row on simultaneous luck events |
 | The game being adjudicated is inside the league conditional table | ~10 drives of ~22,000 | **Open, bounded** at O(1/n), an order of magnitude smaller than the FG model's contamination |
+
+---
+
+## 11. Drive-outcome resampling — results
+
+*Script: `research/11_drive_bootstrap.py`. Design, statistic and thresholds fixed
+by §10 above, committed at `1d91af4` before this script existed. Results in
+`research/outputs/11_drive_bootstrap.json`.*
+
+### Gate outcomes, stated first
+
+| Gate | Rule | All drives | Red-zone drives only |
+|---|---|---|---|
+| **D-1 — unbiased** | resampled mean within 0.01 pts/drive of observed | **PASS** (+0.00003) | **PASS** (−0.0076) |
+| **D-2 — non-inferiority** | 95% CI upper bound below +0.010 log loss | **FAIL** — +0.0145 | **FAIL** — +0.0145 |
+| **D-3 — distinctness** | descriptive, no pass rule | r = 0.662 | r = 0.777 |
+| *coefficient sanity* | `b1 > 0`, CI excludes zero | **PASS** +0.368 | **PASS** +0.378 |
+
+> **Gate D-2 fails on both arms. DQW% does not ship.**
+
+Both arms were named in §10 before the build — the red-zone-only variant is the
+one the defect register promised so the directly-licensed part would stay
+separable. It was not reached for after the failure, and it does not rescue it.
+
+### The failure, in full
+
+| Arm | Δ log loss | SE | 95% CI | Verdict |
+|---|---|---|---|---|
+| All drives, DQ margin *(primary)* | **+0.00701** | 0.00577 | −0.0043 … **+0.0183** | FAIL |
+| All drives, DQW% *(secondary)* | +0.00407 | 0.00662 | −0.0089 … +0.0170 | FAIL |
+| Red-zone only, DQ margin | **+0.00670** | 0.00398 | −0.0011 … **+0.0145** | FAIL |
+| Red-zone only, DQW% | +0.00849 | 0.00572 | −0.0027 … +0.0197 | FAIL |
+
+Compare the DTW arm on the identical harness and the identical 531 pairs
+(document 07): **−0.00159, SE 0.00273, upper bound +0.0038 — PASS.**
+
+Two things separate them, and both matter:
+
+1. **The point estimate has the wrong sign.** DTW's was −0.0016, favouring the
+   neutralized predictor. Every drive-resampling arm lands between +0.004 and
+   +0.008, favouring the raw scoreboard. This is not a wide-interval failure;
+   the centre of the distribution says the resampling *costs* information.
+2. **The standard error is roughly double.** DTW moved the margin by a small,
+   targeted amount. This resampling moves it by a mean of **6.79 points** and
+   changes the named winner in **21.9% of games** — an enormous transformation
+   next to a 13.7-point margin SD.
+
+The red-zone-only arm halves the standard error (0.00398 against 0.00577) while
+leaving the point estimate essentially unchanged. That is the diagnostic
+signature that matters: **this is not noise. It is a real, repeatable
+degradation.**
+
+### Why it failed — exploratory, and it confirms the defect named in advance
+
+§10's defect register called this out before the build, as the largest known
+weakness: *"conditioning on depth understates offenses that score from
+distance."* The test is direct — if depth is too coarse a summary of a drive,
+teams whose drives are better than their depth implies get adjusted downward
+systematically.
+
+> **corr(offensive points per drive, DQ adjustment per drive) = −0.784**, across
+> 320 team-seasons.
+>
+> **Between-team SD of points per drive: 0.490 observed → 0.346 after
+> adjustment. Only 70.6% of the real spread between offenses survives.**
+
+That is unambiguous. The resampling marks good offenses down and bad offenses
+up, and it destroys nearly a third of the genuine, repeatable difference between
+NFL offenses. **It is removing skill, not luck** — and a game-1 predictor with
+less skill in it is precisely what a non-inferiority failure looks like.
+
+The mechanism is the one predicted. Depth-reached is a lossy summary: a drive
+that reached the 5 on a 60-yard touchdown pass and a drive that reached the 5 by
+grinding out three yards a carry are treated as exchangeable, so explosive
+offenses are priced as lucky ones. Document 08 §9's null result licenses
+resampling *finishing given depth*; it does not license treating depth as a
+sufficient statistic for a drive.
+
+### What this changes
+
+1. **DQW% is not reported and does not ship.** No product surface, no README
+   claim, no docx headline. A measure that fails its own pre-registered
+   validation gate is not a measure.
+2. **Document 09's sequencing finding is untouched.** S1 and S2 being luck rests
+   on a properly powered split-half test with an 87–92% detection rate at the
+   reference effect. That test did not depend on this instrument, and this
+   instrument's failure says nothing about it. **The finding is sound; the
+   reporting vehicle built for it is not.**
+3. **The simulator is unchanged.** DTW% still passes on the same harness. No
+   ledger row was ever at stake — §6 committed to that before any result
+   existed, and Gate A was never in play.
+4. **The fix is named but not attempted here.** A drive summary richer than
+   depth — starting field position, plays, yards, and explosive-play count —
+   would plausibly pass. Building it after seeing this failure and re-running the
+   same gate would be goalpost-moving, so it is recorded as future work
+   requiring its own pre-registration and its own power calculation.
+
+Worth stating plainly, because it is the case for working this way: **this
+failure would have shipped.** DQW% looks reasonable, the conditional table is
+clean and monotone (6.14 points per drive from inside the 5, down to 0.17 from
+beyond the opponent's 30), Gate D-1 passes to five decimal places, and Gate D-3
+confirms it is genuinely distinct from DTW%. Nothing about the measure looks
+wrong until it is scored against a rematch, which is the only check that asks
+whether it retains what makes teams different.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **Depth is not a sufficient statistic for a drive** | corr(quality, adjustment) = −0.784; 29.4% of between-team scoring spread destroyed | **Open, and fatal to this instrument.** The named fix needs its own pre-registration |
+| Field-goal make/miss sits inside the resampled quantity | A missed-FG drive can be redrawn to 3 points, and DTW% already neutralizes FG luck | **Open.** Harmless while the two measures are never combined — which §10 forbids — but it is a second, independent reason never to combine them |
+| Gate D-2 has no on-failure rule of its own | §10 specified the pass rule but not the action on failure | **Closed** by applying document 06 §4's rule by analogy: report the failure, change nothing, treat the design as the suspect |
+| The red-zone-only arm still resamples FG outcomes | A red-zone drive ending in a made field goal is in the universe | **Open.** Recorded for the successor design |
