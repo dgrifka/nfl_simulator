@@ -175,6 +175,29 @@ exactly the model that would mislead about skill.
 All interior, none near the 0.055/0.945 boundaries. The beta-binomial reproduces
 the observed team-to-team spread in every case.
 
+## Figures
+
+`research/04_figures.py` and `research/05_arviz_diagnostics.py` write to
+`research/outputs/` (gitignored — regenerate rather than committing them).
+
+| Figure | What it shows |
+|---|---|
+| `fig4_population_sd.png` | Team spread per rate, relative to that rate's own league average |
+| `fig5_shrinkage.png` | Observed season rate vs shrunk posterior, all 320 team-seasons |
+| `fig7_forest_fumble.png` | ArviZ forest plot of the 14 most extreme team-seasons |
+| `fig8_ppc_fumble.png` | ArviZ posterior predictive ECDF for per-team recovery counts |
+
+The forest plot is the most persuasive of the four. Minnesota 2018 recovered 1 of
+9 and Buffalo 2024 recovered 10 of 12, and their posterior intervals are almost
+indistinguishable — both centered near 47%, both spanning roughly 41% to 53%.
+Seven-tenths of a season's apparent difference between the best and worst
+fumble-recovery teams simply is not there.
+
+Note the per-team posteriors are reconstructed by conjugacy rather than sampled,
+since the marginalized model never instantiates `p_team`. Given `(mu, kappa)`,
+`Beta(mu·kappa + k, (1−mu)·kappa + n − k)` is the exact posterior the centered
+model would have drawn from — the same distribution, without the funnel.
+
 ## Updated defect register
 
 | Defect | Evidence | Status |
