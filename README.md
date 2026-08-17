@@ -34,12 +34,13 @@ single rule, and tested it against a gate pre-registered before any
 deserve-to-win number existed.
 
 ```python
-result = simulate_game(plays, fumble_baseline=..., fg_baseline=...,
-                       fg_model=..., points_per_epa=0.62)
-result.dtw_home        # 0.551  — deserve-to-win probability
-result.dtw_interval    # (0.460, 0.631)
-result.deserved_margin # -0.37  (the team actually lost by 7)
-result.ledger          # itemized: which fumble, which kick, how much
+result = simulate_game(
+    plays, fumble_baseline=..., fg_baseline=..., fg_model=..., points_per_epa=0.62
+)
+result.dtw_home  # 0.551  — deserve-to-win probability
+result.dtw_interval  # (0.460, 0.631)
+result.deserved_margin  # -0.37  (the team actually lost by 7)
+result.ledger  # itemized: which fumble, which kick, how much
 ```
 
 Working notes live in [`docs/research/`](docs/research/):
