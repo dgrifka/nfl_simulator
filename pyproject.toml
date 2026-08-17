@@ -18,6 +18,9 @@ dependencies = [
     "arviz>=1.1",
     # PyMC 6 auto-selects nutpie when present; 2-5x faster than the PyMC sampler.
     "nutpie>=0.13",
+    # NetCDF backend for DataTree.to_netcdf(); xarray has no writer without it.
+    "h5netcdf>=1.3",
+    "h5py>=3.11",
     "matplotlib>=3.9",
     "plotly>=5.22",
 ]
