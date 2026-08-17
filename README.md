@@ -28,11 +28,19 @@ management) is explicitly **out of scope**.
 
 ## Status
 
-**Phase 1 — scaffold + EDA.** No simulator code yet. Phase 1 answers the
-prerequisite question empirically: *which EPA components are skill (they persist
-for a team across games) and which are luck (they don't)?* Only the luck
-components get neutralized, so this classification is the foundation everything
-else sits on.
+**Phase 2 — simulator v1 shipped and validated.** Phase 1 classified the
+components; Phase 2 turned that classification into a working simulator under a
+single rule, and tested it against a gate pre-registered before any
+deserve-to-win number existed.
+
+```python
+result = simulate_game(plays, fumble_baseline=..., fg_baseline=...,
+                       fg_model=..., points_per_epa=0.62)
+result.dtw_home        # 0.551  — deserve-to-win probability
+result.dtw_interval    # (0.460, 0.631)
+result.deserved_margin # -0.37  (the team actually lost by 7)
+result.ledger          # itemized: which fumble, which kick, how much
+```
 
 Working notes live in [`docs/research/`](docs/research/):
 
@@ -43,8 +51,14 @@ Working notes live in [`docs/research/`](docs/research/):
 | [02 — Skill vs luck](docs/research/02-skill-vs-luck.md) | Split-half persistence per component; out-of-sample prediction test |
 | [03 — Model foundations](docs/research/03-model-foundations.md) | The hierarchical models and their **pre-registered** gates, committed before any fit |
 | [04 — Bayesian results](docs/research/04-bayesian-results.md) | Gate report (including two failures), population spreads, shrinkage |
+| [05 — Neutralization principle](docs/research/05-neutralization-principle.md) | **The one rule**, the two gates, the per-component treatment table, and the attribution round |
+| [05b — FG model foundations](docs/research/05b-fg-model-foundations.md) | The kicker-hierarchical make model, its pre-registered gates and its results |
+| [06 — Rematch validation](docs/research/06-rematch-validation.md) | The validation design and its **power calculation**, committed before any result |
+| [07 — Validation results](docs/research/07-validation-results.md) | Gate outcomes: non-inferiority passes |
 
 ### Headline findings
+
+**Phase 1 — what is luck**
 
 - The team with the higher game EPA differential wins **95.9%** of decided games.
   Of that differential's variance, **70%** is ordinary offense and defense and
@@ -54,10 +68,45 @@ Working notes live in [`docs/research/`](docs/research/):
   to within 45.6–48.3% regardless of whether it recovered 11% or 83% that year.
 - The fumble coin is **class-specific**, not 50/50 — 40% on run plays, 76% on
   botched snaps. A flat coin would be wrong by up to 26 points.
-- Field goals, penalties and interceptions all carry real, repeatable team skill,
-  so none of them can simply be flipped.
 - **Luck-stripping does not improve forward-looking prediction.** The simulator is
   a retrospective fairness measure, not a forecasting edge.
+
+**Phase 2 — one rule, and what it does**
+
+- **Luck is the realized outcome minus its expectation at the entity's shrunk
+  posterior rate.** Full and partial neutralization are not two policies — they
+  are the same expression read at two values of `w = n/(n+κ)`, and `w` is
+  measured, not chosen.
+- A component must pass a **branch-point gate** before that arithmetic runs.
+  Penalties compute to `w ≈ 0.42–0.46`, which would neutralize half of every
+  game's penalty EPA; only a mechanism story rules that out.
+- **Offensive holding is not random.** The hypothesis that it is got a properly
+  powered test (99.3% power on 916,700 plays) and failed decisively.
+- **The interception spread cannot be attributed.** Quarterbacks (12.6%) and
+  defenses (12.3%) come out indistinguishable, so interceptions stay untouched
+  in v1 rather than being neutralized against a grain the data cannot support.
+- **Kicker skill is real and sized**: a one-SD kicker makes **5.35 pp** more of
+  their 45-yard attempts, giving field goals a genuinely entity-specific `w`
+  from 0.064 to 0.377 depending on how much the kicker has kicked.
+- Over ten seasons the simulator moves the mean margin by **2.80 points** and
+  **disagrees with the actual result in 11.1% of games**.
+- **Validation passes.** Neutralization does not degrade a game's predictive
+  content (95% CI upper bound +0.0038 against a +0.010 margin) — and the
+  observed statistic landed within a few percent of what the pre-registered
+  power simulation predicted.
+
+### Two process laws, carried from Phase 1
+
+Phase 1's Gate 2 failed because a threshold was set from a football-effect-size
+argument with no power calculation behind it. Phase 2 treats two rules as
+binding, and both changed real decisions:
+
+1. **Pre-register before fitting.** Every gate doc lands in git before the
+   script that fits its models — checkable with `git log --diff-filter=A`.
+2. **Power-check every threshold before committing it.** This caught a
+   field-goal calibration gate that would have failed 36% of the time on a
+   correct model, and it converted the rematch validation from a superiority
+   test the design could never pass into a non-inferiority test it can.
 
 ## Data
 
@@ -84,8 +133,8 @@ uv run ruff check .
 
 | Path | What's in it |
 |---|---|
-| `src/nfl_simulator/` | Importable package: ingest, validation, EPA decomposition |
-| `research/` | Exploratory scripts — EDA, skill-vs-luck tests, Bayesian models |
+| `src/nfl_simulator/` | Importable package: ingest, validation, EPA decomposition, FG model, ledger, simulator |
+| `research/` | Exploratory scripts — EDA, skill-vs-luck tests, Bayesian models, power calculations, validation |
 | `docs/research/` | Written findings and working notes |
 | `tests/` | pytest suite (network-free by default) |
 | `data/` | Gitignored parquet cache + manifest |
