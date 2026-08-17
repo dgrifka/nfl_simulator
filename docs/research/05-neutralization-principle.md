@@ -148,7 +148,7 @@ built.
 | Component | Gate A (branch point) | κ | typical n | **w** | Treatment | Source |
 |---|---|---|---|---|---|---|
 | **Fumble recovery** | **Pass** — loose ball, nobody controls the bounce | 1,408 | 15 / team-season | **0.011** | **Full.** `p` = league rate for the fumble's *class* | 04 |
-| **Field goal** | **Pass** — ball in flight, partly outside the kicker | pending | ~30 / kicker-season | pending | **Partial** vs that kicker's shrunk make probability at that distance | step 4 |
+| **Field goal** | **Pass** — ball in flight, partly outside the kicker | `sigma` 0.360 | 29 / kicker-season | **0.285** | **Partial** vs that kicker's shrunk make probability at that distance | 05b |
 | **Interception** | **Pass** — given an interception-worthy throw, whether it is caught is partly the defender's luck | 71.5 | 24 / team-season | **0.251** | **Partial, at the team grain.** Step 3a could not attribute the spread to quarterbacks or defenses | 04, step 3a |
 | **Penalty (pre-snap)** | **Fail** — no post-hoc branch | 3,967 | 2,813 plays | (0.415) | **None** | 04, step 3b |
 | **Penalty (judgment)** | **Fail** — officiating discretion measurably does not add noise (12.5% relative spread vs 14.0% pre-snap) | 3,243 | 2,813 plays | (0.465) | **None.** Subtype check closed: holding is *not* random | 04, step 3b |
@@ -156,6 +156,15 @@ built.
 
 Parenthesised `w` values are shown to make §2's argument concrete. They are not
 used: those rows failed Gate A.
+
+**The field-goal row is the one place the dial is genuinely entity-specific.**
+For every other component `w` is one number, because the opportunity counts are
+similar across entities. Kickers are not: `w` runs from **0.064** at the 10th
+percentile of kicker-seasons to **0.377** at the 90th. A kicker with a handful
+of attempts is neutralized almost to the league curve; a full-season starter
+keeps most of their own record. That falls straight out of `w = n/(n+κ)` with no
+special case, which is the clearest demonstration that §1's rule is doing real
+work rather than restating three policies in one notation.
 
 ### Fumble recovery — full, but class-specific
 

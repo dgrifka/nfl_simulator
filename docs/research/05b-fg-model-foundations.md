@@ -312,3 +312,110 @@ the model that would mislead about skill.
 | Attempts / kicker-seasons | 10,731 / 422 | measured, §2 |
 
 Results are written back into this document as §9.
+
+---
+
+## 9. Results
+
+*Script: `research/07_fg_model.py`. Gates pre-registered in §6, committed at
+`7e9e6d1` before any fit existed. Results in
+`research/outputs/07_fg_model.json`.*
+
+### Gate outcomes, stated first
+
+| Gate | Linear (pre-registered) | Quadratic (fallback) |
+|---|---|---|
+| FG-1 sampler health | **PASS** | **PASS** |
+| FG-2 distance calibration | **FAIL** — 2.828 vs 2.777 | **PASS** — 2.716 vs 2.755 |
+| FG-3 kicker skill resolvable | **PASS** | **PASS** |
+| FG-4 posterior predictive | **PASS** | **PASS** |
+
+**The pre-registered linear form failed Gate FG-2, and the documented fallback
+was applied exactly as named in §5** — add a quadratic term in centred distance,
+refit, report both. The linear arm is retained in the record rather than
+deleted; hiding a failed pre-registered arm would defeat the point of naming a
+fallback in advance.
+
+### Why the linear form failed, and it was not bad luck
+
+The failure was narrow — 2.828 against a 2.777 threshold — but the bin table
+shows it was structural rather than a marginal miss:
+
+| Distance bin | Attempts | Observed | Linear predicted | Miss | Quadratic predicted | Miss |
+|---|---|---|---|---|---|---|
+| 20–24 | 1,024 | 98.8% | 97.8% | +1.0 pp | 98.6% | +0.2 pp |
+| 25–29 | 1,400 | 96.9% | 96.5% | +0.5 pp | 97.2% | −0.2 pp |
+| 30–34 | 1,497 | 95.1% | 94.2% | +0.9 pp | 94.5% | +0.6 pp |
+| 35–39 | 1,563 | 89.8% | 90.6% | −0.7 pp | 90.2% | −0.3 pp |
+| 40–44 | 1,569 | 83.2% | 85.1% | −1.9 pp | 83.9% | −0.7 pp |
+| 45–49 | 1,599 | 74.2% | 77.1% | **−3.0 pp** | 75.8% | −1.7 pp |
+| 50–54 | 1,392 | 71.0% | 67.6% | **+3.4 pp** | 67.6% | **+3.4 pp** |
+| 55–59 | 540 | 60.0% | 57.5% | +2.5 pp | 60.3% | −0.3 pp |
+
+The linear misses are **signed in a pattern**: over-predicting through the 40s,
+under-predicting from 50 out. That is a curve the straight log-odds line cannot
+bend to, and it is the exact failure mode Gate FG-2 was built to catch. The
+quadratic fixes six of the eight bins.
+
+**The 50–54 bin does not improve, and that is worth saying plainly.** It still
+sits 3.4 points above prediction under both models, and it is now the single
+worst bin by a wide margin — the gate passes on the strength of the other seven.
+A plausible reading is selection: a coach who sends the offense out on 4th down
+rather than attempting a 52-yarder does so more often in bad conditions, so the
+52-yarders that *are* attempted are a favourable sample. That is a decision
+process the model does not represent, and it is added to the defect register.
+
+### The fitted curve
+
+| Parameter | Mean | 89% interval |
+|---|---|---|
+| `alpha` (log-odds at 40 yd) | 1.898 | 1.83 – 1.97 |
+| `beta` (per yard) | −0.1148 | −0.122 – −0.108 |
+| `gamma` (quadratic / 100) | 0.130 | — |
+| `sigma_kicker` | **0.360** | **0.273 – 0.442** |
+
+| Distance | League make rate |
+|---|---|
+| 30 yd | 96.0% |
+| 40 yd | 87.0% |
+| 45 yd | 79.5% |
+| 50 yd | 70.7% |
+| 55 yd | 61.5% |
+
+### Gate FG-3 — kicker skill is real and about the size the literature says
+
+> `sigma_kicker` = **0.360**, 89% interval 0.273 – 0.442, against a
+> pre-registered threshold of 0.2407. The interval's *lower* bound clears it.
+
+In readable terms: a one-SD-good kicker makes **5.35 pp more** of their 45-yard
+attempts than an average one (89% interval 4.17 – 6.45), against a league rate
+of 79.5% there. That lands almost exactly on the `sigma = 0.30` row of §6's power
+table, where power was 0.998 — so this is a result the design was built to
+resolve, not one scraped off the edge of it.
+
+**This is what licenses the partial treatment.** Document 05 §3 assigned field
+goals partial neutralization on the strength of Phase 1's split-half `r = 0.145`;
+this sizes it. The resulting shrinkage weight is **`w` = 0.285** at the median
+kicker-season, ranging from 0.064 to 0.377 across the 10th–90th percentiles.
+
+### Shrinkage in practice
+
+| Kicker-season | Attempts | Observed | Shrunk effect |
+|---|---|---|---|
+| Best in sample | 39 | 97.4% | +0.507 log-odds |
+| 26-for-26 season | 26 | 100% | +0.435 |
+| Worst in sample | 15 | 60.0% | −0.492 |
+| Worst full season | 31 | 70.9% | −0.489 |
+
+A perfect 26-for-26 season is shrunk to a smaller effect than a 38-for-39
+season, because 39 attempts is more evidence than 26 — the same partial-pooling
+behaviour document 04 showed for fumbles, at a `w` an order of magnitude larger.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| The 50–54 yard bin misses by +3.4 pp under both models | §9 bin table; unimproved by the quadratic | **Open.** Likely attempt-selection (coaches decline the kick in bad conditions), which the model does not represent |
+| The adopted model is not the pre-registered one | Gate FG-2 failed on the linear form | **Closed** by the §5 fallback, which named the quadratic in advance. Both arms are reported |
+| Gate FG-2 passed narrowly | 2.716 against 2.755 | **Open.** The quadratic is adequate, not comfortably right; a spline or a monotone fit is the Phase 3 option |
+| `gamma` has no mechanism story | Added to fix a calibration failure, not from a theory of kicking | **Open.** It is a curvature correction, and should not be interpreted as anything more |
