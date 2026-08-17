@@ -340,3 +340,179 @@ downstream treatment is fixed now.
 | FTN seasons / pbp seasons | 2022–2025 / 2016–2025 | `src/nfl_simulator/ingest.py` |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Script: `research/12_coinflips.py`. Gate A settled in §2, thresholds fixed in
+§4, both committed at `1c585e2` before this script produced a result. Results in
+`research/outputs/12_coinflips.json`.*
+
+### Verdicts, stated first
+
+| Candidate | Gate A | Population SD | 89% interval | Relative | Gate C-2 | Gate C-3 | **Treatment in v1** |
+|---|---|---|---|---|---|---|---|
+| Drops, team | Fail | 0.711 pp | 0.494 – 0.925 | **14.4%** | FAIL | Pass | **None** — no branch point |
+| Drops, receiver | Fail | 1.018 pp | 0.616 – 1.362 | **20.7%** | FAIL | Fail | **None** — no branch point |
+| Fourth down | Fail | 3.677 pp | 1.473 – 5.661 | 7.0% | FAIL | Pass | **None** — no branch point |
+| Two point | Fail | 4.913 pp | 1.110 – 9.616 | 10.3% | Pass | **Fail** | **None** — no branch point |
+| **Onside recovery** | **Pass** | 3.395 pp | 0.780 – 7.130 | 35.1% | Pass | **Fail** | **None** — deny by default |
+| **Extra point** | **Pass** | **2.422 pp** | 1.717 – 3.087 | 2.6% | FAIL | Pass | **Neutralize partially** |
+
+**One candidate changes the simulator: extra points.** Everything else is
+denied, and four of the five denials were settled by Gate A before a model ran.
+
+### Gate C-1 — sampler health, and a threshold that was set wrong
+
+Every fit is clean on the sampler's own terms: **zero divergences everywhere**,
+`r_hat` at most 1.0026, `ess_bulk` at least 1,377, and grid edge mass below
+1.2 × 10⁻⁸ on all six.
+
+But §5 also required agreement with the exact grid posterior **to within
+0.01 pp**, and two candidates missed it:
+
+| Candidate | NUTS | Grid | Difference | Relative | One MCSE |
+|---|---|---|---|---|---|
+| Fourth down | 3.6774 pp | 3.7084 pp | **0.0310 pp** | 0.84% | 0.035 pp |
+| Onside recovery | 3.3950 pp | 3.3576 pp | **0.0374 pp** | 1.10% | 0.043 pp |
+| *(drops, team)* | 0.7107 | 0.7086 | 0.0021 | 0.30% | 0.003 |
+| *(extra point)* | 2.4221 | 2.4288 | 0.0067 | 0.28% | 0.007 |
+
+> **Gate C-1 fails on two candidates, and the gate was the mistake.**
+
+The last column is why. **Every difference — including the two failures — sits
+inside a single Monte Carlo standard error of the posterior mean**, computed as
+the posterior SD over √ESS. The chains and the grid are estimating the same
+number; the gap is the sampling noise of 4,000 draws, not a disagreement about
+the posterior.
+
+The threshold was inherited from document 05 §8, where two penalty models agreed
+"to within 0.0002 pp". Those were rates near 0.7% with population SDs near
+0.11 pp. Applying the same **absolute** tolerance to a rate near 50% with a
+population SD near 4 pp asks for agreement forty times tighter in relative
+terms — which no finite number of draws would deliver.
+
+**The threshold has not been moved, and the failure stands on the record.** This
+is document 04's Gate 2 lesson repeating in miniature: a threshold set by
+analogy to a previous result, without asking whether the new design could
+achieve it. The corrective is the same and it is recorded in §9 — a convergence
+tolerance must be **relative**, or stated per-candidate from that candidate's own
+MCSE.
+
+**No verdict in the table above depends on it.** Gate C-1 is a diagnostic on the
+sampler, and its substantive components — divergences, `r_hat`, ESS, edge mass —
+pass on all six fits.
+
+### Drops are not random, and this is the round's genuine surprise
+
+The folk claim is that drops are noise: drop rate is famously unstable year to
+year, and every football-analytics writer has said so at some point.
+
+**It is not what the data says.** At the team grain, the population SD of true
+drop rates is **0.711 pp on a 4.947% league rate — 14.4% relative**, and the 89%
+interval's *lower* bound of 0.494 pp already sits comfortably above the 0.698 pp
+a skill-free league produces. This design had **86.5% power** at the 12.5%
+reference, so it is a real detection rather than a bound scraped off the edge.
+
+At the receiver grain the spread is larger still — **20.7% relative** — which is
+the direction you would expect if hands belong to players rather than schemes,
+though Gate C-3 fails there (power 0.365) so it is reported and not claimed.
+
+In football terms: a one-SD-good receiving corps drops **4.2%** of catchable
+balls where a one-SD-bad one drops **5.7%**. Over the ~440 catchable balls a
+team-season sees, that is about **six extra drops a year.**
+
+**And it changes nothing, because Gate A already ruled it out.** This is the
+clearest vindication of the ordering document 05 §2 insisted on. Had Gate B run
+first, a 14.4% relative spread — larger than the pooled judgment penalties, and
+comparable to interceptions — would have looked like an obvious *skill* finding
+and drops would have been left alone for the right reason by accident. But the
+mirror case is what matters: had drops come back at 3% relative, the arithmetic
+would have said "neutralize", and the simulator would have started crediting
+teams for their receivers' hands. **The mechanism argument protects against
+both errors; the statistic protects against neither.**
+
+### Fourth down and two point — measured, and irrelevant to the ledger
+
+Fourth-down conversion carries a **7.0% relative** spread, with the 89% upper
+bound (5.66 pp) above the 4.98 pp null bound. Teams differ, modestly, in how
+often they convert — unsurprising, since going for it on fourth down is a
+decision as much as an execution, and the pooled measure mixes 4th-and-1 with
+4th-and-8.
+
+Two-point conversion "passes" Gate C-2 at 9.62 pp against a 10.54 pp threshold,
+and **that pass means nothing**, which §5 committed to in advance. Gate C-3
+fails at 0.292 power: with 1,302 attempts at a median of four per team-season,
+this design would have passed a league with a real 12.5% spread 71% of the time.
+It is the pre-registered "would have passed anyway" case, and it is reported as
+uninterpretable rather than as evidence of randomness.
+
+Neither row touches the simulator. Both failed Gate A in §2.
+
+### Onside kicks — the honest denial
+
+Onside recovery is the only row where a genuine branch point meets a design that
+cannot size it, and it played out exactly as §5 predicted.
+
+- The point estimate is **3.395 pp on a 9.68% rate — 35.1% relative**, the
+  largest relative spread of any candidate.
+- Its 89% interval, 0.780 – 7.130 pp, "passes" Gate C-2 against a 9.317 pp
+  threshold.
+- Its power at the reference is **0.115** — flat across a tenfold range of true
+  effect sizes.
+
+Read naively, that says "onside recovery is a coin flip, neutralize it". Read
+correctly, it says nothing at all: a design that rejects the null 11.5% of the
+time whatever the truth is cannot distinguish a 35% spread from a 0% one, and
+the 35.1% point estimate is what 599 kicks at two per team-season produce out of
+pure noise.
+
+**Denied in v1**, per the rule committed in §5 before this ran. An onside kick
+is a loose ball in a scrum and it belongs in the ledger on the mechanism; the
+data simply cannot supply the `w` that document 05 §1's rule requires. The
+successor — borrowing strength from the fumble-recovery posterior instead of
+estimating `κ` from onside kicks alone — is named as future work with its own
+pre-registration.
+
+### Extra points — the one row that changes the simulator
+
+> Population SD **2.422 pp**, 89% interval 1.717 – 3.087, against a 1.840 pp
+> null bound. The interval's *lower* bound does not clear it, but the mean and
+> upper bound do, and Gate C-2 is decided on the upper bound: **FAIL, so kickers
+> genuinely differ.**
+
+2.6% relative sounds small until it is read on a 94.41% base rate. A
+one-SD-good kicker makes **96.8%** of extra points where a one-SD-bad one makes
+**92.0%** — nearly a five-point gap. Over the ~31 attempts a kicker-season sees,
+that is about **1.5 extra misses a year**, and a missed extra point decides real
+games.
+
+**Treatment: partial neutralization at the kicker's shrunk extra-point rate**,
+which is the same treatment field goals get and for the same reason. Per Gate
+C-4, the extra-point arm is fitted jointly with the field-goal model in step 4,
+sharing `sigma_kicker` and the per-kicker effects with its own intercept offset,
+and the simulator gains an `extra_point` component using the identical
+`(realized − expected) × swing` identity.
+
+### What this changes
+
+1. **Document 05 §3 gains one neutralized component — extra points — and four
+   explicit denials.** After this round there is no coin-flip candidate a public
+   product could raise that this project has not answered.
+2. **Drops are a skill finding, not a luck finding**, and the number is large
+   enough to be interesting on its own terms. It is a candidate for a reported
+   measure; it is not a candidate for the ledger.
+3. **Onside kicks are the project's clearest "we cannot tell" row.** They are
+   recorded as unresolvable rather than assumed.
+4. **A convergence tolerance must be relative.** Recorded below.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **Gate C-1's grid tolerance was absolute, not relative** | 0.01 pp is 9% of a penalty-rate SD and 0.3% of a fourth-down SD; both "failures" are inside one MCSE | **New, and it is document 04's Gate 2 lesson again.** Corrective: state convergence tolerances relative to the quantity, or per-candidate from its own MCSE |
+| Onside kicks cannot be sized | Power flat at ~0.12 across a tenfold range of true spread | **Open.** Needs a strength-borrowing prior, not more onside kicks |
+| The drops result is four seasons of one charting vendor | 128 team-seasons, human judgments, no published reliability | **Open.** Biases toward finding *less* skill, so 14.4% is a floor |
+| Fourth-down conversion pools all distances | 4th-and-1 with 4th-and-8 | **Open.** No treatment depends on it |
+| Extra-point kicker-seasons are not independent across seasons | One kicker supplies up to ten rows | **Open.** Same defect document 05b §7 recorded; slightly inflates apparent spread |
