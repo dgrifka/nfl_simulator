@@ -419,3 +419,230 @@ behaviour document 04 showed for fumbles, at a `w` an order of magnitude larger.
 | The adopted model is not the pre-registered one | Gate FG-2 failed on the linear form | **Closed** by the §5 fallback, which named the quadratic in advance. Both arms are reported |
 | Gate FG-2 passed narrowly | 2.716 against 2.755 | **Open.** The quadratic is adequate, not comfortably right; a spline or a monotone fit is the Phase 3 option |
 | `gamma` has no mechanism story | Added to fix a calibration failure, not from a theory of kicking | **Open.** It is a curvature correction, and should not be interpreted as anything more |
+
+---
+
+## 10. Change proposal — weather, and extra points
+
+*Written 2026-08-17, **before `research/14_fg_weather_model.py` existed**. Power
+calculation: `research/13_fg_weather_power.py`, results in
+`research/outputs/13_fg_weather_power.json`. Follows the change-proposal
+template: tier, DAG edit, mechanism, cost, gate, downtime, rollback.*
+
+### 1. Tier declaration
+
+**Model change.** Three new covariates and two new structural parameters enter
+the linear predictor, and the observation set grows by 12,818 extra points. The
+generative story changes, so every section of the template is filled.
+
+### 2. DAG edit
+
+The incumbent (§3) with the additions marked `NEW`:
+
+```
+   alpha      beta     gamma          sigma_kicker
+     |          |        |                  |
+     |          |        |         kicker[k] ~ Normal(0, sigma_kicker)
+     |          |        |                  |
+     |          |        |        +---------+---------+
+     |          |        |        |                   |
+     v          v        v        v                   v  (x lambda_xp)  NEW
+   logit p = alpha + beta*c + gamma*c^2/100 + kicker[k] * (1 or lambda_xp)
+             + roof[level]                                    NEW
+             + beta_wind * (wind - 8.118) * has_weather       NEW
+             + beta_temp * (temp - 58.156) * has_weather      NEW
+             + delta_xp * is_extra_point                      NEW
+                              |
+                              v
+                    made ~ Bernoulli(p)
+```
+
+**Nodes added:** `roof[dome|closed|open]` with outdoors as the reference,
+`beta_wind`, `beta_temp`, `delta_xp`, `lambda_xp`.
+**Arrows added:** stadium conditions and kick type now feed the make
+probability. **Nothing is removed.**
+
+**Where inference is cut.** Unchanged — the joint posterior is handed to the
+simulator, which draws from it. The one new cut is that the **centring
+constants** (8.118 mph, 58.156 °F) are properties of the fitted sample and are
+passed to `FieldGoalModel` rather than stored in the trace, so a caller scoring
+a future season must reuse the fit's own values.
+
+**Emergent behaviour to watch.** `lambda_xp` scales the kicker effect on extra
+points. At `lambda_xp = 1` a kicker's field-goal ability transfers one-for-one;
+at 0 the two are unrelated. Sharing one effect *without* this scale would
+**assert** perfect transfer, and asserting is what this parameter exists to
+avoid. Per-attempt Fisher information is `p(1−p)`, so an extra point at 94.4%
+carries 0.053 against a field goal's 0.128 — the 12,818 extra points contribute
+roughly half what the 10,731 field goals do, rather than swamping them.
+
+### 3. Mechanism story
+
+**The defect this addresses is named in §7 as the model's largest**: *"Weather is
+absent… a windy 50-yarder is priced as a calm one, so the simulator overstates
+the kicker's bad luck outdoors in December and understates it in a dome."*
+Document 05 §5 carries the same row.
+
+**Why this change should move that number.** The simulator books
+`(made − p) × swing` as luck. If `p` is the calm-day probability and the kick was
+into a 20 mph wind, the miss is charged to the kicker as bad luck when it was
+partly the conditions — an error whose *sign is systematic*, not noise: it runs
+one way for every outdoor cold-weather team and the other way for every dome
+team, across all ten seasons. Distance-adjusted, the raw data already shows
+indoor kicking running about 2 pp above the league curve and 10–14 mph winds
+about 4 pp below it.
+
+**Extra points enter for a different reason**: document 09 §8 measured a 2.422 pp
+population SD in kicker extra-point rates against a 1.840 pp null bound, so
+kickers genuinely differ there, and document 09 §2 gave extra points a branch
+point. They are a neutralizable component with an entity, and the entity is the
+kicker already in this model.
+
+**What would make it fail.** If `beta_wind`'s interval does not clear the null
+bound, ten seasons cannot size a wind effect and the defect stays open with a
+sharper statement than before. If the weather-cell calibration gate fails, a
+*linear* wind term is the wrong shape — wind direction is not in the data at
+all, and a 20 mph crosswind and a 20 mph tailwind are recorded identically,
+which would show up as a poor fit in the high-wind cells.
+
+### 4. Compute cost and inference plan
+
+- **Arms:** one new fit. The control is the published Phase 2 posterior already
+  on disk (`research/outputs/trace_fg_model.nc`), so no refit is needed for it.
+- **Observations:** 23,549 (10,731 field goals + 12,818 extra points).
+  **Parameters:** ~430.
+- **Engine:** NUTS via nutpie, as §5. Same geometry, slightly larger.
+- **Configuration:** 4 chains, 1,000 tune, 1,000 draws, `target_accept = 0.9` —
+  unchanged, so a difference in diagnostics is attributable to the model rather
+  than to the sampler settings.
+- **Parameterization:** non-centered on `kicker[k]`, still a **ruling** for the
+  reason §5 gave.
+- **Wall clock:** expect under five minutes. **No cheaper screen is warranted —
+  the confirm run is cheap**, and the power calculation (which is the expensive
+  part at 2,000 logistic fits) has already run.
+- **Efficiency levers considered:** the power calculation uses a plain logistic
+  fit rather than the hierarchy, which is what made 2,000 fits affordable; its
+  bias direction is stated in §6 below.
+
+### 5. Sanitize rules — fixed before the fit
+
+These are data-quality guards, not modelling choices, and they live in
+`src/nfl_simulator/fg_model.sanitize_weather` so the fit and the simulator share
+**one** implementation. A model trained on one definition of a windy day and
+applied to another is a defect no gate would catch.
+
+| Rule | Rows affected | Why |
+|---|---|---|
+| **Indoors, weather is nulled** | 4 of 3,200 dome/closed attempts | nflverse leaves temp and wind null on 3,196 of them; the four exceptions carry a stadium-ambient reading (46 °F, 2 mph) that describes the air *outside* the stadium. A wrong reading is worse than a missing one, because it is silently used |
+| **Wind capped at 30 mph** | 17 of 7,327 outdoor attempts | The raw maximum is **71 mph**, on three attempts in one 2016 game. Bins above 25 mph hold 31 attempts in ten seasons — uncapped, three kicks would lever the league's wind coefficient |
+| **Missing outdoor weather is not imputed** | 716 attempts (512 outdoors + all 204 "open") | Centred to the outdoor mean, which contributes exactly zero. The honest meaning is *no information about this kick's conditions, so use the outdoor baseline* — not *it was a calm 58-degree day* |
+| **Both readings required together** | — | temp and wind are null together in every row of the source, so an all-or-nothing rule costs nothing and avoids centring one term while guessing the other |
+
+This mirrors the `sanitize_temp` reasoning in the sibling baseball repo.
+
+### 6. Priors, and the power behind the gate
+
+| Site | Prior | Plain-language meaning |
+|---|---|---|
+| `alpha`, `beta`, `gamma`, `sigma_kicker` | **unchanged** from §4 | The incumbent's curve is not being re-argued |
+| `roof[level]` | `Normal(0, 0.5)` | Level shift for a dome, a closed roof or an open retractable. 0.5 log-odds is about ±6 pp at an 85% base rate — generous |
+| `beta_wind` | `Normal(0, 0.05)` | Log-odds per mph. At 0.05 a 15 mph wind moves 0.75 log-odds ≈ 9 pp, more than twice the effect the design can resolve |
+| `beta_temp` | `Normal(0, 0.02)` | Log-odds per °F. A 40 °F swing moves 0.8 log-odds |
+| `delta_xp` | `Normal(0, 1)` | How much easier or harder an extra point is than a field goal from the same distance |
+| `lambda_xp` | `Normal(1, 0.5)` | How much of a kicker's field-goal ability transfers to extra points. Centred on full transfer; 0 and 2 are both within two SD |
+
+**Power** (`research/13_fg_weather_power.py`, 400 datasets per scenario,
+simulating from the published incumbent with `beta_wind` set to a known value
+and refitting):
+
+| True effect: make-rate drop at 45 yd, calm → 15 mph | `beta_wind` | **Power** |
+|---|---|---|
+| 1 pp | −0.00402 | 0.235 |
+| 2 pp | −0.00791 | 0.388 |
+| **4 pp** | **−0.01533** | **0.800** |
+| 6 pp | −0.02236 | 0.948 |
+
+> **Minimum detectable wind effect: a 4 pp make-rate drop at 45 yards between a
+> calm day and a 15 mph wind.** The design cannot resolve a 2 pp effect, and that
+> limitation is recorded here rather than discovered later.
+
+The power fits use a plain logistic **without** kicker effects while simulating
+data **with** them. The direction is the safe one: unmodelled kicker spread
+inflates the residual, so the true power is at or **above** the table — the
+opposite bias to Gate FG-3's, and stated for the same reason.
+
+### 7. Pre-registered gates
+
+**Gate W-1 — sampler health.** Zero divergences, `r_hat < 1.01`,
+`ess_bulk > 400`, `ess_tail > 400`. Same rule and same fallbacks as Gate FG-1;
+raising `target_accept` to quiet a warning remains forbidden.
+
+**Gate W-2 — weather calibration.** The largest standardized miss across
+**weather cells** — roof level crossed with 5 mph wind buckets, cells holding at
+least 100 attempts — compared against its own posterior predictive
+distribution. **Pass:** observed at or below the 94.5th percentile. Identical in
+construction to Gate FG-2, which was itself fixed by a power check that caught
+its multiplicity problem. **Documented fallback on failure:** replace the linear
+wind term with 5 mph wind buckets and refit, reporting both arms. Named now so
+reaching for it later is execution rather than improvisation.
+
+**Gate W-3 — is the wind effect resolvable?** **Pass:** the 89% upper bound on
+`beta_wind` is below **+0.00268**, the 10th percentile of what this design
+produces when the truth is exactly zero. By construction a true-zero design
+clears it 10% of the time — the same construction Gate FG-3 used. **A failure
+means "no *large* wind effect", never "no wind effect"**, per the power table.
+
+**Gate W-4 — the distance curve still works.** The Gate FG-2 statistic,
+recomputed on distance bins. **Pass:** at or below the 94.5th percentile of its
+own reference. Adding weather must not break what already passed.
+
+**Gate W-5 — posterior predictive.** League make rate and between-kicker
+variance of make rates both inside the central 89% of their posterior
+predictive distributions, i.e. Gate FG-4 preserved.
+
+**Gate W-6 — extra-point transfer. Reported, no pass rule.** `lambda_xp` and
+`delta_xp` with 89% intervals. No threshold, because no prior estimate of either
+exists and pre-registering one would be theatre — the convention document 03 §6
+Gate 3 set. **Reporting rule, committed now:** a claim that extra-point ability
+differs from field-goal ability requires `lambda_xp`'s 89% interval to **exclude
+1**, stated as such.
+
+**Gate W-7 — temperature. Reported, no pass rule.** `beta_temp` with its 89%
+interval. **Reporting rule:** no claim about temperature unless its interval
+clears a null bound built the same way Gate W-3's was.
+
+**Gate W-8 — ledger impact. Reported, no pass rule.** How many ledger entries
+moved, by how much, and in which direction by roof. Required by the Phase 3
+plan's verification list, and it is the number that tells a reader whether any
+of this mattered.
+
+### 8. Long-fit downtime plan
+
+Nothing runs in parallel. The fit is minutes, and the two expensive jobs of this
+phase — the coin-flip power sweep and this one's power calculation — both
+completed before this proposal was written. Stated explicitly, as required.
+
+### 9. Kill and rollback
+
+- **On Gate W-3 failure:** weather is **not adopted**. The Phase 2 posterior
+  stays the simulator's input, `FieldGoalModel`'s weather parameters stay
+  `None`, and §7's weather defect is restated with the power table attached. No
+  code is reverted — the weather support is already merged and inert without a
+  weather-bearing trace, which is exactly the default-off behaviour this section
+  asks for.
+- **On Gate W-2 failure:** apply the §7 bucketed-wind fallback, refit, report
+  both arms.
+- **On success:** `research/outputs/trace_fg_weather.nc` becomes the simulator's
+  field-goal posterior, `model_metadata.json` records the change with a version
+  bump to `simulator-v1.1`, and document 05 §3's treatment table gains the
+  extra-point row. Downstream consumer: `research/09_simulator_demo.py`, which
+  regenerates `dtw_games.parquet` and `dtw_ledger.parquet`.
+
+### 10. Disclosure
+
+Fixing the sanitize rules required looking at the raw weather distributions —
+that is how the 71 mph reading and the 100%-null domes were found — and the same
+pass exposed the distance-adjusted make rate by weather bucket. **The thresholds
+above come from the null simulation and could not have been moved by those
+numbers**, but the exposure is recorded here rather than left unsaid, as
+document 08 §7 records the equivalent for the sequencing round.
