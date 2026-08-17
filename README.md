@@ -28,10 +28,13 @@ management) is explicitly **out of scope**.
 
 ## Status
 
-**Phase 2 — simulator v1 shipped and validated.** Phase 1 classified the
+**Phase 3 — the luck accounting is complete.** Phase 1 classified the
 components; Phase 2 turned that classification into a working simulator under a
-single rule, and tested it against a gate pre-registered before any
-deserve-to-win number existed.
+single rule; Phase 3 tested every remaining candidate and closed the two defects
+a public product would have exposed.
+
+**Every candidate is now neutralized, kept, or marked unresolvable with the
+power table that says why. There are no pending rows left.**
 
 ```python
 result = simulate_game(
@@ -56,6 +59,9 @@ Working notes live in [`docs/research/`](docs/research/):
 | [05b — FG model foundations](docs/research/05b-fg-model-foundations.md) | The kicker-hierarchical make model, its pre-registered gates and its results |
 | [06 — Rematch validation](docs/research/06-rematch-validation.md) | The validation design and its **power calculation**, committed before any result |
 | [07 — Validation results](docs/research/07-validation-results.md) | Gate outcomes: non-inferiority passes |
+| [08 — Sequencing luck](docs/research/08-sequencing-luck.md) | Is *where* production lands a team property? Plus the drive-outcome resampling that failed its gate |
+| [09 — Coin-flip candidates](docs/research/09-coinflip-candidates.md) | Drops, fourth down, two-point, onside kicks, extra points — Gate A first, then the arithmetic |
+| [10 — Interval coverage](docs/research/10-interval-coverage.md) | Does the 89% DTW interval mean 89%? It did not, and why |
 
 ### Headline findings
 
@@ -96,7 +102,38 @@ Working notes live in [`docs/research/`](docs/research/):
   observed statistic landed within a few percent of what the pre-registered
   power simulation predicted.
 
-### Two process laws, carried from Phase 1
+**Phase 3 — completing the accounting**
+
+- **Where a team's production lands is luck; when it lands is skill.** Red-zone
+  placement (r = −0.034) and third/fourth-down placement (r = +0.000) do not
+  persist across the halves of a team's own season, on a test with **87–92%
+  power** — so these are evidence of *absence*, not absence of evidence. But the
+  gap between win-probability and expected-points value of the same plays does
+  persist (**r = +0.180**), and survives a control for playing close games
+  (+0.144). Teams differ, repeatably, in how much winning they extract from a
+  fixed amount of production.
+- **None of it becomes a ledger row.** Sequencing has no branch point, so
+  Gate A rules it out at any value of `w` — a rule committed before the results
+  existed, and it held in both directions.
+- **Drops are not random.** Teams differ by **14.4% relative** on catchable-ball
+  drop rate (86.5% power), against the folk claim. Also not a ledger row: a drop
+  is a receiver's hands, not a coin.
+- **Extra points join the ledger.** A branch point, and kickers genuinely differ
+  (2.42 pp spread against a 1.84 pp null bound) — so they are partially
+  neutralized at the kicker's shrunk rate, folded into the same kicker model.
+- **Onside kicks are the honest denial.** A genuine branch point whose power is
+  flat at **0.115** across a tenfold range of true spread. `w` cannot be
+  measured, so it is not chosen.
+- **Weather closed the FG model's largest defect.** A 15 mph wind costs **5.50
+  pp** at 45 yards; a dome adds **4.53 pp**. 7,507 of 10,731 field-goal ledger
+  entries were repriced — systematically, by roof. Kicker skill barely moved
+  (σ 0.360 → 0.342), so the old model was not smuggling conditions into kickers.
+- **The 89% interval was not an 89% interval.** It covered ~97% of informative
+  games. The two-layer design was correct; the *coin-draw count* was too low, so
+  a third of the reported width was Monte Carlo noise. Fixed by raising a
+  constant — intervals are now 24.9% narrower and no verdict changed.
+
+### Three process laws
 
 Phase 1's Gate 2 failed because a threshold was set from a football-effect-size
 argument with no power calculation behind it. Phase 2 treats two rules as
@@ -108,6 +145,19 @@ binding, and both changed real decisions:
    field-goal calibration gate that would have failed 36% of the time on a
    correct model, and it converted the rematch validation from a superiority
    test the design could never pass into a non-inferiority test it can.
+3. **Gate A before Gate B — mechanism before arithmetic.** No statistic can
+   detect the *absence* of a branch point. In Phase 3 this disqualified six
+   candidates before a model was fit, and the drops result shows why it matters
+   in both directions: a 14.4% spread would have looked like an obvious skill
+   finding, but had drops come back near zero the arithmetic would have said
+   "neutralize" and the simulator would have started crediting teams for their
+   receivers' hands.
+
+Phase 3 produced **four pre-registered failures** — a drive-outcome resampling
+that degraded the game's predictive content, a distance gate that a defect
+register had already flagged, a convergence tolerance set by bad analogy, and an
+interval that did not cover what it claimed. Each was reported rather than
+tuned, and three of the four turned into a concrete fix.
 
 ## Data
 
