@@ -1,0 +1,23 @@
+# Cached data pulls — never tracked. Regenerate with `uv run python -m nfl_simulator.ingest`.
+data/
+*.parquet
+
+# Environments
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Research outputs (figures / fitted traces are large and regenerable)
+research/outputs/
+*.nc
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Local session state
+.remember/
