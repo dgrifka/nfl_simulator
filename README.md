@@ -28,13 +28,16 @@ management) is explicitly **out of scope**.
 
 ## Status
 
-**Phase 3 — the luck accounting is complete.** Phase 1 classified the
-components; Phase 2 turned that classification into a working simulator under a
-single rule; Phase 3 tested every remaining candidate and closed the two defects
-a public product would have exposed.
+**Phase 4 — the research program is closed.** Phase 1 classified the components;
+Phase 2 turned that classification into a working simulator under a single rule;
+Phase 3 tested every remaining candidate and closed the two defects a public
+product would have exposed; Phase 4 finished the sequencing research and ran the
+special-teams round.
 
-**Every candidate is now neutralized, kept, or marked unresolvable with the
-power table that says why. There are no pending rows left.**
+**Every candidate is neutralized, kept, or marked unresolvable with the power
+table that says why. There are no pending rows left, and Phase 4 added no new
+ones** — the branch-point gate denied every component it examined, which is what
+a settled treatment table looks like.
 
 ```python
 result = simulate_game(
@@ -62,6 +65,10 @@ Working notes live in [`docs/research/`](docs/research/):
 | [08 — Sequencing luck](docs/research/08-sequencing-luck.md) | Is *where* production lands a team property? Plus the drive-outcome resampling that failed its gate |
 | [09 — Coin-flip candidates](docs/research/09-coinflip-candidates.md) | Drops, fourth down, two-point, onside kicks, extra points — Gate A first, then the arithmetic |
 | [10 — Interval coverage](docs/research/10-interval-coverage.md) | Does the 89% DTW interval mean 89%? It did not, and why |
+| [11 — Drive anatomy](docs/research/11-drive-anatomy.md) | What a drive summary can and cannot see, and which scoring channel the leftover persists in |
+| [12 — The DQW% successor](docs/research/12-dq-successor.md) | Sufficiency criteria committed **before** the validation gate — and why the gate could not have carried it |
+| [13 — Leverage-timing attribution](docs/research/13-s3-attribution.md) | Does clutch conversion follow the quarterback or the scheme? |
+| [14 — Special teams](docs/research/14-special-teams.md) | Punting with weather, the punt bounce, kick and punt returns |
 
 ### Headline findings
 
@@ -133,11 +140,53 @@ Working notes live in [`docs/research/`](docs/research/):
   a third of the reported width was Monte Carlo noise. Fixed by raising a
   constant — intervals are now 24.9% narrower and no verdict changed.
 
-### Three process laws
+**Phase 4 — finishing the sequencing question, and special teams**
+
+- **A richer drive summary was necessary and not sufficient.** Conditioning a
+  drive's points on explosive plays, first downs and starting field position
+  rather than on depth alone lifts between-team spread retention from **70.5% to
+  94.8%** and cuts the leftover's persistence by two-thirds. The leftover still
+  persists, so the successor Phase 3 sketched was refuted by its own
+  pre-registered rule before it was built.
+- **Reaching the end zone is luck; kicking a field goal is not.** Valuing the
+  same drives three ways separates the channels: touchdown points leave a
+  leftover that does not persist (r = +0.042 against a 0.056 noise floor, 89%
+  power), field-goal points leave one that persists strongly (+0.229). The
+  finishing residual was the kicking channel all along — which DTW% already
+  neutralizes.
+- **The validation gate is blind to the failure it exists to catch.** A
+  purpose-built instrument shows the rematch non-inferiority test has **zero
+  power** against a measure that erases a tenth of the difference between NFL
+  offenses, and reaches 80% only between 20% and 29%. It caught Phase 3's
+  measure because that measure erased 29.4%.
+- **So the successor was stopped by sufficiency criteria, not by the gate.** It
+  passed the rematch test. It failed two of four criteria committed beforehand:
+  its excess quality correlation was no better than its predecessor's (+0.071 vs
+  +0.075, once the mechanical floor is subtracted), and it changed the named
+  winner in 4.6% of games against a 5% floor — near-vacuous, because holding
+  field-goal drives out leaves a nearly separable universe.
+- **Punter skill is real and now sized: 1.27 net yards** of true spread between
+  punter-seasons, about 83 yards of field position a year, and stable across
+  three specifications sharing neither likelihood nor estimator. The punter
+  carries **1.45×** the spread of the opposing return unit. The model that
+  measured it fails its own calibration gates by about a yard in the
+  highest-volume bins, and that is reported rather than tuned.
+- **Weather barely touches punting.** 0.31 net yards at 15 mph, against 5.50
+  percentage points of make probability for a 45-yard field goal.
+- **The punt bounce is unresolvable by construction.** The play-by-play records
+  one spot per punt — where the ball stopped — never where it landed. Not one
+  description in 22,519 punt rows mentions a bounce. More seasons cannot fix a
+  field that does not exist.
+- **Return yardage is a large, repeatable skill** at both the returner and team
+  grains (+0.35 for kickoff teams), which leaves Phase 2's interception-return
+  null intact because that was a different play. Kickoff eras are never pooled:
+  the return rate went 0.25 → 0.33 → 0.74 across two rule changes in two years.
+
+### Four process laws
 
 Phase 1's Gate 2 failed because a threshold was set from a football-effect-size
-argument with no power calculation behind it. Phase 2 treats two rules as
-binding, and both changed real decisions:
+argument with no power calculation behind it. Each phase since has treated the
+rules below as binding, and every one of them changed a real decision:
 
 1. **Pre-register before fitting.** Every gate doc lands in git before the
    script that fits its models — checkable with `git log --diff-filter=A`.
@@ -152,12 +201,21 @@ binding, and both changed real decisions:
    finding, but had drops come back near zero the arithmetic would have said
    "neutralize" and the simulator would have started crediting teams for their
    receivers' hands.
+4. **Characterize an instrument before writing its gate.** Phase 3 added this
+   after a coverage check turned out to be measuring Monte Carlo noise. Phase 4
+   is the case for it: measuring what the rematch gate could *see* revealed it
+   had zero power against a tenth of the between-team spread, which is why the
+   successor measure was judged on sufficiency criteria instead of on a test it
+   went on to pass.
 
 Phase 3 produced **four pre-registered failures** — a drive-outcome resampling
 that degraded the game's predictive content, a distance gate that a defect
 register had already flagged, a convergence tolerance set by bad analogy, and an
-interval that did not cover what it claimed. Each was reported rather than
-tuned, and three of the four turned into a concrete fix.
+interval that did not cover what it claimed. Phase 4 produced four more: a
+successor measure refuted by its own premise test, two sufficiency criteria
+failed, and a punting model that fails its calibration gates with the named
+fallback applied and no third curve attempted. Each was reported rather than
+tuned.
 
 ## Data
 
