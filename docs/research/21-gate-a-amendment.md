@@ -1,5 +1,7 @@
 # 21 — A proposed amendment to Gate A, for the maintainer to accept or reject
 
+> **DECIDED 2026-08-18 — REJECTED by the maintainer.** Gate A stands unamended. See §9.
+
 *Written 2026-08-18. **This document enacts nothing.** It is a proposal with
 both sides argued, a concrete amendment text, and an explicit list of what the
 amendment would let into the ledger and what it would keep out. No code changes,
@@ -262,3 +264,35 @@ strength of this document. It is a decision request:
   does not need to be re-derived the next time a powered zero appears.
 - **Accept a narrowed A-2** → the seventh clause of §6 has to be written first,
   and it needs its own memo.
+
+---
+
+## 9. Decision
+
+**Status: rejected. Decided 2026-08-18 by the maintainer**, on the recommendation of §7.
+
+Amendment A-2 is not adopted. **Gate A stands unamended:** a component enters the
+ledger only through a genuine branch point, because the gate is what supplies the
+empirical expectation that `luck = (realized − expected) × swing` requires. A
+powered measured-zero skill dial is not a substitute — it grants permission
+without supplying a `p`.
+
+What this settles, so it is not re-derived:
+
+- **Interception returns stay in `core`.** Document 05 §3's treatment table is
+  untouched, and no code, threshold or treatment changes on this document.
+- **The sequencing rows stay out.** Document 08 §6's judgment on red-zone
+  finishing and late-down conversion stands as written, and §6 above is the
+  record of why the amendment would have overruled it as a side effect.
+- **The powered zeros remain true and remain reportable.** Interception-return
+  yardage (r = −0.014), red-zone finishing (r = −0.034) and late-down conversion
+  (r = +0.0005) are measured facts about the game. They may be **reported** in
+  the product layer as luck diagnostics — document 05 §3's "reported separately,
+  never as ledger rows" — but they never become ledger rows.
+- **The reopening conditions of §7 survive the rejection.** A working empirical
+  expectation table keyed on pre-branch state, a defensible seventh clause, or a
+  materially larger candidate with the same shape would each justify re-opening
+  this argument. Absent one of those, it is closed.
+
+This is the fifth consecutive round in which the mechanism gate, not the
+arithmetic, settled the question.
