@@ -125,6 +125,37 @@ class TestPartition:
         assert games.height == toy_pbp["game_id"].n_unique()
 
 
+def _widening_corpus() -> list[dict]:
+    """100 fumbles by AAA: 49 recovered, 50 lost, 1 out of bounds.
+
+    Retention is exactly 50/100 and the branch means are exactly +1.0 and -3.0,
+    so every number a widening test asserts is arithmetic rather than a fit.
+    """
+    rows = [
+        make_play(
+            game_id=f"g{i}",
+            play_id=i,
+            fumble=1,
+            fumbled_1_team="AAA",
+            fumble_recovery_1_team="AAA" if i < 49 else "BBB",
+            epa=1.0 if i < 49 else -3.0,
+        )
+        for i in range(99)
+    ]
+    rows.append(
+        make_play(
+            game_id="g99",
+            play_id=99,
+            fumble=1,
+            fumbled_1_team="AAA",
+            fumble_recovery_1_team=None,
+            fumble_out_of_bounds=1,
+            epa=1.0,
+        )
+    )
+    return rows
+
+
 class TestFumbleLuck:
     def test_zero_when_no_fumbles(self, toy_pbp):
         clean = toy_pbp.with_columns(
@@ -160,22 +191,56 @@ class TestFumbleLuck:
         # Swing magnitude is half the branch gap: 0.5 * (1.0 - -3.0) = 2.0
         assert np.allclose(np.abs(luck), 2.0)
 
-    def test_out_of_bounds_fumbles_are_not_coin_flips(self):
-        """No recovery team means no coin flip to neutralise."""
+    def test_out_of_bounds_counts_as_keeping_the_ball(self):
+        """v1.2, document 18 §5g: the branch is *did the fumbling team keep it*,
+        and skipping out of bounds is one of the two ways to keep it."""
+        df = pl.DataFrame(_widening_corpus())
+        plays = decompose_plays(df, fit_fumble_baseline(df), fit_fg_baseline(df))
+        out_of_bounds = plays.filter(pl.col("fumble_out_of_bounds") == 1)
+        # Retention rate is 50/100, the swing is 1.0 - -3.0 = 4.0, and AAA is the
+        # away team, so keeping the ball is negative luck in home perspective.
+        assert np.isclose(out_of_bounds["fumble_luck"].item(), -2.0)
+
+    def test_a_fumble_nobody_resolved_books_no_luck(self):
+        """No recovery team and no out-of-bounds flag is an unresolved
+        disposition, not a retention. Two such plays exist in ten seasons."""
         df = pl.DataFrame(
             [
                 make_play(
                     fumble=1,
-                    fumble_out_of_bounds=1,
                     fumbled_1_team="AAA",
                     fumble_recovery_1_team=None,
+                    fumble_out_of_bounds=0,
                     epa=-1.0,
                 )
             ]
         )
+        assert fit_fumble_baseline(df).table.height == 0
         plays = decompose_plays(df, fit_fumble_baseline(df), fit_fg_baseline(df))
         assert plays["fumble_luck"].item() == 0.0
         assert plays["core"].item() == 1.0  # away team's -1 EPA, home perspective
+
+    def test_conflicting_flags_resolve_to_the_recovery(self):
+        """Eleven fumbles carry both an out-of-bounds flag and a named recovering
+        team. A named recovering team is the more specific fact (document 18 §3)."""
+        rows = _widening_corpus()
+        # Turn the out-of-bounds play into a conflicted one: the opponent
+        # recovered it, so it is a loss despite the flag.
+        rows[-1] |= {"fumble_recovery_1_team": "BBB", "epa": -3.0}
+        df = pl.DataFrame(rows)
+        baseline = fit_fumble_baseline(df)
+        assert np.isclose(baseline.table["p_own"].item(), 0.49)
+        plays = decompose_plays(df, fit_fumble_baseline(df), fit_fg_baseline(df))
+        conflicted = plays.filter(pl.col("fumble_out_of_bounds") == 1)
+        assert np.isclose(conflicted["fumble_luck"].item(), 0.49 * 4.0)
+
+    def test_the_baseline_reports_the_out_of_bounds_rate(self):
+        """Reporting only — the rate is not used in the luck identity, but a
+        class that goes out of bounds 3% of the time and one that goes 11% are
+        not the same coin, and the table has to show it (document 18 §5g)."""
+        df = pl.DataFrame(_widening_corpus())
+        table = fit_fumble_baseline(df).table
+        assert np.isclose(table["p_out_of_bounds"].item(), 0.01)
 
     def test_aborted_snaps_get_their_own_class(self, toy_pbp):
         """Botched snaps recover far more than half the time; pooling them would

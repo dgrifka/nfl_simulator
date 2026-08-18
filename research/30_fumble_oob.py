@@ -81,7 +81,7 @@ def main() -> None:
     )
     incumbent = fit(
         "recovery, live only (incumbent)",
-        counts_for(_fumble_frame(pbp.filter(live_fumble_mask())), pl.col("recovered_own")),
+        counts_for(_fumble_frame(pbp.filter(live_fumble_mask())), pl.col("retained")),
     )
 
     upper = widened["population_sd_eti89_pp"][1]

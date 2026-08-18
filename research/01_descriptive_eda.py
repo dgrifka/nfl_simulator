@@ -109,20 +109,20 @@ def baseline_tables(pbp: pl.DataFrame) -> dict:
     fumbles = fit_fumble_baseline(pbp)
     field_goals = fit_fg_baseline(pbp)
 
-    print("\n=== Fumble recovery baseline (2016-2025) ===")
+    print("\n=== Fumble retention baseline (2016-2025) ===")
     print(fumbles.table)
-    rate_ex_aborted = fumbles.league_recovery_rate(exclude_aborted=True)
-    rate_all = fumbles.league_recovery_rate(exclude_aborted=False)
-    print(f"\nLeague own-recovery rate, excluding aborted snaps: {rate_ex_aborted:.4f}")
-    print(f"League own-recovery rate, all live fumbles:        {rate_all:.4f}")
+    rate_ex_aborted = fumbles.league_retention_rate(exclude_aborted=True)
+    rate_all = fumbles.league_retention_rate(exclude_aborted=False)
+    print(f"\nLeague retention rate, excluding aborted snaps: {rate_ex_aborted:.4f}")
+    print(f"League retention rate, all fumbles:            {rate_all:.4f}")
 
     print("\n=== Field goal baseline ===")
     print(field_goals.table)
 
     return {
         "fumble_classes": fumbles.table.to_dicts(),
-        "recovery_rate_ex_aborted": rate_ex_aborted,
-        "recovery_rate_all": rate_all,
+        "retention_rate_ex_aborted": rate_ex_aborted,
+        "retention_rate_all": rate_all,
         "fg_bins": field_goals.table.to_dicts(),
     }
 

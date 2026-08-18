@@ -56,6 +56,26 @@ def fumble_play(play_id: float, *, fumbler: str, recoverer: str, epa: float = -2
     )
 
 
+def oob_fumble_play(play_id: float, *, fumbler: str, epa: float = -0.1, **overrides) -> dict:
+    """A fumble the fumbling team kept by the ball crossing the sideline.
+
+    v1.2 (document 18 §5g) prices this as a retention branch: nobody recovered
+    it, but the fumbling team still has the ball, which is the outcome the coin
+    is being asked about.
+    """
+    return play(
+        play_id,
+        posteam=fumbler,
+        play_type="run",
+        epa=epa,
+        fumble=1,
+        fumbled_1_team=fumbler,
+        fumble_recovery_1_team=None,
+        fumble_out_of_bounds=1,
+        **overrides,
+    )
+
+
 def fg_play(
     play_id: float, *, kicker: str, distance: float, made: bool, team: str = HOME, **overrides
 ) -> dict:
@@ -224,6 +244,51 @@ def test_the_ledger_sums_to_the_applied_margin_adjustment(baselines, fg_model):
 
     applied = result.actual_margin - result.deserved_margin
     assert applied == pytest.approx(result.ledger.total_luck_epa() * 0.6)
+
+
+def test_an_out_of_bounds_fumble_books_luck_at_the_class_retention_rate(baselines, fg_model):
+    """v1.2: keeping the ball by the sideline is a branch of the same coin, so it
+    earns a ledger row instead of being booked as deserved."""
+    result = run([oob_fumble_play(1.0, fumbler=HOME)], baselines, fg_model)
+
+    assert len(result.ledger) == 1
+    entry = result.ledger.entries[0]
+    assert entry.component == "fumble"
+    assert entry.realized == 1.0
+    assert entry.expected == pytest.approx(0.4, abs=0.05)
+    assert entry.luck_epa > 0  # HOME kept a ball it was odds-on to lose
+
+
+def test_an_out_of_bounds_fumble_by_the_away_team_carries_the_opposite_sign(baselines, fg_model):
+    home = run([oob_fumble_play(1.0, fumbler=HOME)], baselines, fg_model)
+    away = run([oob_fumble_play(1.0, fumbler=AWAY)], baselines, fg_model)
+    assert home.ledger.total_luck_epa() != 0.0
+    assert home.ledger.total_luck_epa() == pytest.approx(-away.ledger.total_luck_epa())
+
+
+def test_a_fumble_flagged_out_of_bounds_and_recovered_books_exactly_one_row(baselines, fg_model):
+    """Gate F-4. Widening a population is exactly the change that double-counts:
+    a play carrying both flags must not produce a retention row and a recovery
+    row."""
+    conflicted = fumble_play(1.0, fumbler=HOME, recoverer=AWAY) | {"fumble_out_of_bounds": 1}
+    result = run([conflicted], baselines, fg_model)
+
+    assert len(result.ledger) == 1
+    assert result.ledger.entries[0].realized == 0.0  # the recovery is the specific fact
+
+
+def test_the_ledger_still_sums_with_an_out_of_bounds_fumble_in_it(baselines, fg_model):
+    """Gate F-4's other half: the identity survives the wider population."""
+    rows = [
+        oob_fumble_play(1.0, fumbler=HOME),
+        fumble_play(2.0, fumbler=AWAY, recoverer=HOME),
+        fg_play(3.0, kicker="K_GOOD", distance=48.0, made=False),
+    ]
+    result = run(rows, baselines, fg_model, points_per_epa=0.6)
+
+    applied = result.actual_margin - result.deserved_margin
+    assert applied == pytest.approx(result.ledger.total_luck_epa() * 0.6)
+    assert len(result.ledger) == 3
 
 
 # --------------------------------------------------------------------------
