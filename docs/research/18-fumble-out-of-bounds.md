@@ -316,3 +316,106 @@ carelessly. §3's eleven conflicted plays are the ones that would do it.
 | `points_per_epa` | 0.8389 | `research/outputs/model_metadata_v11.json` |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Script: `research/30_fumble_oob.py`. Gate F-2's threshold was committed at
+`afae577` before this script existed. Results in
+`research/outputs/30_fumble_oob.json`.*
+
+### The verdict, stated first
+
+> **All three gates pass. Widening the fumble branch is the first Phase 5 change
+> that should ship — and it is held at the door pending approval, because it
+> moves numbers the product already prints.**
+
+| Gate | Statistic | Result | Verdict |
+|---|---|---|---|
+| **F-1** — branch point | The same bounce, one instant earlier | — | **Pass** (§2) |
+| **F-2** — entity spread | 89% upper bound **4.222 pp** vs 5.260 pp | Below the null bound | **Pass** |
+| **F-3** — materiality | 1.65 pp vs 0.62 pp on 536 games | Clears by 2.7× | **Pass** (known at writing) |
+
+### Gate F-2 — full neutralization survives, and gets stronger
+
+| Branch | Population SD | 89% ETI | Relative | κ | w at the median entity | Grid edge mass |
+|---|---|---|---|---|---|---|
+| **Retention, all fumbles (widened)** | **2.370 pp** | 0.777 – 4.222 | **4.2%** | 1,317 | **0.0150** | 1.7 × 10⁻⁷ |
+| Recovery, live only (incumbent) | 2.672 pp | 0.862 – 4.816 | 5.1% | 1,083 | 0.0163 | 1.3 × 10⁻⁷ |
+
+Two things worth reading carefully.
+
+**The widened branch looks *more* like a coin, not less.** Its population SD is
+lower, its κ is higher, and its `w` is smaller. The natural worry about folding
+in a rarer outcome was that it would introduce team-to-team structure — that some
+teams are better at batting loose balls through the sideline. The measurement
+says the opposite: the extra 591 events make the league look flatter.
+
+**`w = 0.015` is the whole justification for full neutralization**, and it holds.
+A team-season's own record of keeping fumbled balls carries about one and a half
+percent of the information about its true rate; the other 98.5% comes from the
+league. Document 05 §1's dial reads essentially zero and the entity term drops
+out. *(Document 04 published `w = 0.011` for the recovery branch on a
+4,898-fumble population; the 0.0163 above is the same quantity recomputed on this
+document's 5,914-fumble population with the grid posterior, so the two are close
+rather than identical and neither contradicts the other.)*
+
+Grid edge mass below 2 × 10⁻⁷ on both fits: the posterior has died out well
+before the grid boundary, so the exact posterior is exact.
+
+### What changes if it ships
+
+| | v1.1 | v1.2 |
+|---|---|---|
+| Fumble population | 5,914 recovered | **6,505 fumbles** |
+| League rate | 52.13% recovery | **56.48% retention** |
+| pass/live `p` | 0.4530 | **0.5096** |
+| run/aborted `p` | 0.7622 | 0.7690 |
+| Games gaining a ledger row | — | **536** |
+| Median \|Δ deserved margin\| on those games | — | **1.76 points** |
+| Games whose DTW side flips | — | **31** |
+
+Document 05 §3's treatment table gains **no new row**. Fumble recovery is still
+the one component neutralized in full at the class league rate; the population it
+runs on widens, and the row's name in the ledger does not change.
+
+---
+
+## 9. What this round changes, and what it teaches
+
+### The ledger changes, once approved
+
+This is the first Phase 5 candidate to reach the shipping gate. Candidates 1
+(overtime toss, immaterial) and 2 (deflected interceptions, unidentifiable) are
+closed with nothing shipped.
+
+### Three things worth carrying forward
+
+1. **The most valuable candidate in the round was a conditioning bug in an
+   existing component, not a new component.** Documents 16 and 17 went looking
+   for new coins and found one that does not matter and one that cannot be seen.
+   This one was already inside the simulator, selecting its population on the
+   outcome of the branch immediately upstream of the branch it neutralizes.
+   **The next round should audit the other components' populations for the same
+   shape before hunting new candidates.** Field goals condition on an attempt
+   being made; extra points condition on a touchdown having been scored.
+2. **Widening a branch can improve its measurement.** The intuition that adding a
+   rarer outcome dilutes a rate is wrong when the rarer outcome adds
+   opportunities to every entity: power at the reference went from 0.975 to
+   1.000 and the measured spread went *down*.
+3. **Two impact populations, both reported.** A component that fires on 602 plays
+   moves the median game with any fumble by 0.10 pp and the median game with an
+   out-of-bounds fumble by 1.65 pp. Reporting one number would have been
+   misleading in whichever direction it was chosen. Document 16 §9's lesson —
+   state which summary the floor reads and why — is now a two-population rule.
+
+### What would reopen this
+
+- **A Gate F-2 failure on future data**, which would move the component to
+  partial neutralization and needs its own round.
+- **Field position in the fumble class**, the largest open defect: a fumble at
+  the sideline and a fumble at the numbers do not share an out-of-bounds rate,
+  and pooling them is the same mistake a flat recovery rate would have been.
+- **Separating fumbles out of the back of the end zone**, which are touchbacks
+  rather than retentions and are currently mislabelled among the 602.
