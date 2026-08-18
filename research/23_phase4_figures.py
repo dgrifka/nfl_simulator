@@ -443,6 +443,46 @@ def figure_returns(special: dict) -> None:
     save(fig, "fig15_returns")
 
 
+def figure_bounce(special: dict) -> None:
+    """Why the punt-roll bound is unusable. Polarity job -> a diverging bar chart.
+
+    Two hues around a neutral zero, which is the diverging case: the sign is the
+    finding. If the gap were the roll it would be positive everywhere.
+    """
+    rows = special["punt_bounce"]["matched_bins"]
+    gaps = [row["gap"] for row in rows]
+    fig, ax = plt.subplots(figsize=(8.6, 3.8))
+    ax.bar(
+        range(len(rows)),
+        gaps,
+        width=0.6,
+        color=[AQUA if gap > 0 else ORANGE for gap in gaps],
+    )
+    ax.axhline(0, color=INK_MUTED, linewidth=1)
+    ax.set_xticks(range(len(rows)), [str(row["spot_bin"]) for row in rows], fontsize=9)
+    ax.set_xlabel("yards from the opponent's goal line when the punt was struck")
+    ax.set_ylabel("extra yards a bouncing punt travels")
+    ax.text(0.3, 3.3, "near midfield: bouncing punts go FURTHER", fontsize=9, color=AQUA)
+    ax.text(
+        len(rows) - 0.6,
+        2.3,
+        "backed up in your own end:\nthey go SHORTER",
+        fontsize=9,
+        color=ORANGE,
+        ha="right",
+        va="top",
+    )
+    ax.grid(axis="y", color=GRID, linewidth=0.8)
+    ax.set_axisbelow(True)
+    _finish(
+        ax,
+        "The aggregate bound on the punt roll is measuring intent, not physics",
+        "If this were the roll it would be positive everywhere. It flips sign at midfield.",
+    )
+    fig.tight_layout()
+    save(fig, "fig16_punt_bounce")
+
+
 def main() -> None:
     paths.ensure_data_dirs()
     anatomy = _load("19_drive_anatomy.json")
@@ -461,6 +501,7 @@ def main() -> None:
         special = _load("22_special_teams.json")
         figure_punting(special)
         figure_returns(special)
+        figure_bounce(special)
 
 
 if __name__ == "__main__":
