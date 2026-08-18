@@ -16,6 +16,7 @@ together they are drawn as two panels rather than two y-scales.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from importlib import import_module
 from pathlib import Path
@@ -116,12 +117,17 @@ def figure_channel_split(anatomy: dict) -> None:
     ax.bar(position, values, width=0.5, color=colours)
     for x, (value, threshold) in enumerate(zip(values, thresholds, strict=True)):
         ax.hlines(threshold, x - 0.32, x + 0.32, color=INK_MUTED, linewidth=2, zorder=3)
-        ax.text(x, value + 0.008, f"{value:+.3f}", ha="center", fontsize=10, color=INK)
         ax.text(
-            x + 0.34,
+            x, max(value, threshold) + 0.010, f"{value:+.3f}", ha="center", fontsize=10, color=INK
+        )
+        # The rightmost rule labels leftward so the text stays inside the axes.
+        outward = x < len(values) - 1
+        ax.text(
+            x + (0.35 if outward else -0.35),
             threshold,
             f"noise floor {threshold:.3f}",
             va="center",
+            ha="left" if outward else "right",
             fontsize=8,
             color=INK_MUTED,
         )
@@ -362,6 +368,9 @@ def figure_punting(special: dict) -> None:
     ax.set_yticks(position, labels, fontsize=10)
     ax.invert_yaxis()
     ax.axvline(0, color=GRID, linewidth=1)
+    # Room for the outside-the-bar labels on both sides, so a negative value's
+    # label never lands on the category axis.
+    ax.set_xlim(min(values) - 0.95, max(values) + 0.55)
     ax.set_xlabel("change in net punt yards")
     _finish(
         ax,
@@ -375,17 +384,17 @@ def figure_punting(special: dict) -> None:
 def figure_returns(special: dict) -> None:
     """Return persistence by cell. Magnitude job with per-cell thresholds."""
     rows = [row for row in special["returns"]["cells"] if not row.get("skipped")]
-    labels = [
-        row["cell"].replace(" / ", "\n").replace("(traditional)", "").replace("(no rule break)", "")
-        for row in rows
-    ]
+    labels = [re.sub(r"\s*\(.*?\)", "", row["cell"]).replace(" / ", "\n") for row in rows]
     values = [row["split_half_r"] for row in rows]
     thresholds = [row["threshold"] for row in rows]
     colours = [AQUA if row["persists"] else ORANGE for row in rows]
+    # Texture, not colour, carries the second dimension: a hatched bar sits in a
+    # cell the design was pre-registered as underpowered for.
+    hatches = ["" if row["power_at_reference_r"] >= 0.80 else "///" for row in rows]
 
     fig, ax = plt.subplots(figsize=(max(8.0, 1.7 * len(rows)), 4.4))
     position = np.arange(len(rows))
-    ax.bar(position, values, width=0.5, color=colours)
+    ax.bar(position, values, width=0.5, color=colours, hatch=hatches, edgecolor=SURFACE)
     for x, (value, threshold) in enumerate(zip(values, thresholds, strict=True)):
         ax.hlines(threshold, x - 0.32, x + 0.32, color=INK_MUTED, linewidth=2, zorder=3)
         ax.text(
@@ -406,13 +415,14 @@ def figure_returns(special: dict) -> None:
         loc="left",
         fontsize=13,
         fontweight="bold",
-        pad=20,
+        pad=34,
     )
     ax.text(
         0,
         1.02,
-        "Grey rules are each cell's own noise floor. Kickoff eras are never pooled — "
-        "the 2024 and 2025 rule changes are structural breaks.",
+        "Grey rules are each cell's own noise floor; hatched bars sit in cells the design "
+        "was pre-registered as underpowered for.\nKickoff eras are never pooled — the 2024 "
+        "and 2025 rule changes are structural breaks.",
         transform=ax.transAxes,
         fontsize=8.5,
         color=INK_MUTED,
