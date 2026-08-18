@@ -463,3 +463,170 @@ the new rules, which is roughly four seasons away.
 | Overtime games / decided / ties | 155 / 145 / 10 | §3 |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Script: `research/26_overtime.py`. Gate A settled in §2, thresholds fixed in
+§4–§5, all committed at `3fbbc59` before this script existed. Results in
+`research/outputs/26_overtime.json`, per-game impact in
+`research/outputs/26_overtime_games.parquet`.*
+
+### The verdict, stated first
+
+> **The overtime coin toss is worth 2.05 points of final margin, the estimate is
+> real and stable, and it does not reach the materiality floor. The component is
+> not shipped.**
+
+| Gate | Statistic | Result | Verdict |
+|---|---|---|---|
+| **A** | Is there a branch point? | A referee's coin | **Pass** (§2) |
+| **O-1** | 89% interval on the swing excludes zero | +2.049 pts, **[+1.037, +3.065]** | **Pass** |
+| **O-2** | Independent estimator and priors agree within 10% relative | worst gap 6.98% / 5.67% | **Pass** |
+| **O-3** | Median \|ΔDTW\| ≥ 4.06 pp | **3.93 pp** | **FAIL by 0.13 pp** |
+
+Per the decision rule committed in §5g — *pass O-1, fail O-3 → no treatment* —
+**the toss is measured, reported, and left out of the ledger.** Nothing in
+document 05 §3's treatment table moves.
+
+### Gate O-1 — the swing is real
+
+| Estimate | Swing (points) | 89% ETI |
+|---|---|---|
+| **Primary** — home-balanced Dirichlet(0.5) | **+2.049** | +1.037 – +3.065 |
+| In EPA units (÷ 0.8389) | +2.443 | — |
+
+Receiving the first overtime possession is worth about **two points of final
+margin**, which is roughly two thirds of a field goal. The interval excludes zero
+comfortably, and §4a puts the design's power at a 2.0-point swing at 0.927, so
+this is a detection the instrument was built to make rather than one it stumbled
+into.
+
+### Gate O-2 — the estimate is trustworthy
+
+| Check | Result | Tolerance | Verdict |
+|---|---|---|---|
+| Nonparametric bootstrap of the same contrast | +2.161, [+1.110, +3.202] | 10% relative on the endpoints | **6.98%** — pass |
+| Prior α = 1.0 | +1.937 | 10% relative on the mean | 5.5% — pass |
+| Prior α = 0.01 (≈ Bayesian bootstrap) | +2.164 | 10% relative on the mean | 5.7% — pass |
+| Naive, unbalanced estimate *(reported, not gated)* | +2.176 | — | 6.2% above the balanced figure |
+
+The naive figure is higher than the balanced one by 0.13 points, which is home
+advantage leaking through the 87/68 split the coin produced — small, in the
+direction §5b predicted, and removed by construction rather than by adjustment
+after the fact.
+
+### Gate O-3 — and it does not matter enough
+
+Applying the fitted 2.049-point swing to all 155 overtime games in simulator
+v1.1:
+
+| Statistic | Value |
+|---|---|
+| **Median \|ΔDTW\|** | **3.93 pp** |
+| Floor (incumbent's own median 89% half-width) | 4.06 pp |
+| Mean \|ΔDTW\| | 5.56 pp |
+| Max \|ΔDTW\| | 21.44 pp |
+| Games whose DTW side flips | 14 / 155 (9.0%) |
+
+**The failure is 0.13 pp, so the first question is whether it is noise.** It is
+not. Redrawing the replayed coin eight independent times moves the median across
+a range of **3.87 – 3.96 pp** — the whole spread sits below the floor, and the
+gap to it is three times the spread. The gate is decided, not undecidable.
+
+**What the failure does and does not say.** The median overtime game moves less
+than the interval the product already prints on it. The *mean* game moves more
+(5.56 pp), because the distribution is strongly right-skewed: most overtime games
+are already far enough from the boundary that two points cannot reach it, while a
+minority sitting on the boundary move by up to 21 pp. Fourteen games over ten
+years change which team the simulator says deserved to win. That is a real
+effect on a real minority of games, and the committed statistic was the median.
+
+### The sensitivity arm — the shortcut this component could not afford
+
+§5h required reporting DTW with the swing redrawn from its posterior on every
+posterior draw, because the toss's swing rests on 155 games where a fumble class
+rests on thousands of events.
+
+| Median 89% DTW interval half-width, overtime games | Value |
+|---|---|
+| Incumbent (no overtime component) | 4.06 pp |
+| With the component, swing fixed at its posterior mean | **3.69 pp** |
+| With the component, swing redrawn per posterior draw | **5.00 pp** |
+
+Read the second and third rows together. Shipping the component at a fixed swing
+would have made the printed intervals **narrower** (3.69 pp) while the honest
+accounting makes them **wider** (5.00 pp) than the incumbent's. The fixed-swing
+convention every other component uses would have quietly bought a 1.3 pp
+reduction in stated uncertainty that the data does not support. The point
+estimate itself barely moves — median gap 0.54 pp — so this is a defect about
+intervals, not about the number.
+
+**This finding outlives the candidate.** It is the first quantification anywhere
+in the project of what the unpropagated-swing shortcut costs, and it is recorded
+against the register in §6.
+
+### Reported, deciding nothing (§5f)
+
+| Split | n | Swing | 89% ETI |
+|---|---|---|---|
+| 2016–2024 | 139 | +2.242 | +1.146 – +3.347 |
+| **2025 (new rules)** | **16** | **+0.688** | **−1.756 – +3.069** |
+| Regular season | 145 | +1.848 | +0.784 – +2.894 |
+| Playoffs | 10 | +2.539 | −0.530 – +5.447 |
+
+The 2025 row is the one a reader will want to interpret, and §4d pre-registered
+that it cannot be: at 16 games the design has power **0.243** to detect that the
+new rules removed the effect entirely, and the interval here is 4.8 points wide
+against an effect of about 2. **A lower point estimate under the new rules is
+exactly what an unchanged effect looks like a quarter of the time.** Nothing is
+concluded from it, and the successor trigger stands at 60 new-rule games.
+
+---
+
+## 9. What this round changes, and what it teaches
+
+### The ledger is unchanged
+
+No component is added. `docs/research/05` §3's treatment table stands as it was
+after Phase 3: fumble recovery in full, field goals and extra points partially,
+nothing else.
+
+### Three things worth carrying forward
+
+1. **A gate that fails by a tenth of a point still fails, and the way to earn
+   that verdict is to measure the noise rather than argue about it.** The eight
+   replayed-coin replicates cost one line and turned an uncomfortable 0.13 pp
+   into a settled question. Any future gate that lands this close should do the
+   same before anyone writes a sentence about it.
+2. **The floor did its job, and its job was unglamorous.** Document 09 shipped
+   extra points — defensible, fully gated, and worth 0.115 EPA on the average
+   attempt. This round produced a *larger* per-event effect on a *smaller* set of
+   games and stopped it at the door. A materiality gate that never rejects
+   anything is decoration.
+3. **The median was the committed statistic, and a right-skewed impact
+   distribution is where median and mean disagree.** The mean (5.56 pp) clears
+   the floor and the median (3.93 pp) does not. This document does not relitigate
+   the choice; it records that the next candidate's floor should state *which*
+   summary it uses and why, because for a component that touches few games and
+   moves a minority of them a lot, the two summaries answer different questions.
+
+### The defect register gains a measured entry
+
+The "swing uncertainty is not propagated" row was inherited from every existing
+component and had never been sized. It now has a number: on this component, the
+shortcut understates the median 89% DTW half-width by **1.31 pp** (3.69 against
+5.00). That is a general finding about the simulator's interval convention, not
+about overtime, and it belongs to whichever future round revisits document 10's
+coverage work.
+
+### What would reopen this
+
+- **60 overtime games under the 2025 rules** (roughly four seasons), which would
+  make the era question answerable and could move the swing in either direction.
+- **A coin-toss field in the source data**, which would replace the
+  first-possession proxy and let the *election* be separated from the *toss* —
+  the largest open defect in §6.
+- **A change to the materiality floor itself**, which would be a pre-registered
+  amendment with its own justification, not a re-run of this document.
