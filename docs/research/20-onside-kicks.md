@@ -327,3 +327,127 @@ all three values of `w`.
 | `points_per_epa` | 0.8389 | `research/outputs/model_metadata_v12.json` |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Script: `research/33_onside.py`. The gates were committed at `c5d4dfe` before
+this script existed. Results in `research/outputs/33_onside.json`.*
+
+### The verdict, stated first
+
+> **The onside coin matters just enough to clear the bar when you assume it is
+> pure luck, and stops clearing it the moment you hand back a quarter of the
+> trust to the kicking team. The component is not shipped, and the reason is not
+> that it is too small — it is that its verdict is a function of a dial this data
+> cannot read.**
+
+| Gate | Statistic | Result | Verdict |
+|---|---|---|---|
+| **K-1** — branch point | A short kick into a scrum | — | **Pass** (§2, document 09) |
+| **K-2** — identification | 581/584 agreement, all 3 disagreements replay reversals | 99.5% vs 95% | **Pass** (known at writing) |
+| **K-3** — materiality at `w = 0` | median \|ΔDTW\| **0.55 pp** vs a **0.44 pp** floor | Clears by 1.25× | **Pass** |
+| **K-4** — the ledger must still sum | 0 plays shared with the fumble population, 0 duplicates | — | **Pass** |
+| **K-5** — verdict independent of `w` | Passes at `w = 0`, fails at 0.25 and 0.50 | Not identical | **FAIL** |
+
+Per the decision rule committed in §5g — *pass K-3, fail K-5 → ship nothing,
+report as verdict-depends-on-an-unreadable-dial* — **the component is measured,
+reported, and left out of the ledger.** Document 05 §3's treatment table does not
+move.
+
+### Gate K-3 — it clears the floor, by less than fumbles did
+
+519 games carry an onside kick. Against simulator v1.2, with the fumble,
+field-goal and extra-point draws held to their own seeded generators in both
+arms:
+
+| | `w = 0.00` | `w = 0.25` | `w = 0.50` |
+|---|---|---|---|
+| **Median \|ΔDTW\|** | **0.55 pp** | 0.42 pp | 0.32 pp |
+| Mean \|ΔDTW\| | 1.73 pp | 1.49 pp | 1.26 pp |
+| Max \|ΔDTW\| | 28.37 pp | 26.22 pp | 25.33 pp |
+| Median \|Δ deserved margin\| | 0.281 pts | 0.211 pts | 0.141 pts |
+| Games whose DTW side flips | 4 | 3 | 1 |
+| **Against the 0.44 pp floor** | **Pass** | Fail | Fail |
+
+For scale, the fumble widening cleared its floor by 2.7× on 536 games (document
+18 §8) and the overtime toss missed its by 0.13 pp on 155 games (document 16
+§8). This candidate sits between them and closer to the toss.
+
+### The redraw, run because §5d required it
+
+`w = 0.25` misses the floor by 0.02 pp, well inside the 0.1 pp band §5d said
+would be re-drawn rather than called. Eight independent redraws of every coin:
+
+| Arm | Median \|ΔDTW\| across 8 redraws | Passes |
+|---|---|---|
+| Floor (v1.2 half-width) | 0.44 – 0.50 pp | — |
+| `w = 0.00` | **0.53 – 0.57 pp** | **8 / 8** |
+| `w = 0.25` | 0.42 – 0.46 pp | **2 / 8** |
+| `w = 0.50` | 0.31 – 0.34 pp | **0 / 8** |
+
+**Both ends of the finding are stable.** The `w = 0` pass is not a lucky draw —
+it survives every redraw. The `w = 0.25` failure is not a rounding artefact
+either: it fails six times in eight, and it fails because the floor itself moves
+up on some redraws, not because the statistic collapses. The gate is decided.
+
+### Gate K-5 — the honest failure
+
+The component's whole justification was that `w = 0` needs no per-team estimate.
+That is true, and it turns out to be beside the point: **the answer to "does this
+matter?" is different at `w = 0` than at `w = 0.25`,** and §4a established that
+nothing in this data can say which is right. Power to detect a 12.5%-relative
+spread is 0.102.
+
+Two readings, and the design committed to the second in advance:
+
+- *Charitable*: `w = 0` is the same choice fumble recovery makes, so make it and
+  ship. But fumble recovery **measured** `w = 0.015` on 6,505 events. Here the
+  choice would be an assumption doing the work of a measurement, on a branch
+  (§2) where a kicker's placement skill is real and unmeasured.
+- *Committed*: a component whose verdict flips with an unreadable dial is not
+  ready, whatever the dial's true value happens to be. **Ship nothing.**
+
+### What would reopen this
+
+- **A placement measure.** Anything that separates a well-struck onside kick
+  from a badly struck one would let the dial be estimated from execution rather
+  than from a two-kick-per-season record, and would collapse the K-5 ambiguity.
+- **More events.** The rate at which onside kicks are attempted is falling
+  (69 in 2016, 53 in 2025), so this is not arriving on its own.
+- **A change to the materiality floor.** The candidate fails on the interaction
+  of two thresholds, and the floor is the incumbent's own interval width. If
+  document 10's coverage work ever narrows that interval, this candidate's
+  arithmetic changes without the football changing.
+
+---
+
+## 9. What this round changes, and what it teaches
+
+### The ledger does not change
+
+This is the third Phase 5 candidate to be measured and left out — after the
+overtime toss (immaterial) and deflected interceptions (unidentifiable). One
+candidate shipped: the fumble widening, which was a conditioning correction to an
+existing component rather than a new one.
+
+### Three things worth carrying forward
+
+1. **Document 15's cross-check was read too generously, and the cost was
+   nearly a wrong population.** "The flag adds only 4 plays the text misses" is
+   true and irrelevant: all four are deep kickoffs with muffed returns. A
+   cross-check that counts agreement without reading the disagreements is not a
+   cross-check. **Every future identification memo should print the rejected
+   rows, not their count.**
+2. **A sensitivity arm can be the binding gate, and should be allowed to be.**
+   Document 16 ran its sensitivity as a required report; here it was written as
+   a gate with a committed on-failure action, and it is the only gate that
+   failed. A component that passes materiality by 1.25× and has an unmeasurable
+   dial was always going to fail in this direction — the value of pre-registering
+   it is that the failure is a verdict rather than a judgment call made after
+   seeing three numbers.
+3. **"`w = 0` needs no estimate" is true and insufficient.** It removes the
+   *estimation* problem and leaves the *identification* problem untouched. Any
+   future candidate proposing full neutralization on an unmeasurable dial should
+   expect to be judged on K-5 before K-3.
