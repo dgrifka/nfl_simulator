@@ -5,8 +5,10 @@ Implements `docs/research/05-neutralization-principle.md`:
 * **§1, the one rule.** Luck is the realized outcome minus its expectation at
   the responsible entity's shrunk rate. Every component uses the same identity;
   only where `p` comes from differs.
-* **§3, the treatment table.** Fumble recovery is neutralized in full at the
-  league rate for the fumble's *class*. Field goals are neutralized partially,
+* **§3, the treatment table.** Fumble retention is neutralized in full at the
+  league rate for the fumble's *class*, on the widened population of document
+  18 — every fumble with a resolved disposition, with out of bounds counted as
+  the fumbling team keeping the ball. Field goals are neutralized partially,
   against that kicker's shrunk make probability. Nothing else is touched —
   penalties and return yardage failed the branch-point gate, and step 3a could
   not attribute the interception spread to an entity.
@@ -34,7 +36,6 @@ from nfl_simulator.components import (
     FieldGoalBaseline,
     FumbleBaseline,
     fg_attempt_mask,
-    live_fumble_mask,
     xp_attempt_mask,
 )
 from nfl_simulator.fg_model import FieldGoalModel, Weather, sanitize_weather
@@ -132,17 +133,22 @@ def fumble_events(
     n_draws: int,
     rng: np.random.Generator,
 ) -> list[LuckEvent]:
-    """Live fumbles, neutralized in full at the league rate for their class.
+    """Fumbles, neutralized in full at the league retention rate for their class.
 
-    Full neutralization because document 04 measured `w = 0.011` — a
-    team-season's own recovery record carries about one percent of the
-    information about its true rate, so the entity term vanishes and `p` is the
-    league's. Class-specific because the classes run from 40% to 76%, and a flat
-    coin would be wrong by up to 26 points on a botched snap.
+    Full neutralization because document 18 §8 measured `w = 0.015` on the
+    widened branch — a team-season's own record of keeping fumbled balls carries
+    about one and a half percent of the information about its true rate, so the
+    entity term vanishes and `p` is the league's. Class-specific because the
+    classes run from 46% to 77%, and a flat coin would be wrong by up to 26
+    points on a botched snap.
+
+    The branch is **retention**, not recovery: v1.2 asks whether the fumbling
+    team ended up with the ball, so a fumble that crosses the sideline is a kept
+    ball rather than a play with no coin in it.
     """
     from nfl_simulator.components import _fumble_frame
 
-    fumbles = _fumble_frame(plays.filter(live_fumble_mask())).join(
+    fumbles = _fumble_frame(plays).join(
         baseline.table.select("fumble_class", "n", "p_own", "swing_value"),
         on="fumble_class",
         how="left",
@@ -159,7 +165,7 @@ def fumble_events(
                 component="fumble",
                 event_class=row["fumble_class"],
                 charged_team=row["fumbled_1_team"],
-                realized=float(row["recovered_own"]),
+                realized=float(row["retained"]),
                 expected_draws=_class_rate_draws(
                     float(row["n"]), float(row["p_own"]), n_draws, rng
                 ),

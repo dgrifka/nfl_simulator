@@ -178,7 +178,7 @@ def widened_fumble_events(
 
 def class_comparison(pbp: pl.DataFrame) -> dict:
     """The incumbent class table beside the widened one."""
-    incumbent = fit_fumble_baseline(pbp).table
+    incumbent = fit_fumble_baseline(pbp.filter(live_fumble_mask())).table
     widened = fit_widened_baseline(widened_frame(pbp))
     merged = (
         incumbent.select(
@@ -222,7 +222,7 @@ def entity_power(pbp: pl.DataFrame) -> dict:
         (
             "fumble recovery, live only (incumbent)",
             _fumble_frame(pbp.filter(live_fumble_mask())),
-            pl.col("recovered_own"),
+            pl.col("retained"),
         ),
     ]:
         counts = (
@@ -244,7 +244,7 @@ def impact(pbp: pl.DataFrame) -> dict:
     noise from components that did not change.
     """
     print("  fitting baselines ...")
-    fumble_baseline = fit_fumble_baseline(pbp)
+    fumble_baseline = fit_fumble_baseline(pbp.filter(live_fumble_mask()))
     widened = fit_widened_baseline(widened_frame(pbp))
     fg_baseline = fit_fg_baseline(pbp)
     xp_baseline = fit_xp_baseline(pbp)
@@ -302,7 +302,11 @@ def impact(pbp: pl.DataFrame) -> dict:
         rng_old = np.random.default_rng(RANDOM_SEED)
         rng_new = np.random.default_rng(RANDOM_SEED)
         dtw_old, deserved_old, luck_old, half_width_old = arm(
-            fumble_events(group, fumble_baseline, SIM_POSTERIOR_DRAWS, rng_old), group, actual
+            fumble_events(
+                group.filter(live_fumble_mask()), fumble_baseline, SIM_POSTERIOR_DRAWS, rng_old
+            ),
+            group,
+            actual,
         )
         dtw_new, deserved_new, luck_new, _ = arm(
             widened_fumble_events(group, widened, SIM_POSTERIOR_DRAWS, rng_new), group, actual

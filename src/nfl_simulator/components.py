@@ -11,9 +11,11 @@ is the whole point of the module:
 
 * ``fumble_luck`` — not the EPA of fumble plays. It is the EPA swing
   attributable to **which way the loose ball bounced**, computed as
-  ``(recovered_own - p) * (mean_epa_own - mean_epa_lost)`` inside a class of
-  comparable fumbles. A team that fumbles a lot still eats the cost of fumbling
-  in ``core``; only the recovery coin flip lands here.
+  ``(retained - p) * (mean_epa_own - mean_epa_lost)`` inside a class of
+  comparable fumbles, where ``retained`` asks whether the fumbling team ended up
+  with the ball — by recovering it, or by the ball crossing the sideline. A team
+  that fumbles a lot still eats the cost of fumbling in ``core``; only the bounce
+  lands here.
 * ``fg_luck`` — same construction for field goals:
   ``(made - p_make) * (mean_epa_made - mean_epa_missed)`` inside a distance bin.
   Attempting a 55-yarder is a decision; whether it drifts inside the upright is
@@ -58,11 +60,25 @@ def add_home_perspective_epa(pbp: pl.DataFrame) -> pl.DataFrame:
 # --------------------------------------------------------------------------
 
 
-def live_fumble_mask() -> pl.Expr:
-    """Fumbles where a loose ball was actually recovered by an identified team.
+def any_fumble_mask() -> pl.Expr:
+    """Every fumble with an identified fumbling team — the v1.2 population.
 
-    Excludes fumbles out of bounds — nobody recovers those, so there is no coin
-    flip to neutralise.
+    Document 18 widened the branch from *who recovered the loose ball* to **did
+    the fumbling team end up with it**, because the incumbent population was
+    selected on the outcome of the branch immediately upstream of the one it
+    neutralized. A ball that skips out of bounds is kept by rule, and booking
+    that as deserved was a hidden conditioning rather than a decision.
+    """
+    return (pl.col("fumble") == 1) & pl.col("fumbled_1_team").is_not_null()
+
+
+def live_fumble_mask() -> pl.Expr:
+    """Fumbles a named team actually recovered — the v1.1 population.
+
+    Superseded by :func:`any_fumble_mask` for the shipped component. It is kept
+    because document 04's recovery-rate model and the documents 18/29/30
+    incumbent arm are all defined on this narrower population, and filtering a
+    frame through it before :func:`_fumble_frame` reproduces them exactly.
     """
     return (
         (pl.col("fumble") == 1)
@@ -71,10 +87,29 @@ def live_fumble_mask() -> pl.Expr:
     )
 
 
+def _out_of_bounds_expr(pbp: pl.DataFrame) -> pl.Expr:
+    """The out-of-bounds flag, or a constant False when the frame lacks it.
+
+    A frame without `fumble_out_of_bounds` is not an error — it is a v1.1-shaped
+    replay, and on such a frame every fumble is resolved by its recovery, which
+    is exactly what the incumbent did.
+    """
+    if "fumble_out_of_bounds" not in pbp.columns:
+        return pl.lit(False)
+    return (pl.col("fumble_out_of_bounds") == 1).fill_null(False)
+
+
 def _fumble_frame(pbp: pl.DataFrame) -> pl.DataFrame:
-    """Live fumbles, annotated from the fumbling team's point of view."""
+    """Fumbles with a resolved disposition, from the fumbling team's point of view.
+
+    ``retained`` is 1 when the fumbling team still has the ball afterwards —
+    either it recovered, or the ball crossed the sideline. A fumble that carries
+    neither a recovering team nor an out-of-bounds flag has no resolved
+    disposition and is dropped; two of 6,507 fumbles in ten seasons are in that
+    state.
+    """
     return (
-        pbp.filter(live_fumble_mask())
+        pbp.filter(any_fumble_mask())
         .with_columns(
             # EPA from the fumbling team's perspective, which is not always the
             # offense: a defender can fumble after an interception or on a return.
@@ -82,33 +117,52 @@ def _fumble_frame(pbp: pl.DataFrame) -> pl.DataFrame:
             .then(pl.col("epa"))
             .otherwise(-pl.col("epa"))
             .alias("epa_fumbler"),
-            (pl.col("fumble_recovery_1_team") == pl.col("fumbled_1_team"))
-            .cast(pl.Int8)
-            .alias("recovered_own"),
+            pl.col("fumble_recovery_1_team").is_not_null().alias("was_recovered"),
+            _out_of_bounds_expr(pbp).alias("out_of_bounds"),
             # Aborted plays are botched snaps. The ball squirts backward with
             # only the quarterback and centre near it, so they recover far more
-            # than half the time — a different coin, not the same one.
+            # than half the time — a different coin, not the same one. They also
+            # reach a sideline three times less often, which is why the class
+            # structure carries the out-of-bounds branch rather than a flat rate.
             (pl.col("aborted_play") == 1).fill_null(False).alias("is_aborted"),
         )
         .with_columns(
+            # Eleven fumbles carry both an out-of-bounds flag and a named
+            # recovering team. A named recovering team is the more specific
+            # fact, so the recovery wins — and because the branches are ordered
+            # rather than added, such a play produces exactly one row (Gate F-4).
+            pl.when(pl.col("was_recovered"))
+            .then((pl.col("fumble_recovery_1_team") == pl.col("fumbled_1_team")).cast(pl.Int8))
+            .when(pl.col("out_of_bounds"))
+            .then(pl.lit(1, dtype=pl.Int8))
+            .otherwise(None)
+            .alias("retained"),
             pl.concat_str(
                 [
                     pl.col("play_type").fill_null("other"),
                     pl.when(pl.col("is_aborted")).then(pl.lit("aborted")).otherwise(pl.lit("live")),
                 ],
                 separator="/",
-            ).alias("fumble_class")
+            ).alias("fumble_class"),
         )
+        .drop_nulls("retained")
     )
 
 
 @dataclass
 class FumbleBaseline:
-    """Per-class recovery probability and the EPA value of each branch."""
+    """Per-class retention probability and the EPA value of each branch."""
 
-    table: pl.DataFrame  # fumble_class, n, p_own, epa_own, epa_lost, swing_value
+    # fumble_class, n, p_own, p_out_of_bounds, epa_own, epa_lost, swing_value
+    table: pl.DataFrame
 
-    def league_recovery_rate(self, exclude_aborted: bool = True) -> float:
+    def league_retention_rate(self, exclude_aborted: bool = True) -> float:
+        """Share of fumbles the fumbling team ends up keeping.
+
+        Named for the branch it measures: v1.2 counts a ball that crosses the
+        sideline as kept, so this is a retention rate rather than the recovery
+        rate document 04 published on the narrower population.
+        """
         table = self.table
         if exclude_aborted:
             table = table.filter(~pl.col("fumble_class").str.ends_with("/aborted"))
@@ -116,7 +170,7 @@ class FumbleBaseline:
 
 
 def fit_fumble_baseline(pbp: pl.DataFrame, min_class_size: int = 30) -> FumbleBaseline:
-    """Empirical recovery rate and branch EPA means, per fumble class."""
+    """Empirical retention rate and branch EPA means, per fumble class."""
     fumbles = _fumble_frame(pbp)
     if fumbles.height == 0:
         return FumbleBaseline(
@@ -125,6 +179,7 @@ def fit_fumble_baseline(pbp: pl.DataFrame, min_class_size: int = 30) -> FumbleBa
                     "fumble_class": pl.String,
                     "n": pl.UInt32,
                     "p_own": pl.Float64,
+                    "p_out_of_bounds": pl.Float64,
                     "epa_own": pl.Float64,
                     "epa_lost": pl.Float64,
                     "swing_value": pl.Float64,
@@ -136,39 +191,42 @@ def fit_fumble_baseline(pbp: pl.DataFrame, min_class_size: int = 30) -> FumbleBa
         fumbles.group_by("fumble_class")
         .agg(
             pl.len().alias("n"),
-            pl.col("recovered_own").mean().alias("p_own"),
-            pl.col("epa_fumbler").filter(pl.col("recovered_own") == 1).mean().alias("epa_own"),
-            pl.col("epa_fumbler").filter(pl.col("recovered_own") == 0).mean().alias("epa_lost"),
+            pl.col("retained").mean().alias("p_own"),
+            # Reporting only. The luck identity never reads it, but a class that
+            # reaches a sideline 3% of the time and one that reaches it 11% of
+            # the time are visibly different coins (document 18 §3).
+            pl.col("out_of_bounds").mean().alias("p_out_of_bounds"),
+            pl.col("epa_fumbler").filter(pl.col("retained") == 1).mean().alias("epa_own"),
+            pl.col("epa_fumbler").filter(pl.col("retained") == 0).mean().alias("epa_lost"),
         )
         .sort("n", descending=True)
     )
 
-    # Thin classes get pooled into the league-wide numbers rather than carrying
-    # a branch mean estimated off a handful of plays.
-    pooled_p = fumbles["recovered_own"].mean()
-    pooled_own = fumbles.filter(pl.col("recovered_own") == 1)["epa_fumbler"].mean()
-    pooled_lost = fumbles.filter(pl.col("recovered_own") == 0)["epa_fumbler"].mean()
+    # Thin classes get pooled into the league-wide rate rather than carrying a
+    # probability estimated off a handful of plays.
+    pooled_p = fumbles["retained"].mean()
+    pooled_own = fumbles.filter(pl.col("retained") == 1)["epa_fumbler"].mean()
+    pooled_lost = fumbles.filter(pl.col("retained") == 0)["epa_fumbler"].mean()
 
     table = table.with_columns(
         pl.when(pl.col("n") >= min_class_size)
         .then(pl.col("p_own"))
         .otherwise(pooled_p)
         .alias("p_own"),
-        # A branch mean is also missing when a class never went that way — the
-        # 68 aborted pass plays across ten seasons were recovered by the
-        # offense every single time, so "what is losing one worth" has no
-        # in-class answer. Falling back to the pooled value keeps the swing
-        # finite; the class's own p_own of 1.0 then correctly zeroes the luck.
-        pl.when(pl.col("n") >= min_class_size)
-        .then(pl.col("epa_own"))
-        .otherwise(pooled_own)
-        .fill_null(pooled_own)
-        .alias("epa_own"),
-        pl.when(pl.col("n") >= min_class_size)
-        .then(pl.col("epa_lost"))
-        .otherwise(pooled_lost)
-        .fill_null(pooled_lost)
-        .alias("epa_lost"),
+        # A branch mean is missing when a class never went that way — the 68
+        # aborted pass plays across ten seasons were kept by the offense every
+        # single time, so "what is losing one worth" has no in-class answer.
+        # Falling back to the pooled value keeps the swing finite; the class's
+        # own p_own of 1.0 then correctly zeroes the luck.
+        #
+        # Note this fallback fires on missingness alone, not on class size, so
+        # a two-play class that happened to go both ways carries its own branch
+        # means. That is the behaviour document 18 §8's impact figures were
+        # computed with, and §6 registers it as an open defect affecting six
+        # plays in ten seasons; pooling the swing on class size instead would
+        # change v1.1's numbers too and needs its own round.
+        pl.col("epa_own").fill_nan(None).fill_null(pooled_own),
+        pl.col("epa_lost").fill_nan(None).fill_null(pooled_lost),
     ).with_columns((pl.col("epa_own") - pl.col("epa_lost")).alias("swing_value"))
 
     return FumbleBaseline(table=table)
@@ -352,7 +410,7 @@ def decompose_plays(
         "game_id",
         "play_id",
         (
-            (pl.col("recovered_own") - pl.col("p_own"))
+            (pl.col("retained") - pl.col("p_own"))
             * pl.col("swing_value")
             # back to home perspective
             * pl.when(pl.col("fumbled_1_team") == pl.col("home_team")).then(1).otherwise(-1)
