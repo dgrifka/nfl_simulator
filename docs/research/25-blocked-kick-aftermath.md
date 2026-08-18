@@ -382,3 +382,123 @@ authoritative, and §8 is the record.
 | `points_per_epa` | 0.8389 | `research/outputs/model_metadata_v12.json` |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Script: `research/39_blocked_kicks.py`. The gates were committed at `0427bd1`
+before this script existed. Results in `research/outputs/39_blocked_kicks.json`.*
+
+### The verdict, stated first
+
+> **The branch is real, it identifies at 415 of 415, the blocker is not the
+> recoverer, and the ledger sums. It does not ship, and it misses by more than
+> any candidate so far: 0.222 pp against a 1.439 pp floor, a factor of 6.5. The
+> screen predicted the direction and understated the size.**
+
+| Gate | Statistic | Result | Verdict |
+|---|---|---|---|
+| **B-1** — branch point | Block denied and left in `core`; aftermath admitted; blocker is the recoverer 11% | — | **Pass** (§2) |
+| **B-2** — identification | 415/415 resolved, two "no recovery" rows and five overlap rows printed | 100% vs 95% | **Pass** (known at writing) |
+| **B-3** — entity spread | Not run; power 0.177 | — | **Absent by design** (§5d) |
+| **B-4** — materiality | median \|ΔDTW\| **0.222 pp** vs the **1.4392 pp** floor | Misses by 6.5× | **FAIL** |
+| **B-5** — the ledger must still sum | 0 shared plays, 0 duplicates | — | **Pass** |
+| **B-6** — verdict independent of `w` | Fails at 0.00, 0.25 and 0.50 alike | Identical | **Pass** |
+
+Per the decision rule committed in §5h — *B-4 fail → ship nothing, report as
+measured and immaterial* — **the component is measured, reported and left out of
+the ledger.** No production code changes and simulator v1.2 stays authoritative.
+
+### Gate B-4 — the numbers
+
+378 games carry an eligible blocked kick. Against v1.2, with the fumble,
+field-goal and extra-point draws held to their own seeded generators in both
+arms:
+
+| | `w = 0.00` | `w = 0.25` | `w = 0.50` |
+|---|---|---|---|
+| **Median \|ΔDTW\|** | **0.222 pp** | 0.187 pp | 0.160 pp |
+| Mean \|ΔDTW\| | 1.765 pp | 1.495 pp | 1.232 pp |
+| Max \|ΔDTW\| | 36.86 pp | 27.66 pp | 19.45 pp |
+| Median \|Δ deserved margin\| | 0.519 pts | 0.389 pts | 0.259 pts |
+| Games whose DTW side flips | 7 | 4 | 3 |
+| **Against the 1.4392 pp floor** | **Fail** | **Fail** | **Fail** |
+
+The run's own v1.2 median half-width came out at 1.3767 pp against the 1.4392 pp
+committed in §4b — a 0.06 pp redraw difference, well inside the ±0.05 pp spread
+document 16 measured and far too small to matter at a 6.5× miss. **The
+pre-registered floor is the one the gate is read against**, and no redraw was
+triggered because nothing landed within 0.1 pp of it.
+
+### The structural reason it fails, which is the round's real finding
+
+**This candidate moves the deserved margin by *more* than the kickoff-muff
+candidate did — 0.519 points against 0.344 — and moves DTW by *half* as much.**
+That is not a contradiction and it is worth understanding, because it generalises.
+
+A blocked kick happens on a play that **already carries a large luck row**. The
+field-goal component prices a blocked field goal as an ordinary miss, and that
+row is one of the widest the simulator prints. So the games this component fires
+in are games whose DTW distribution is already broad: v1.2's median 89% half-width
+on them is 1.44 pp, twice the 0.72 pp on kickoff-muff games. The new row adds
+half a point of deserved margin into a distribution that is already half a point
+wide, and the median game barely notices.
+
+**A component that fires on plays that already carry a big luck row is penalised
+twice: the floor it must clear is raised by the incumbent row, and its own
+marginal effect is diluted by the same row.** Nothing in documents 16, 18, 20 or
+24 anticipated this, and it is the first structural rule the project has that
+predicts a materiality failure from the *location* of a candidate rather than
+from its size.
+
+### Gate B-6 — the dial is not the problem
+
+Identical verdict at all three values of `w`, so B-6 passes unmodified. As in
+document 24, the candidate fails on size at every dial rather than flipping with
+one, which is the cleaner of the two failures.
+
+---
+
+## 9. What this round changes, and what it teaches
+
+### Nothing ships
+
+Blocked-kick aftermath is closed. The 410 eligible blocked kicks stay outside the
+ledger, and the reason is now a measured 0.222 pp rather than an open scouting
+question.
+
+### Four things worth carrying forward
+
+1. **The screen works, and it under-predicted.** Document 24 §9 said to compute
+   `p(1 − p) × swing` before writing a pre-registration, and §5a wrote the
+   prediction down in advance: roughly 0.3 pp against a 1.44 pp bar. The answer
+   was 0.222 pp. The screen got the direction and the verdict right and was
+   optimistic on the magnitude by about a third, because it takes no account of
+   the dilution effect above. **Screen and floor together, not the screen
+   alone.**
+2. **Where a candidate fires matters as much as how big it is.** The dilution
+   finding above is the round's most transferable result: a candidate landing on
+   plays that already carry a wide luck row faces a raised floor and a damped
+   effect at the same time. Any future special-teams candidate on a kick play
+   inherits this.
+3. **A number beat an argument, cheaply.** The blocker-is-the-recoverer check
+   turned the single hardest Gate A objection in the round into 16 of 144. It
+   cost one regex and it is the kind of check that should be attached to every
+   Gate A memo that has a "but isn't this really one continuous play" objection.
+4. **Refusing to report a gate is sometimes the honest move.** Gate B-3 was
+   designed and then deliberately not run, because at power 0.177 a pass would
+   have read as "there is no team skill here" when it means "we cannot see". The
+   register carries the reason instead of a misleading number.
+
+### What would reopen this
+
+- **Candidate 3's interaction.** If the field-goal and extra-point components
+  ever stop pricing a blocked kick as an ordinary miss, the incumbent row on
+  these plays narrows and both halves of the dilution effect weaken. **The two
+  changes must then be measured together, in one arm**, never in sequence.
+- **A punt-only component.** Extra points dilute the n-weighted screen from 0.375
+  to 0.309 and contribute almost nothing. A punt-only version would screen higher
+  — and would still have failed here by a factor of four, so this is a note for
+  method rather than a live route back.
+- **A lower floor**, the standing reopening condition from document 20 §8.
