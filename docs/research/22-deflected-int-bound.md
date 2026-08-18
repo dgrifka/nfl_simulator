@@ -170,3 +170,90 @@ committed in advance.
 | `points_per_epa` | 0.8389 |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Script: `research/34_deflected_bound.py`. The gate was committed at `6b00e4f`
+before this script existed. Results in
+`research/outputs/34_deflected_bound.json`.*
+
+### The verdict, stated first
+
+> **The bound is too wide. Sweeping the unidentified live-tip share across its
+> full range moves the component's impact by a factor of four and flips its
+> verdict against the materiality floor, so the identification failure is not a
+> nuisance — it is the whole answer. The candidate stays closed, and document
+> 17's verdict stands with a better-stated reason.**
+
+| Arm | max/min across `f` | Same verdict at every `f`? | Gate D-1 |
+|---|---|---|---|
+| **A — successes only** (buildable, not the component) | **1.18×** | Yes, above the floor everywhere | **Pass** |
+| **B — both branches** (the component the identity requires) | **4.07×** | **No** — above at `f ≤ 0.10`, below at `f ≥ 0.25` | **FAIL** |
+
+Per §5b, **Arm B decides.** Per §5a's decision rule, a D-1 failure closes the
+candidate as *bound too wide* — the punt-bounce verdict of document 14.
+
+### The sweep
+
+`p(f) = 629 / (629 + f · 18,777)`, branch swing 3.820 EPA from the defense's
+perspective.
+
+| `f` | `p` | Arm A: median \|ΔDTW\| | Arm B: rows | Arm B: games | Arm B: median \|ΔDTW\| | vs floor |
+|---|---|---|---|---|---|---|
+| 0.05 | 40.1% | 1.83 pp | 1,568 | 1,202 | **1.30 pp** [1.05–1.59] | above (0.78) |
+| 0.10 | 25.1% | 2.15 pp | 2,507 | 1,632 | **0.96 pp** [0.81–1.15] | above (0.62) |
+| 0.25 | 11.8% | 2.02 pp | 5,323 | 2,364 | **0.53 pp** [0.48–0.55] | **below** (0.69) |
+| 0.50 | 6.3% | 1.97 pp | 10,017 | 2,676 | **0.35 pp** [0.33–0.37] | **below** (0.63) |
+| 1.00 | 3.2% | 2.01 pp | 19,406 | 2,756 | **0.32 pp** [0.32–0.32] | **below** (0.63) |
+
+Bracketed ranges are across the five random draws of which incompletions were
+live tips. **The spread across draws is far smaller than the spread across
+`f`** — at every value of `f`, the draws agree with each other to within about
+0.2 pp while the values of `f` disagree by 1 pp. The uncertainty that matters is
+the one that cannot be sampled away.
+
+### Arm A's pass is the artefact §5c named in advance
+
+Arm A varies by only 1.18× and clears the floor everywhere, which — read alone —
+would have looked like a clean invariance result and reopened the candidate.
+**§5b committed to Arm B deciding, and §5c wrote down why Arm A would look
+stable, before either number existed.** The reason is now visible in the table:
+
+- Arm A's per-event luck is `(1 − p)`, which runs only from 0.60 to 0.97 across
+  the whole range of `f`. Its row count never changes — 629 interceptions,
+  always.
+- Arm B's row count runs from 1,568 to 19,406, a factor of twelve, and its
+  per-event luck on the added rows is `(0 − p)`, which *falls* as `f` rises.
+  Those two effects do not cancel; the median game gets steadily smaller
+  adjustments as the coin is priced closer to a certainty.
+
+Arm A is also one-sided by construction: every deflected interception becomes
+good fortune for the defense and nothing ever offsets it, which is why it flips
+41–64 games — more than the fumble widening — while booking a coin that only
+appears in the ledger when it lands heads.
+
+### What this closure is worth
+
+Document 17 closed this candidate with "the denominator is invisible." That was
+true and it was an assertion. This round turns it into arithmetic: **the range
+the denominator could take moves the answer across the decision boundary**, and
+the least generous assumption available (`f = 1`, every pass defensed was a live
+tip) puts the component at half its own floor.
+
+**What would reopen it:** anything that separates a swat-down from a live tip.
+Charting that marked "ball deflected in the air" — the FTN feed does not carry
+it, and document 17 §1 established that `is_interception_worthy` is answering a
+different question — or player tracking. Neither is in this project's data
+inventory, and both are named in `CLAUDE.md` under *Not available — do not go
+looking*.
+
+### One lesson, carried forward
+
+**A sensitivity sweep needs its deciding arm named before the numbers arrive.**
+The buildable implementation passed and the correct one failed, by a factor of
+four, and the only thing that prevented the wrong reading was §5b having been
+written first. Document 20's round produced the mirror-image lesson — a
+sensitivity arm allowed to be the binding gate — and the two together are now
+the round's clearest process result.
