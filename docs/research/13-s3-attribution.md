@@ -419,3 +419,134 @@ it is written down instead.
 | pbp seasons | 2016–2025 | `src/nfl_simulator/ingest.py` |
 
 Results are written back into this document as §10.
+
+---
+
+## 10. Results
+
+*Script: `research/21_s3_attribution.py`. Design, instrument, null bounds and
+reporting rules fixed by §§1–9 above, committed at `7af5f01` before this script
+produced a result. Results in `research/outputs/21_s3_attribution.json`.*
+
+### Outcome, stated first
+
+| Gate | Rule | Result |
+|---|---|---|
+| **A-1 — sampler health** | 0 divergences, r̂ < 1.01, ESS > 400 | **PASS** — 0 divergences, r̂ 1.0016, ESS bulk 1,431, tail 1,318 |
+| **A-1 — grid vs NUTS** | relative gap ≤ 5% on all three scales | **PASS** — 1.10% / 1.04% / 0.05% |
+| **A-2 — the reporting rule** | one factor clears its bound, the other does not | **UNRESOLVED** — neither clears it |
+| **A-3 — game-state control** | reported | Both spreads shrink; still not separable |
+
+> **Verdict: 5,522 team-games cannot tell a quarterback from a head coach on
+> leverage timing.** §5 pre-registered this as the most likely outcome, and it
+> is.
+
+### The estimates
+
+| Factor | Spread | 89% interval | In football | Null bound | Clears it? |
+|---|---|---|---|---|---|
+| Quarterback | **0.0245** | 0.0130 – 0.0334 | **2.45 pp** of win probability per game | 0.0210 | **No** |
+| Head coach | **0.0252** | 0.0129 – 0.0390 | **2.52 pp** per game | 0.0210 | **No** |
+| *(residual)* | 0.2365 | 0.2359 – 0.2371 | — | — | — |
+
+`P(quarterback spread > coach spread) = 0.408` — a coin flip, if anything
+leaning to the coach.
+
+**Read the "no" column carefully, because it is not saying what it looks like.**
+Both point estimates sit **above** the achievable-null bound: 0.0245 and 0.0252
+against 0.0210. What fails is the *lower* bound of each interval, which is what
+§6's claim rule requires. So the data hint that both a quarterback effect and a
+coach effect are real and of similar size — and cannot confirm either, nor
+separate them.
+
+That is a different sentence from "there is no effect", and §5 committed to the
+distinction before the fit: at this design's 63–67% power against document 08's
+own reference effect, a failure to clear is the design running out of resolution.
+
+### Gate A-1 — the grid instrument is doing what §4 said it would
+
+| Quantity | Grid | NUTS | Relative gap |
+|---|---|---|---|
+| `sigma_qb` | 0.02446 | 0.02420 | **1.10%** |
+| `sigma_coach` | 0.02518 | 0.02545 | **1.04%** |
+| `sigma_e` | 0.23646 | 0.23657 | **0.05%** |
+
+Well inside the 5% relative tolerance, and on real data rather than the synthetic
+check §4 reported. **This is document 09 §9's corrective working as intended.**
+An absolute tolerance of the kind that failed two candidates there — 0.01 on a
+quantity of 0.024 — would have demanded agreement to 0.04%, which no finite
+number of draws delivers. Stated relative to the quantity, the same two
+instruments agree comfortably.
+
+Note also the sampler: **zero divergences and ESS above 1,300** at 3,000 draws.
+§6 pre-committed the larger draw budget on document 05 §8's evidence that this
+geometry mixes slowly, and it was the right call — the equivalent crossed model
+there returned ESS 289 at 1,000 draws.
+
+### Gate A-3 — the game-state control shrinks both, and settles nothing
+
+Restricting to one-score game states (`|score differential| ≤ 8`) and refitting
+the slope inside the subset:
+
+| Factor | Full sample | Competitive plays only |
+|---|---|---|
+| Quarterback | 0.0245 | **0.0178** |
+| Head coach | 0.0252 | **0.0161** |
+| `P(QB > coach)` | 0.408 | **0.513** |
+
+Both spreads fall by roughly a third, in the same proportion, and the two factors
+become if anything *more* indistinguishable. That is consistent with document
+08 §9's finding that about a fifth of S3's persistence was playing close games —
+the control removes real variation from both factors alike, and removes no more
+from one than the other.
+
+**Nothing survives the control that did not survive it before**, because nothing
+cleared the bound in the first place. The secondary arm is reported because §6
+committed to reporting it whatever it said.
+
+### What this changes
+
+1. **Document 08 §9's defect stays open, with a sharper statement.** It said
+   S3's mechanism was "untested". It is now **tested and unresolved**, and the
+   reason is sample size rather than model choice — which is a more useful thing
+   to know, because it says what would fix it.
+2. **The quarterback and the coach carry effects of the same size, and the data
+   cannot separate them.** If both are real, a one-SD entity of either kind moves
+   about 2.5 percentage points of win probability per game beyond what its
+   expected-points production implies. That is a real football effect and it is
+   why the round was worth running even having failed.
+3. **Nothing in the simulator changes**, and nothing could have. Document 08 §6
+   committed before any sequencing result existed that a sequencing channel has
+   no branch point and earns no ledger row at any value of `w`. S3 is skill; skill
+   already lives in `core`.
+4. **The instrument is now validated on real data** and is available for any
+   future crossed-Gaussian attribution in this project, at about one second a fit.
+5. **What would fix it is more seasons, not a better model** — the same closing
+   sentence document 05 §8 had to write about the interception attribution. Two
+   attribution rounds, two null results, both traceable to entity counts rather
+   than to design.
+
+### An observation worth recording, though it proves nothing
+
+Document 05 §8 and this document are now the project's two crossed-attribution
+rounds, and they failed the same way: interceptions split 12.6% (quarterback) vs
+12.3% (defense) with `P = 0.530`; leverage timing splits 0.0245 (quarterback) vs
+0.0252 (coach) with `P = 0.408`. Both times two plausible owners came back
+**almost exactly equal** and neither cleared its bound.
+
+The dull explanation is that both designs are underpowered in the same way and an
+underpowered crossed model shrinks both factors toward their common mean, which
+would manufacture this pattern from nothing. That explanation is sufficient, and
+it is the one to prefer. It is recorded here only because two rounds is the point
+at which a pattern becomes worth *watching* — not the point at which it becomes
+evidence.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **The round is unresolved for want of entities, not for want of a model** | Both point estimates exceed the null bound; both lower bounds fall short | **Open.** Needs more seasons. Recorded against document 08 §9's open defect |
+| Both point estimates exceed the null bound while both intervals fail to clear it | §10's estimate table | **Open, and it is the honest shape of the result.** Reported as "cannot confirm", never as "no effect" |
+| The grid's 0.035% edge mass is not zero | `grid_edge_mass` = 3.5 × 10⁻⁴ on the primary arm, 1.2 × 10⁻³ on the secondary | **Open, and small.** Some posterior mass sits at the grid's lower boundary, which is the log scale never reaching a true zero — document 05 §8's defect, inherited |
+| A head coach is not the play-caller | §8 | **Open, and the largest limitation.** A coordinator effect is the model this round would want and nflverse carries no coordinator field |
+| Two attribution rounds have now returned near-identical spreads for both candidate owners | This section's closing observation | **Open, and deliberately under-interpreted.** The dull explanation is sufficient |
