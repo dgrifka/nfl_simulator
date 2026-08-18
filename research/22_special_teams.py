@@ -266,7 +266,9 @@ def punt_bounce(pbp: pl.DataFrame, punts: pl.DataFrame) -> dict:
         .alias("outcome")
     )
     classified = punts.with_columns(outcome)
-    counts = classified.group_by("outcome").agg(pl.len().alias("punts")).sort("punts", reverse=True)
+    counts = (
+        classified.group_by("outcome").agg(pl.len().alias("punts")).sort("punts", descending=True)
+    )
     print(counts)
 
     # Does any description record a landing spot separately from a final spot?
@@ -394,7 +396,16 @@ def main() -> None:
     with THRESHOLDS_PATH.open() as handle:
         thresholds = json.load(handle)
 
-    pbp = load_pbp(PBP_SEASONS, columns=[*_power.COLUMNS, "desc"])
+    pbp = load_pbp(
+        PBP_SEASONS,
+        columns=[
+            *_power.COLUMNS,
+            "desc",
+            "punt_fair_catch",
+            "punt_downed",
+            "punt_out_of_bounds",
+        ],
+    )
     punts = _power.punt_table(pbp)
     wind_centre = thresholds["punting"]["design"]["wind_centre"]
     temp_centre = thresholds["punting"]["design"]["temp_centre"]

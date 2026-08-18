@@ -491,3 +491,271 @@ attached. Only the two punt-return cells carry a readable verdict.
 | Punts / punter-seasons / punters | 22,403 / 392 / 107 | measured, §3 |
 
 Results are written back into this document as §10.
+
+---
+
+## 10. Results
+
+*Script: `research/22_special_teams.py`. Gate A settled in §2, the bounce
+determination in §4, and every threshold in §§5–7, all committed at `521694c`
+before this script existed. Results in
+`research/outputs/22_special_teams.json`.*
+
+### Outcomes, stated first
+
+| Component | Gate A | Outcome |
+|---|---|---|
+| **Punting** | Fail — no ledger row | **Punter skill is real and large. The model that measured it fails its own calibration gates.** |
+| **The punt bounce** | Pass — a genuine branch | **Unresolvable by construction**, and even the aggregate bound is unusable |
+| **Kick returns** | Fail — no ledger row | **Skill**, strongly — but in cells the design was pre-registered as underpowered |
+| **Punt returns** | Fail — no ledger row | **Skill**, at both grains, on the two properly powered cells |
+
+| Gate | Quadratic (pre-registered) | Cubic (fallback) |
+|---|---|---|
+| **PU-1** sampler health | **PASS** — 0 divergences, r̂ 1.0087, ESS 1,483 | **PASS** — 0 divergences, r̂ 1.0056, ESS 1,169 |
+| **PU-2** spot calibration | **FAIL** — 9.058 vs 2.818 | **FAIL** — 6.952 vs 2.869 |
+| **PU-3** punter skill resolvable | **PASS** | **PASS** |
+| **PU-4** wind resolvable | **PASS** | **PASS** |
+| **PU-5** posterior predictive | **FAIL** — mean tail 0.000 | **FAIL** — mean tail 0.000 |
+| PU-6 temperature | reported | reported |
+| PU-7 punter vs return unit | reported | reported |
+
+### (a) Punting — a large skill, measured by a model that does not fit
+
+> **`sigma_punter` = 1.27 net yards, 89% interval [1.14, 1.41], against a null
+> bound of 0.545.** The interval's lower bound clears the bound by more than a
+> factor of two.
+
+In football: a one-SD-good punter is worth about **1.3 net yards per punt** over
+an average one. Across the ~65 punts a punter-season sees that is **83 yards of
+field position a year**, and the gap between a one-SD-good and a one-SD-bad
+punter is twice that. **Punting is a bigger skill than anything the weather does
+to it**, and this is the first time this project has sized it.
+
+The estimate is stable across three specifications that disagree about almost
+everything else:
+
+| Estimator | `sigma_punter` |
+|---|---|
+| Hierarchy, quadratic spot, Student-t | 1.280 |
+| Hierarchy, cubic spot, Student-t | 1.272 |
+| Grid, OLS-residualized, Normal, crossed with the return unit | **1.302** |
+
+The third differs from the second by **2.33%**, inside Gate PU-1's 5% relative
+tolerance — which is document 09 §9's corrective applied, a tolerance stated
+relative to the quantity rather than borrowed as an absolute number from another
+scale.
+
+#### Gate PU-2 and PU-5 fail, and the diagnosis is a one-yard bias
+
+The calibration failure is large in standardized units and **small in yards**,
+which is the whole story:
+
+| Spot (yards to opponent goal) | Punts | Observed net | Predicted | Miss | Standardized |
+|---|---|---|---|---|---|
+| 45–49 | 1,586 | 34.88 | 35.49 | −0.61 | 2.48 |
+| 50–54 | 1,893 | 38.05 | 38.81 | −0.76 | 3.36 |
+| 60–64 | 2,451 | 42.88 | 43.07 | −0.19 | 0.98 |
+| 65–69 | 3,042 | 44.08 | 44.20 | −0.13 | 0.71 |
+| **70–74** | **3,190** | **43.44** | **44.67** | **−1.23** | **6.95** |
+| **75–79** | **2,375** | **43.47** | **44.79** | **−1.32** | **6.49** |
+| **80–84** | 1,718 | 43.32 | 44.55 | −1.23 | 5.18 |
+| 85–89 | 1,150 | 43.14 | 44.25 | −1.11 | 3.85 |
+
+**The model is about 1.2 net yards optimistic exactly where teams punt most —
+backed up in their own territory.** With 22,403 punts the posterior predictive
+mean of a 3,000-punt bin has a standard error near 0.18 yards, so a 1.2-yard bias
+is seven standard errors. Gate PU-5's mean-tail probability of 0.000 is the same
+fact seen from the league total: every posterior replicate produces a higher mean
+net punt than the 41.10 actually observed.
+
+The physical reading is that net punt yards **stop growing** once a team is
+backed past its own 30 — hang time, coverage spacing and returner room bind
+before leg strength does — and neither a quadratic nor a cubic in field position
+can flatten that hard. The response is also **bounded above by the spot itself**,
+since a punt cannot travel past the goal line without becoming a touchback, and
+the model has no such ceiling.
+
+**The pre-registered fallback was applied and did not rescue it.** §5 named the
+cubic in advance precisely so reaching for it would be execution rather than
+improvisation; it reduces the statistic from 9.06 to 6.95 against a 2.87
+threshold, which is an improvement and not a pass. **No further form is tried
+here.** Building a third curve after seeing which two failed, and re-running the
+same gate, is the goalpost-moving document 08 §11 refused. The fix — a monotone
+spline in field position with an explicit ceiling at the goal line — is named as
+future work needing its own pre-registration.
+
+**What may and may not be claimed, given that.** `sigma_punter` and `beta_wind`
+are *variance and slope* parameters, and the failure is a *location* bias that
+runs in the same direction across the whole high-volume region. Their stability
+across three specifications — including one that shares neither the likelihood
+nor the estimator nor the covariate treatment — is real evidence that they are
+not artifacts of the misfit. But the model is **not adopted as a calibrated
+description of punting**, and the per-spot fitted curve should not be quoted.
+
+#### Gate PU-4 — wind moves a punt far less than it moves a field goal
+
+> `beta_wind` = **−0.0204** net yards per mph, 89% interval −0.0411 to +0.0008,
+> against a null bound of +0.0061. The upper bound clears it. **PASS.**
+>
+> **At 15 mph, a punt loses 0.31 net yards.**
+
+That is a third of a yard, and §5's power table put a 0.8-yard effect at 97%
+power — so **the true wind effect is smaller than the smallest scenario the
+design was powered against.** Note also that the interval contains zero: the gate
+is one-sided by construction and it passes narrowly.
+
+Compare the field-goal model, where 15 mph costs **5.50 percentage points** of
+make probability (document 05b §11). Two plausible reasons, neither tested here:
+punters and coverage units adjust to conditions in a way a kicker aiming at fixed
+uprights cannot, and **wind direction is not in the data at all**, so a tailwind
+and a headwind are recorded identically — a defect that biases toward finding
+less effect and which binds harder on a kick aimed downfield than on one aimed at
+a target 45 yards away.
+
+| Roof | Change in net punt yards |
+|---|---|
+| Dome | +0.56 [+0.30, +0.82] |
+| Closed retractable | +0.90 [+0.63, +1.16] |
+| Open retractable | +0.81 [+0.14, +1.49] |
+
+Indoor punting is better by about three quarters of a yard — real, and an order
+of magnitude smaller in football terms than the 4.5-point make-probability gap a
+roof buys a kicker.
+
+**Gate PU-6, temperature:** +0.038 net yards per °F, **+1.53 net yards across a
+40 °F swing**. Warmer is better, and by more than the wind does — the same
+direction the field-goal model found, and here the larger of the two weather
+terms.
+
+#### Gate PU-7 — net punting belongs to the punter
+
+> Punter-season spread **1.302** [1.130, 1.325]; return-unit-season spread
+> **0.895** [0.703, 0.965]. Null bounds 0.545 and 0.534.
+>
+> **Both clear their bounds, and `P(punter spread > return-unit spread) =
+> 0.992`.**
+
+Per the reporting rule committed in §7, that is not a claim that the gap
+"belongs to" the punter — the rule required one factor to clear while the other
+failed to, and both clear. The honest statement is that **both the punter and
+the opposing return unit are real, sized contributors to net punt yards, and the
+punter is the larger of the two with 99% posterior probability.**
+
+This matters for the response choice §3 flagged. Net yards contains the return by
+construction, and the worry was that it might be mostly the return. It is not:
+the punter carries about 1.45 times the spread of the unit trying to bring it
+back.
+
+### (b) The punt bounce — unresolvable, and the bound does not rescue it
+
+22,403 punts split as: 7,551 returned, 6,208 fair-caught, 2,900 downed, 2,272 out
+of bounds, 1,533 touchbacks, 1,939 other. **Exactly one description in 22,519
+punt rows mentions a bounce**, and there is no landing-spot column.
+
+> **Verdict: unresolvable by construction**, as §4 determined before any model
+> existed. The two quantities the branch is defined by — where the ball landed,
+> and where it stopped — are never separately recorded on the same play.
+
+§4 promised an aggregate upper bound on the mean roll and said it would be a
+bound rather than an estimate because punt intent confounds it. **The confound
+turns out to be larger than the effect, and it flips the sign with field
+position**, which is a cleaner demonstration than the caveat sentence was:
+
+| Spot | Caught punts (flight only) | Bounced punts (flight + roll) | Gap |
+|---|---|---|---|
+| 35–39 | 27.9 yd | 31.8 yd | **+3.9** |
+| 40–44 | 31.9 | 34.8 | +2.9 |
+| 45–49 | 36.0 | 38.5 | +2.5 |
+| 50–54 | 40.1 | 40.9 | +0.8 |
+| 55–59 | 44.0 | 43.1 | **−0.8** |
+| 60–64 | 47.5 | 45.5 | −2.0 |
+| 65–69 | 49.3 | 45.4 | −3.9 |
+
+Punting from near midfield, a ball allowed to bounce travels **further** — which
+is a roll. Punting from deep in your own territory it travels **shorter** —
+which is a punter who has out-kicked nothing and a returner who has let a short
+ball go. Volume-weighted the two cancel to **−2.08 yards**, a negative "upper
+bound on a roll", which is arithmetic telling you the instrument is measuring
+intent rather than physics.
+
+**Recorded like document 09's onside row, and it is a stronger denial than that
+one.** Onside kicks had an estimable quantity behind an inadequate denominator;
+this has no quantity at all. More seasons cannot fix a field that does not exist.
+
+### (c) Returns — skill, at both grains, and the kickoff era rule costs what it was said to cost
+
+| Cell | Split-half r | Threshold | Power at r = 0.12 | Verdict |
+|---|---|---|---|---|
+| Kickoff / returner / 2016–2023 | **+0.273** | 0.0894 | 0.61 | **skill** (see below) |
+| Kickoff / team / 2016–2023 | **+0.347** | 0.0767 | 0.75 | **skill** (see below) |
+| Kickoff / returner / 2024 | — | — | — | too few entities to run |
+| Kickoff / team / 2024 | +0.029 | 0.1963 | 0.26 | **unresolvable** |
+| Kickoff / returner / 2025 | **+0.327** | 0.1732 | 0.27 | **skill** (see below) |
+| Kickoff / team / 2025 | **+0.359** | 0.1920 | 0.30 | **skill** (see below) |
+| **Punt / returner / 2016–2025** | **+0.162** | 0.0681 | 0.82 | **skill** |
+| **Punt / team / 2016–2025** | **+0.151** | 0.0621 | 0.89 | **skill** |
+
+**Return yardage persists, and it is not close.** Kickoff returns at the team
+grain split at +0.347 — larger than any component document 02 measured, larger
+than document 08's leverage-timing gap at +0.180, and roughly six standard
+deviations of its own permutation null above the threshold.
+
+That contradicts the one prior reading this project had. Document 05 §8 measured
+**interception** return yards at r = −0.014 and concluded no measurable
+persistence. Both are right: an interception return is a defensive back running
+with a ball he was not expecting to have, on a play with no designed blocking. A
+kickoff or punt return is a **scheduled play with a returner, a wall and a
+scheme.** The earlier null was about a different football event, and document
+05 §7's own power table said it could only have detected a 45%-relative effect
+anyway.
+
+**The honesty gate has a wording gap, and it is recorded rather than resolved
+after the fact.** Gate RT-2 was written to stop an *underpowered null* being read
+as evidence of absence — the failure mode document 05 §7's return-yardage row
+demonstrated. Four kickoff cells detected an effect while sitting below the
+0.80 power bar, and §7's decision-rule table did not name that case. The reading
+applied here is that **a detection remains valid in an underpowered cell**,
+because the threshold is the permutation null's 95th percentile and its
+false-positive rate is therefore 5% by construction whatever the power is; low
+power means the design would have missed a *smaller* effect, not that it
+hallucinated this one. But the rule did not say so in advance, so it is a defect
+below rather than a ruling.
+
+**And the era rule cost exactly what §6 said it would.** 2024 is unanswerable at
+the returner grain (17 entity-seasons clear the 8-game floor) and flat at the
+team grain with 0.26 power. Pooling 2024 with 2025 would have produced 63
+team-seasons and a readable number — measuring a rulebook that changed twice in
+two years.
+
+### What this changes
+
+1. **Nothing in document 05 §3's treatment table.** Gate A denied all three
+   components before a model ran, and no result here could breach it. That is
+   now the fourth consecutive round where the mechanism gate, not the arithmetic,
+   settled the ledger question.
+2. **Punting is sized for the first time: 1.27 net yards of true spread between
+   punter-seasons**, about 83 yards of field position a year — and the punter
+   carries 1.45× the spread of the return unit opposing him.
+3. **Weather barely touches punting.** 0.31 net yards at 15 mph against 5.50
+   percentage points of make probability for a field goal. The one weather term
+   that does something is temperature, at 1.53 net yards across 40 °F.
+4. **Return skill is real and large at every grain the design can see**, which
+   overturns the intuition that returns are where the season's blocks happened to
+   fall — while leaving the interception-return null from document 05 §8 intact,
+   because it was measuring a different play.
+5. **The punting model is not adopted as a description**, and its calibration
+   failure is on the record with the diagnosis and the named-but-unattempted fix.
+
+### Defects added by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **The punting model is ~1.2 net yards optimistic from deep own territory** | Gate PU-2, standardized misses of 5–7 in the four highest-volume bins; Gate PU-5 mean tail 0.000 | **Open, and fatal to the model as a calibrated description.** The named fallback did not fix it; the fix (monotone spline with a goal-line ceiling) needs its own pre-registration |
+| **§7's decision rule did not cover PU-5 failing** | Only PU-2 had an on-failure rule | **New wording gap.** Reported rather than resolved after the fact, following document 05b §11's precedent |
+| **§7's decision rule did not cover a detection in an underpowered cell** | Four kickoff cells passed RT-1 while failing RT-2 | **New wording gap.** The reading applied is stated in §10 and argued from the permutation null's calibrated false-positive rate |
+| Net punt yards have a hard ceiling the model ignores | A punt cannot pass the goal line without a touchback | **Open.** Almost certainly part of the PU-2 failure |
+| Gate PU-4 passes with an interval containing zero | −0.0204 [−0.0411, +0.0008] against a +0.0061 bound | **Open, stated.** The gate is one-sided by construction; the effect is real but smaller than any powered scenario |
+| Wind direction is absent | A tailwind and a headwind are identical rows | **Open**, and it binds harder on punts than on field goals. Biases toward less effect, so 0.31 yards is a floor |
+| Punter-season rows are not independent across seasons | 107 punters supply 392 punter-seasons | **Open.** Same defect document 05b §7 recorded for kickers |
+| The 2024 kickoff era is unanswerable | 17 returner-seasons and 31 team-seasons | **Accepted, by design.** Pooling would measure the rulebook |
