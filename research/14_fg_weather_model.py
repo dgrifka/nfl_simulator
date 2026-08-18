@@ -61,8 +61,14 @@ COLUMNS = [
 ]
 
 
-def load_kicks() -> pl.DataFrame:
+def load_kicks(exclude_blocked: bool = False) -> pl.DataFrame:
     """Field goals and extra points, sanitized, in one table.
+
+    ``exclude_blocked`` was added by document 27, which refits this model on the
+    population that excludes blocked kicks. It defaults to ``False`` so the
+    published posterior is reproduced exactly, and it lives here rather than in a
+    copy of this loader so the fit and the refit cannot drift apart.
+
 
     Extra points carry their own `kick_distance` (33 yards for 98.5% of them,
     with the rest moved by a penalty), so they go through the same distance terms
@@ -72,9 +78,18 @@ def load_kicks() -> pl.DataFrame:
     """
     pbp = load_pbp(PBP_SEASONS, columns=COLUMNS)
 
-    field_goals = pbp.filter(
-        (pl.col("play_type") == "field_goal") & pl.col("kick_distance").is_not_null()
-    ).select(
+    fg_mask = (pl.col("play_type") == "field_goal") & pl.col("kick_distance").is_not_null()
+    xp_mask = (
+        (pl.col("extra_point_attempt") == 1)
+        & pl.col("extra_point_result").is_not_null()
+        & pl.col("kick_distance").is_not_null()
+    )
+    if exclude_blocked:
+        # Narrow the two masks, never the frame — the trap document 26 §8 names.
+        fg_mask = fg_mask & (pl.col("field_goal_result") != "blocked")
+        xp_mask = xp_mask & (pl.col("extra_point_result") != "blocked")
+
+    field_goals = pbp.filter(fg_mask).select(
         "season",
         "kicker_player_id",
         "roof",
@@ -84,11 +99,7 @@ def load_kicks() -> pl.DataFrame:
         (pl.col("field_goal_result") == "made").cast(pl.Int64).alias("made"),
         pl.lit(0).alias("is_xp"),
     )
-    extra_points = pbp.filter(
-        (pl.col("extra_point_attempt") == 1)
-        & pl.col("extra_point_result").is_not_null()
-        & pl.col("kick_distance").is_not_null()
-    ).select(
+    extra_points = pbp.filter(xp_mask).select(
         "season",
         "kicker_player_id",
         "roof",
@@ -232,13 +243,15 @@ def standardized_miss(masks, made: np.ndarray, p_hat: np.ndarray) -> float:
     return worst
 
 
-def calibration_gate(label: str, masks, kicks: pl.DataFrame, p_draws: np.ndarray) -> dict:
+def calibration_gate(
+    label: str, masks, kicks: pl.DataFrame, p_draws: np.ndarray, seed: int = RANDOM_SEED
+) -> dict:
     """The FG-2 construction: a maximum, calibrated against its own reference."""
     made = kicks["made"].to_numpy().astype(float)
     p_hat = p_draws.mean(axis=0)
     observed = standardized_miss(masks, made, p_hat)
 
-    rng = np.random.default_rng(RANDOM_SEED)
+    rng = np.random.default_rng(seed)
     picks = rng.choice(len(p_draws), size=400, replace=False)
     replicated = np.array(
         [
@@ -269,8 +282,16 @@ def fit_arm(
     thresholds: dict,
     *,
     cubic: bool,
+    seed: int = RANDOM_SEED,
+    trace_prefix: str = "trace_fg_weather",
 ) -> tuple[object, dict]:
-    """One arm, end to end through all eight gates."""
+    """One arm, end to end through all eight gates.
+
+    ``seed`` and ``trace_prefix`` are document 27's, and both default to this
+    round's values. The prefix exists so a refit writes alongside the published
+    posterior rather than over it — the artifacts of a shipped version are never
+    overwritten by a candidate, as v1.1's and v1.2's were preserved.
+    """
     print(f"\n{'#' * 72}\n### {label}\n{'#' * 72}")
     model = build_model(kicks, kicker_levels, kicker_idx, centres, cubic=cubic)
     with model:
@@ -279,11 +300,11 @@ def fit_arm(
             tune=TUNE,
             chains=CHAINS,
             target_accept=TARGET_ACCEPT,
-            random_seed=RANDOM_SEED,
+            random_seed=seed,
             progressbar=False,
         )
     suffix = "cubic" if cubic else "quadratic"
-    idata.to_netcdf(paths.RESEARCH_OUTPUT_DIR / f"trace_fg_weather_{suffix}.nc")
+    idata.to_netcdf(paths.RESEARCH_OUTPUT_DIR / f"{trace_prefix}_{suffix}.nc")
 
     posterior = idata["posterior"]
 
@@ -337,7 +358,7 @@ def fit_arm(
     weather_masks = [
         cell == value for value in np.unique(cell) if (cell == value).sum() >= MIN_CELL_ATTEMPTS
     ]
-    w2 = calibration_gate("Gate W-2 (weather calibration)", weather_masks, kicks, p_draws)
+    w2 = calibration_gate("Gate W-2 (weather calibration)", weather_masks, kicks, p_draws, seed)
 
     # ---- Gate W-4: distance bins ----------------------------------------
     distance = kicks["distance"].to_numpy()
@@ -346,7 +367,7 @@ def fit_arm(
         bins == edge for edge in np.unique(bins) if (bins == edge).sum() >= MIN_CELL_ATTEMPTS
     ]
     w4 = calibration_gate(
-        "Gate W-4 (distance calibration, all kicks)", distance_masks, kicks, p_draws
+        "Gate W-4 (distance calibration, all kicks)", distance_masks, kicks, p_draws, seed
     )
 
     # Field goals only — the population Gate FG-2 was defined on. Section 7's
@@ -357,7 +378,7 @@ def fit_arm(
         for edge in np.unique(bins[~is_xp])
         if ((bins == edge) & ~is_xp).sum() >= MIN_CELL_ATTEMPTS
     ]
-    w4_fg = calibration_gate("Gate W-4 variant (field goals only)", fg_masks, kicks, p_draws)
+    w4_fg = calibration_gate("Gate W-4 variant (field goals only)", fg_masks, kicks, p_draws, seed)
 
     per_bin = []
     p_hat = p_draws.mean(axis=0)
@@ -411,7 +432,7 @@ def fit_arm(
     )
 
     # ---- Gate W-5: posterior predictive ---------------------------------
-    rng = np.random.default_rng(RANDOM_SEED)
+    rng = np.random.default_rng(seed)
     picks = rng.choice(len(p_draws), size=1000, replace=False)
     replicated = rng.binomial(1, p_draws[picks]).astype(float)
     counts = np.bincount(kicker_idx, minlength=len(kicker_levels))

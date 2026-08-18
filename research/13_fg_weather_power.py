@@ -88,11 +88,21 @@ FG_COLUMNS = [
 # --------------------------------------------------------------------------
 
 
-def load_attempts() -> tuple[pl.DataFrame, dict]:
-    """Field-goal attempts with sanitized weather, plus a report of what moved."""
+def load_attempts(exclude_blocked: bool = False) -> tuple[pl.DataFrame, dict]:
+    """Field-goal attempts with sanitized weather, plus a report of what moved.
+
+    ``exclude_blocked`` was added by document 27 §7b, which re-derives this
+    script's null bounds on the population the refit is fitted to. It defaults
+    to ``False``, so the published `13_fg_weather_power.json` is reproduced
+    exactly; there is one implementation of the sanitize rules and of the design
+    matrix, and the two rounds cannot drift apart.
+    """
     pbp = load_pbp(PBP_SEASONS, columns=FG_COLUMNS)
+    attempt_mask = (pl.col("play_type") == "field_goal") & pl.col("kick_distance").is_not_null()
+    if exclude_blocked:
+        attempt_mask = attempt_mask & (pl.col("field_goal_result") != "blocked")
     attempts = (
-        pbp.filter((pl.col("play_type") == "field_goal") & pl.col("kick_distance").is_not_null())
+        pbp.filter(attempt_mask)
         .drop_nulls("kicker_player_id")
         .select(
             pl.col("season"),
