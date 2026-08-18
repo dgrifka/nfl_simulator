@@ -314,3 +314,102 @@ zero is informative only when the instrument was capable of measuring it.
 | Interceptions / deflected | 4,304 / 629 | §3 |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Script: `research/28_deflected_int.py`. Gates committed at `5cdf574` before this
+script existed. Results in `research/outputs/28_deflected_int.json`.*
+
+### The verdict, stated first
+
+> **Gate A passes on mechanism. Gate D-2 fails on identification. No component
+> is added, and the reason is that the data cannot see the branch — not that the
+> branch is not there, and not that it would not matter.**
+
+| Gate | Result | Verdict |
+|---|---|---|
+| **D-1** — branch point | The post-deflection flight | **Pass** |
+| **D-2** — identification | See below | **FAIL** |
+| **D-3** — persistence | r = +0.089 | **Uninterpretable by pre-registration** |
+
+### Gate D-2 — the denominator, checked rather than asserted
+
+| Check | Count |
+|---|---|
+| Completions carrying a pass-defense credit *(the "deflected, offense caught it" arm)* | **0** |
+| Defended incompletions, tips and clean swats pooled *(the "deflected, fell dead" arm)* | **18,777** |
+| Pass attempts whose description narrates a deflection | 253 of 189,287 (**0.13%**) |
+
+The first row is the striking one. In ten seasons and 189,287 pass attempts,
+**not one completion carries a pass-defense credit** — the scoring convention
+does not record a defender touching a ball that the offense then caught. So one
+arm of the branch is not merely hard to isolate; it is structurally absent from
+the dataset. The second arm exists but pools the tip with the swat, and the third
+row shows the play description cannot rescue it: 253 narrated deflections against
+18,777 candidate plays is coverage of about one in seventy-four.
+
+`p(e)` therefore has no estimator, and document 05 §1's rule has nothing to
+return. **Denied.**
+
+### Gate D-3 — the persistence measurement, reported and deciding nothing
+
+Odd-week against even-week deflected-interception rate, across 320 team-seasons:
+
+> **observed split-half r = +0.089**
+
+The same instrument, simulated at the same denominators, produces
+**[−0.095, +0.095]** when the true skill share is exactly zero, and its 10%-skill
+band overlaps that. The observed +0.089 sits inside both. §5 pre-registered that
+neither reading may be reported as a finding, and it is not.
+
+**This is worth contrasting with document 15 §C5 deliberately.** There, an
+observed r of −0.014 for interception returns was *informative*, because the
+instrument's 5% band started at +0.140 and nothing near it appeared. Here an
+observed r three times larger is *uninformative*, because the instrument's bands
+are stacked on top of each other. The number is not what makes a zero meaningful;
+the instrument is.
+
+---
+
+## 9. What this round changes, and what it teaches
+
+### The ledger is unchanged
+
+Document 05 §3's treatment table stands. Two Phase 5 candidates are now closed
+and neither moved it.
+
+### Four things worth carrying forward
+
+1. **The assigned question had a third answer.** Document 15 asked whether the
+   FTN flag isolates the coin or encloses it, and the honest answer was neither:
+   it cross-cuts. A memo that had reasoned about the flag's *meaning* without
+   cross-tabulating it against an independent channel would have picked one of
+   the two offered answers and been wrong either way.
+2. **A better channel was found by looking at scoring conventions rather than
+   charting.** `pass_defense_1_player_id != interception_player_id` covers ten
+   seasons instead of four, involves no human judgment, and identifies 629
+   interceptions. It cost one cross-tab to find and it is now on the record for
+   any future round that needs deflections.
+3. **Gate D-2 is new and should have existed since Phase 4.** Three candidates
+   have now passed Gate A and died on measurement — the punt bounce (document
+   14), onside kicks (document 09), and this one. Each was resolved ad hoc.
+   Naming the identification gate makes the fourth one a two-line determination
+   instead of a document.
+4. **"Denied on identification" and "denied on materiality" are different
+   verdicts and the register must say which.** The overtime toss (document 16)
+   was measurable and immaterial. This candidate is material and unmeasurable —
+   its bound is 1.32 pp of median DTW against a 0.69 pp floor, with 62 games
+   changing side. One of those two denials is permanent and the other is waiting
+   on data.
+
+### What would reopen this
+
+- **A charting source that flags ball contact** — FTN adds fields most seasons,
+  and a `is_deflected` or `is_batted` column would supply the denominator
+  directly.
+- **Player tracking data**, which resolves it completely and is out of reach for
+  this project by settled decision.
+- **Nothing else.** No amount of additional seasons helps: the missing arm is
+  missing by convention, not by sample size.
