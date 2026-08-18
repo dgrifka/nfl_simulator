@@ -165,6 +165,14 @@ Working notes live in [`docs/research/`](docs/research/):
   +0.075, once the mechanical floor is subtracted), and it changed the named
   winner in 4.6% of games against a 5% floor — near-vacuous, because holding
   field-goal drives out leaves a nearly separable universe.
+- **Leverage timing cannot be attributed.** A one-SD quarterback and a one-SD
+  head coach each carry about **2.5 percentage points** of win probability per
+  game beyond what their production implied — the same number, with
+  `P(quarterback > coach) = 0.41`. Neither interval clears the design's null
+  bound, so the honest verdict is *5,522 team-games cannot tell them apart*. Both
+  point estimates sit **above** the bound, so this is "cannot confirm", not "no
+  effect" — a distinction committed in writing before the fit, at a design known
+  in advance to reach only 63–67% power against the reference effect.
 - **Punter skill is real and now sized: 1.27 net yards** of true spread between
   punter-seasons, about 83 yards of field position a year, and stable across
   three specifications sharing neither likelihood nor estimator. The punter
@@ -211,11 +219,14 @@ rules below as binding, and every one of them changed a real decision:
 Phase 3 produced **four pre-registered failures** — a drive-outcome resampling
 that degraded the game's predictive content, a distance gate that a defect
 register had already flagged, a convergence tolerance set by bad analogy, and an
-interval that did not cover what it claimed. Phase 4 produced four more: a
+interval that did not cover what it claimed. Phase 4 produced five more: a
 successor measure refuted by its own premise test, two sufficiency criteria
-failed, and a punting model that fails its calibration gates with the named
-fallback applied and no third curve attempted. Each was reported rather than
-tuned.
+failed, a punting model that fails its calibration gates with the named fallback
+applied and no third curve attempted, and an attribution round that could not
+separate its two candidates. Each was reported rather than tuned — along with two
+gaps in Phase 4's own decision rules and one commit that landed before the
+pre-registration it was meant to obey, all three recorded in the defect
+registers rather than tidied away.
 
 ## Data
 

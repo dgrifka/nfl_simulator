@@ -309,10 +309,12 @@ def figure_attribution(attribution: dict) -> None:
     """Whose skill is leverage timing? Identity job -> dot plot with 89% intervals."""
     rows = attribution["factors"]
     labels = [row["label"] for row in rows]
-    means = [row["mean"] for row in rows]
-    lows = [row["eti89"][0] for row in rows]
-    highs = [row["eti89"][1] for row in rows]
-    bounds = [row["null_bound"] for row in rows]
+    # Percentage points of win probability, which is the readable unit; the raw
+    # scale is thousandths and nobody can hold four leading zeros in their head.
+    means = [row["mean"] * 100 for row in rows]
+    lows = [row["eti89"][0] * 100 for row in rows]
+    highs = [row["eti89"][1] * 100 for row in rows]
+    bounds = [row["null_bound"] * 100 for row in rows]
     colours = [BLUE, ORANGE][: len(rows)]
 
     fig, ax = plt.subplots(figsize=(8.8, 3.4))
@@ -322,16 +324,25 @@ def figure_attribution(attribution: dict) -> None:
     ):
         ax.hlines(y, low, high, color=colour, linewidth=3)
         ax.scatter([mean], [y], s=150, color=colour, zorder=3, edgecolor=SURFACE, linewidth=2)
-        ax.vlines(bound, y - 0.3, y + 0.3, color=INK_MUTED, linewidth=2)
-        ax.text(mean, y + 0.24, f"{mean:.4f}", ha="center", fontsize=9, color=INK)
-        ax.text(bound, y - 0.42, "noise floor", ha="center", fontsize=8, color=INK_MUTED)
-    ax.set_yticks(position, labels, fontsize=10)
-    ax.invert_yaxis()
-    ax.set_xlabel("spread in win probability added per game, beyond what the points implied")
+        ax.vlines(bound, y - 0.26, y + 0.26, color=INK_MUTED, linewidth=2)
+        ax.text(mean, y - 0.34, f"{mean:.2f} pp", ha="center", fontsize=10, color=INK)
+    # One noise-floor label, under the lower row, rather than one per row.
+    ax.text(
+        bounds[-1],
+        len(rows) - 0.62,
+        "noise floor",
+        ha="center",
+        va="top",
+        fontsize=9,
+        color=INK_MUTED,
+    )
+    ax.set_yticks(position, labels, fontsize=11)
+    ax.set_ylim(len(rows) - 0.35, -0.6)
+    ax.set_xlabel("win probability added per game, beyond what the points implied (pp)")
     _finish(
         ax,
         attribution["headline"],
-        "89% intervals. A bar clearing the noise floor is an effect the design can resolve.",
+        "89% intervals. A bar whose LEFT end clears the noise floor is an effect the design can confirm.",
     )
     fig.tight_layout()
     save(fig, "fig13_s3_attribution")
