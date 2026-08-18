@@ -371,3 +371,162 @@ until the maintainer says so, and the ship record is a separate document on the 
 | `points_per_epa` | 0.8389 | `research/outputs/model_metadata_v12.json` |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Script: `research/41_blocked_pricing.py`. The gates were committed at `a06edb3`
+before this script existed. Results in `research/outputs/41_blocked_pricing.json`.*
+
+### The verdict, stated first
+
+> **The correction is right, it is by far the largest thing this round found —
+> 2.69 points of deserved margin on the median game it touches, twenty-two DTW
+> side flips — and it fails its pre-registered materiality floor at 1.167 pp
+> against 1.625 pp, in all eight redraws. Nothing ships. The round's real finding
+> is that the floor was the wrong instrument to point at a correction, and §9
+> says so without moving the goalposts after the fact.**
+
+| Gate | Statistic | Result | Verdict |
+|---|---|---|---|
+| **P-1** — branch point | A blocked kick is not a kick in flight; document 25 §2's ruling | — | **Pass** (§2) |
+| **P-2** — identification | 192 blocked field goals, 110 blocked extra points, from charted fields | — | **Pass** (known at writing) |
+| **P-3** — materiality | median \|ΔDTW\| **1.167 pp** vs the **1.6250 pp** floor; **0 of 8 redraws clear** | Misses by 1.4× | **FAIL** |
+| **P-4** — the ledger must still sum | −192 field-goal rows, −110 extra-point rows, nothing else | — | **Pass** |
+| **P-5** — a dial gate | Not applicable; no `w` is assumed | — | **Absent by design** (§5e) |
+
+Per the decision rule committed in §5g — *P-3 fail → ship nothing, record the
+defect as known, measured and below the floor* — **no production code changes and
+simulator v1.2 stays authoritative.** §9 is the record §5d promised in advance.
+
+### Gate P-3 — the numbers, on both populations
+
+| | 287 games with a blocked kick | All 2,761 games with a kick |
+|---|---|---|
+| **Median \|ΔDTW\|** | **1.167 pp** | **0.000 pp** |
+| Mean \|ΔDTW\| | **8.057 pp** | — |
+| Max \|ΔDTW\| | **53.66 pp** | — |
+| Median \|Δ deserved margin\| | **2.688 pts** | 0.019 pts |
+| Games whose DTW side flips | **22** | 25 |
+| **Against the 1.6250 pp floor** | **Fail** | — |
+
+Document 18 §4b's two-population rule earns its place here more than anywhere:
+the all-games median is **exactly zero** — the second-order swing change of §3b
+moves a typical kick game not at all — while the median blocked-kick game moves
+2.7 points of deserved margin. Reporting either number alone would be a
+different and wrong story.
+
+### The eight redraws, run unconditionally because §5d required it
+
+| Redraw | Median \|ΔDTW\| | v1.2 median half-width |
+|---|---|---|
+| 1 | 1.189 pp | 1.691 pp |
+| 2 | 1.160 pp | 1.694 pp |
+| 3 | 1.237 pp | 1.566 pp |
+| 4 | 1.149 pp | 1.688 pp |
+| 5 | 1.184 pp | 1.566 pp |
+| 6 | 1.160 pp | 1.628 pp |
+| 7 | 1.207 pp | 1.507 pp |
+| 8 | 1.186 pp | 1.688 pp |
+
+**0 of 8 clear the pre-registered floor**, against the 6-of-8 majority §5d fixed.
+The statistic is tight — 1.149 to 1.237 pp, a range of 0.09 pp — and the floor
+wanders more than the statistic does, 1.507 to 1.694 pp. **The verdict does not
+depend on which of those floors is used**, because the statistic sits below all
+ten values of the floor observed in this round. The gate is decided.
+
+**§4's prediction was wrong by 55%.** It projected 1.8 pp from a 0.72 pp-per-EPA
+conversion calibrated on document 25's candidate; the answer was 1.167 pp, a
+conversion of 0.47. The screen is a filter on effort and it is not a
+substitute for the measurement — that is the second round in a row where it got
+the direction right and the magnitude wrong, both times optimistic.
+
+### Gate P-4, and a trap worth naming
+
+Field-goal rows 10,731 → 10,539 and extra-point rows 12,818 → 12,708, exactly
+−192 and −110.
+
+**One implementation detail is load-bearing and would be easy to get wrong.**
+Four blocked field goals also carry a v1.2 **fumble** row. This study implements
+the correction by handing the *kick* builders a filtered frame while the fumble
+builder always receives the unfiltered one. A production implementation that
+instead filtered the play frame once, at the top, would silently delete those
+four fumble rows and the ledger would stop summing. **The correction must narrow
+`fg_attempt_mask` and `xp_attempt_mask`, never the frame** — the check in
+`ledger_checks` exists to make that failure visible rather than silent, and it
+reports both counts.
+
+---
+
+## 9. What this round changes, and what it teaches
+
+### Nothing ships, and that is an uncomfortable verdict on purpose
+
+§5d committed in advance to recording what a P-3 failure would mean, so that it
+could not be improvised afterwards. Here it is.
+
+**The field-goal component knowingly neutralizes a play Gate A denies.** A
+blocked field goal books 3.36 EPA of luck relief to the team whose protection
+was beaten, and after this round that is a documented, measured, deliberate
+state of affairs rather than an oversight. The correction that fixes it is
+correct in direction, argued from the same gate that admitted the component in
+the first place, and it moves the median affected game by 2.7 points of deserved
+margin — and it did not clear the bar.
+
+### The finding worth carrying out of Phase 6
+
+**The materiality floor is a gate for additions, and this round pointed it at a
+correction, where it does the wrong job.**
+
+The floor exists to stop the ledger accumulating rows that move nothing — a
+component must move a game by more than the uncertainty already printed on it,
+or it is noise with extra steps. That logic is sound for a *new* coin. Applied to
+a *correction*, it says something quite different: *keep the known error, because
+fixing it does not move the median game far enough.* Those are not the same
+decision and the gate cannot tell them apart.
+
+Three things make this concrete rather than a complaint:
+
+1. **The floor is raised by the error being corrected.** The 1.625 pp floor is
+   v1.2's own interval width on these games, and it is that wide partly *because*
+   v1.2 books a 3.36 EPA luck row on every one of them. **The incumbent's mistake
+   is part of the bar its own fix has to clear.** Document 25 §8 found the
+   dilution effect for an addition; for a correction it becomes circular.
+2. **The all-games median of exactly 0.000 pp is the honest defence of shipping
+   nothing.** Whatever else is true, this change does not disturb 2,474 games.
+   The cost of the error is concentrated, not systemic.
+3. **A correction needs a correctness gate, not a materiality gate.** The
+   defensible pre-registration for a Gate A violation would ask *is the incumbent
+   wrong, and is the fix right*, and treat size as a reporting requirement rather
+   than a threshold. **That gate does not exist in this project and this round is
+   the argument for writing one.**
+
+**This document does not adopt that gate.** The rule was fixed at `a06edb3` and
+the result is read against the rule as written. Proposing the new gate is a
+separate round with its own pre-registration, and it should be written before
+anybody looks at this candidate again — otherwise it is goalpost-moving with a
+delay, which is exactly what document 21's process exists to prevent.
+
+### What the maintainer is being asked
+
+Nothing, in the sense that this round requests no approval — it ships nothing and
+touches no production code. But the decision the round surfaces is real and it is
+his:
+
+> **Should a Gate A violation inside a shipped component be governed by the
+> materiality floor at all?** If yes, this candidate is closed and the
+> field-goal component keeps pricing blocks as misses, with the defect register
+> carrying the reason. If no, the next round writes a correctness gate and this
+> candidate is the first thing measured against it.
+
+### What would reopen this
+
+- **A correctness gate**, pre-registered before this candidate is re-measured.
+- **A refit of the document 05b make-probability model** on non-blocked
+  attempts, the open defect in §6. It would raise `p_make` by about 1.5 pp on
+  every kick, which changes the incumbent's luck rows and therefore the floor
+  itself — this candidate's arithmetic is not stable under that refit.
+- **A narrower incumbent interval**, the standing reopening condition from
+  document 20 §8, which here has a sharper edge: the floor is inflated by the
+  very row being removed.
