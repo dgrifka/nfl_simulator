@@ -456,6 +456,7 @@ attached. Only the two punt-return cells carry a readable verdict.
 
 | Defect | Evidence | Status |
 |---|---|---|
+| **`research/22_special_teams.py` was committed alongside this document, not after it** | `git log --diff-filter=A` shows the results script and this pre-registration added in the same commit, `521694c` | **Open, disclosed.** The script had not been run — `research/outputs/22_special_teams.json` postdates the commit — but the file-add ordering is weaker than steps 1 and 2, where the results script landed in a later commit. An auditor checking goalpost integrity by commit archaeology should know that this round's evidence is "the output postdates the commit", not "the script postdates the commit" |
 | **The bounce is unobservable** | §4 — one spot per punt, no landing-spot field, no bounce mention in any description | **Open and permanent.** More seasons cannot fix a field that does not exist |
 | Net punt yards contain the coverage and the return | `net = kick_distance − return_yards` by construction | **Open, and sized by Gate PU-7** rather than assumed away |
 | The roll bound is confounded with punt intent | A coffin-corner punt is aimed short and hung low | **Open, stated.** The number is reported as an upper bound only |
