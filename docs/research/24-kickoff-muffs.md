@@ -498,3 +498,155 @@ document 19 template.
 | `points_per_epa` | 0.8389 | `research/outputs/model_metadata_v12.json` |
 
 Results are written back into this document as §8.
+
+---
+
+## 8. Results
+
+*Script: `research/37_kickoff_muffs.py`. The gates were committed at `b5ec6d4`
+before this script existed. Results in `research/outputs/37_kickoff_muffs.json`.*
+
+### The verdict, stated first
+
+> **The conditioning bug is real and the fix works — the branch identifies
+> perfectly, the ledger still sums, and full neutralization survives on the wider
+> population. It does not ship, because it is too small: the median game with a
+> kickoff muff moves 0.40 pp against a 0.72 pp floor. This is document 16's
+> overtime-toss ending, not document 20's.**
+
+| Gate | Statistic | Result | Verdict |
+|---|---|---|---|
+| **M-1** — branch point | The same loose ball the component prices on punts | — | **Pass** (§2) |
+| **M-2** — identification | 269/269 dispositions resolved; 5 residual rows, all replay reversals | 100% vs 95% | **Pass** (known at writing) |
+| **M-3** — entity spread | 89% upper bound **3.8127 pp** vs 5.0718 pp | Below the null bound | **Pass** |
+| **M-4** — materiality | median \|ΔDTW\| **0.404 pp** vs the **0.7222 pp** floor | Misses by 1.8× | **FAIL** |
+| **M-5** — the ledger must still sum | 6,756 rows exactly as predicted; 0 duplicates, 0 misclassified, 0 lost | — | **Pass** |
+| **M-6** — verdict independent of `w` | Fails at 0.00 and at 0.25 — the same verdict at both | Identical | **Pass** |
+
+Per the decision rule committed in §5h — *M-3 pass, M-4 fail → ship nothing,
+report as measured and immaterial* — **the widening is measured, reported and
+left out of the ledger.** Document 05 §3's treatment table does not move, no
+production code changes, and this round needs no approval because it asks for
+nothing.
+
+### Gate M-3 — full neutralization survives, and gets stronger again
+
+| Branch | Population SD | 89% ETI | Relative | κ | `w` at the median entity | Grid edge mass |
+|---|---|---|---|---|---|---|
+| **Widened with kickoff muffs** | **2.084 pp** | 0.681 – 3.813 | **3.6%** | 1,654 | **0.0125** | 2.3 × 10⁻⁷ |
+| v1.2 (incumbent) | 2.370 pp | 0.777 – 4.222 | 4.2% | 1,317 | 0.0150 | 1.7 × 10⁻⁷ |
+
+**The same thing happened that happened in document 18, and for the same
+reason.** Folding in a population whose branch is nearly a coin at the league
+level — 92.9% for every team, with a median of one event apiece — leaves teams
+looking *more* alike, not less. Population SD falls from 2.370 pp to 2.084 pp,
+κ rises, and the trust dial `w` falls from 0.015 to **0.0125**. A team-season's
+own record of keeping loose balls carries about one and a quarter percent of the
+information about its true rate.
+
+This is the third consecutive widening of this component in which the
+measurement got better rather than worse, and it is the part of this round worth
+carrying forward even though nothing shipped.
+
+### Gate M-4 — the honest failure
+
+248 games carry a kickoff muff and **232 of them gain a ledger row v1.2 did not
+already have**. Against v1.2, with the field-goal and extra-point draws held to
+their own seeded generators in both arms:
+
+| | `w = 0.00` | `w = 0.25` | `w = 0.50` |
+|---|---|---|---|
+| **Median \|ΔDTW\|** | **0.404 pp** | 0.297 pp | 0.182 pp |
+| Mean \|ΔDTW\| | 1.648 pp | 1.325 pp | 1.011 pp |
+| Max \|ΔDTW\| | 29.56 pp | 21.19 pp | 22.06 pp |
+| Median \|Δ deserved margin\| | 0.344 pts | 0.258 pts | 0.172 pts |
+| Games whose DTW side flips | 4 | 4 | 1 |
+| **Against the 0.7222 pp floor** | **Fail** | **Fail** | Fail |
+
+**It misses by 0.32 pp, which is more than three times the 0.1 pp band §5e set
+for a redraw, so the gate is decided on one pass and no redraw was run.** For
+scale: v1.2's fumble widening cleared its floor by 2.7×, the onside candidate
+cleared its own by 1.25× before failing the dial, and the overtime toss missed
+by 0.13 pp. This one misses by the largest margin of the four.
+
+**Why it is small, in one paragraph.** A muff is kept 92.9% of the time, so the
+typical ledger row it produces is `(1 − 0.929) × 5.59 = 0.40` EPA, about a third
+of a point. The 19 muffs that were lost each book about −5.2 EPA and they move
+their games hard — the mean |ΔDTW| of 1.65 pp and the 29.6 pp maximum are those
+games — but there are nineteen of them in ten seasons and the median game with a
+muff is one where the returner picked his own bobble up. **The component is
+correct in direction and real in size; it is concentrated in too few games to
+clear a floor read on the median.**
+
+### Gate M-6 — the dial is not the problem this time
+
+The verdict is **identical at `w = 0.00` and `w = 0.25`**, so M-6 passes on its
+own terms. It is worth saying plainly what that means, because it is the opposite
+of document 20's ending: the onside candidate failed *because* its answer changed
+with a dial nobody can read; this one gives the same answer at every dial and
+fails on size. **A candidate that fails M-4 at every `w` is a cleaner close than
+one that passes at `w = 0` and nowhere else.**
+
+### Gate M-5 — the arithmetic
+
+6,505 v1.2 rows, 269 muffs, 18 of them already inside v1.2, so the widened
+population must be exactly 6,505 − 18 + 269 = **6,756**. It is. Zero plays appear
+twice, zero muffs carry a class other than `kickoff/muff`, and zero v1.2 rows are
+lost by the reclassification. The double-count risk §5f named — writing the mask
+as a union rather than as a move — did not materialise, and the check is what
+proves it rather than the intention.
+
+---
+
+## 9. What this round changes, and what it teaches
+
+### Nothing ships
+
+This is the second Phase 6 candidate to be closed and the first to be closed on
+size rather than on identification. Simulator v1.2 remains the shipped version.
+The 245 invisible kickoff muffs stay invisible to the ledger, and the reason is
+now written down with a number attached rather than left as an open scouting
+finding.
+
+### Four things worth carrying forward
+
+1. **A conditioning bug is not automatically worth fixing.** Document 18 §9's
+   instruction — audit the other components' populations for the same shape — was
+   right, and it found a real one. But *hidden* and *material* are different
+   properties, and this round is the first in the project where a genuine
+   population defect was measured and consciously left in place. The register
+   entry is the deliverable.
+2. **The rate is what kills it, not the count.** 269 events is more than the
+   overtime toss's 155 games and half the onside population, and the swing per
+   event is larger than either. It fails because the branch is 93/7 rather than
+   50/50: a lopsided coin books a small row on almost every play and a large row
+   almost never. **A future candidate should be screened on `p(1 − p) × swing`
+   before anyone writes a pre-registration**, which would have predicted this
+   failure from §3d alone.
+3. **Widening keeps improving the instrument.** Three widenings, three falls in
+   the measured population SD, `w` now 0.0125. The intuition that adding rarer
+   or more lopsided sub-populations dilutes a measurement has been wrong every
+   time it has been tested here.
+4. **The gate ordering did its job.** M-2 and M-5 were cheap and passed; M-3 was
+   the expensive fit and passed; M-4 was the one that mattered and it was
+   genuinely unseen when the thresholds were committed. Had the floor been
+   computed with the treatment arm — document 18's arrangement — the temptation
+   to read it after the fact would have existed. It did not.
+
+### What would reopen this
+
+- **The 2025 population.** 63 muffs in one season against 13–29 in every earlier
+  one. If the dynamic-kickoff era holds that rate, five seasons of it would give
+  roughly 300 muffs concentrated in recent games, and a materiality test run on
+  2024–2025 alone is a different arithmetic than one run on ten pooled seasons.
+  **That test must be pre-registered before it is run**, and this document's
+  failure cannot be revived by choosing a narrower population after the fact.
+- **A lower floor.** The candidate fails on the interaction of two thresholds and
+  the floor is the incumbent's own interval width. If document 10's coverage work
+  ever narrows that interval, this arithmetic changes without the football
+  changing — the same reopening condition document 20 §8 recorded.
+- **A lost-muff subpopulation, pre-registered.** The 19 losses move their games
+  by up to 29.6 pp. A round that wants to argue from that population must fix it
+  as the materiality population *in advance*, with an argument for why the
+  median over games containing the event is the wrong summary. Reading it off
+  this document's results would be floor-shopping.
