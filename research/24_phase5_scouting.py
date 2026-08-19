@@ -7,11 +7,12 @@ exist at all, and roughly what are the stakes. Nothing here is a fit.
 import numpy as np
 import polars as pl
 
-DATA = "~/Desktop/personal/nfl_simulator/data"
+from nfl_simulator import paths
+
 rng = np.random.default_rng(20260818)
 
 pbp = pl.concat(
-    [pl.read_parquet(f"{DATA}/pbp/pbp_{y}.parquet") for y in range(2016, 2026)],
+    [pl.read_parquet(paths.pbp_path(y)) for y in range(2016, 2026)],
     how="diagonal_relaxed",
 )
 print(f"pbp rows: {pbp.height:,}, cols: {len(pbp.columns)}")
@@ -43,7 +44,7 @@ print(
 )
 
 ftn = pl.concat(
-    [pl.read_parquet(f"{DATA}/ftn/ftn_{y}.parquet") for y in range(2022, 2026)],
+    [pl.read_parquet(paths.ftn_path(y)) for y in range(2022, 2026)],
     how="diagonal_relaxed",
 )
 key_cols = [c for c in ftn.columns if "game_id" in c or "play_id" in c]
