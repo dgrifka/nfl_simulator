@@ -70,11 +70,16 @@ Posterior means with 89% equal-tailed intervals, matching documents 03 and 05.
 
 ### Facts that must be defensible by name
 
-- **Blocked kicks count as misses.** A block is partly a protection failure
-  rather than a kicking outcome, so charging it to the kicker is arguably wrong.
-  At 192 of 10,731 attempts (1.8%) splitting it out would add a class without
-  changing a conclusion. `components.py` already treats blocks this way, and
-  consistency with the Phase 1 decomposition matters more here than the 1.8%.
+- **Blocked kicks are excluded.** *(Revised 2026-08-18 by document 27, approved
+  by the maintainer and shipped in v1.3. The original bullet counted them as misses, on
+  the grounds that `components.py` did; document 26 §2 ruled that
+  `components.py` should not, and the consistency argument lost its referent.)*
+  A block is not an observation of the quantity this model estimates — the ball
+  never flew. 192 field goals and 110 extra points leave the training
+  population, `p_make` rises 1.33 pp on average and by more the longer the kick,
+  and `sigma_kicker` **rises** from 0.342 to 0.385, because blocks were noise
+  diluting the measured spread between kickers. The refit clears every gate in
+  §6 and §10 on the same cubic curve (document 27 §14).
 - **Extra points are excluded.** They are a fixed-distance formality at a make
   rate near 94% and would dominate the sample while telling us nothing about the
   distance curve.
@@ -288,9 +293,10 @@ the model that would mislead about skill.
 | Kicker-season rows are not independent across seasons | One kicker can supply ten rows of the same underlying ability | **Open.** Slightly inflates apparent population spread |
 | FG-3's power check uses a normal-normal reduction | The full logistic hierarchy is too slow for hundreds of power fits | **Accepted, stated.** The reduction ignores the shrinkage the real hierarchy applies, so it *overstates* resolving power — the true power is at or below the table in §6 |
 | FG-2 is weak against subtle misspecification | 32% power against a 5-point miss at 55 yd | **Accepted, stated in §6** |
-| Blocked kicks charged to the kicker | 192 of 10,731 attempts | **Accepted** for consistency with `components.py` |
 | Long-distance bins are thin | 65+ yards holds 19 attempts across ten seasons (document 01) | **Open.** The model extrapolates there rather than borrowing a neighbour bin as `components.py` does; those kicks are rare enough not to move a game total |
 | The game being adjudicated is inside the fit | Document 05 §5, the general contamination defect | **Open, bounded** at O(1/n); a kicker-season contributes ~2 of ~29 attempts |
+| ~~Blocked kicks charged to the kicker~~ | 192 of 10,731 attempts | **CLOSED 2026-08-18** by the document 27 refit, shipped in v1.3. They are out of the training population and out of the ledger |
+| **`w = 0.285` has no derivation in this repository** | Document 27 §14c could only recompute the refit's implied 0.336 under a stated assumption | **Open.** Any document quoting `w` for the field-goal row is quoting a number nothing regenerates |
 
 ---
 
@@ -718,20 +724,30 @@ from §9 remains the better explanation of what is left.
 
 ### The fitted model
 
-| Parameter | Mean | 89% interval |
-|---|---|---|
-| `alpha` (log-odds at 40 yd) | 1.747 | 1.70 – 1.80 |
-| `beta` (per yard) | −0.108 | −0.117 – −0.099 |
-| `gamma` (quadratic / 100) | 0.204 | 0.13 – 0.27 |
-| `delta_cubic` (cubic / 1000) | −0.068 | −0.11 – −0.026 |
-| **`sigma_kicker`** | **0.342** | **0.268 – 0.417** |
-| `roof[dome]` | +0.285 | +0.176 – +0.393 |
-| `roof[closed]` | +0.294 | +0.180 – +0.411 |
-| `roof[open]` | +0.529 | +0.238 – +0.830 |
-| **`beta_wind`** (per mph) | **−0.0213** | **−0.0305 – −0.0119** |
-| `beta_temp` (per °F) | +0.00385 | +0.00122 – +0.00655 |
-| `delta_xp` | +0.167 | +0.050 – +0.284 |
-| `lambda_xp` | 1.263 | 0.862 – 1.725 |
+*The **refit** column is the v1.3 posterior — the same model on the population
+that excludes blocked kicks, adopted 2026-08-18 (document 27 §14c). The
+incumbent column is preserved: v1.1's and v1.2's artifacts were built on it.*
+
+| Parameter | Mean | 89% interval | **Refit mean** | **Refit 89%** |
+|---|---|---|---|---|
+| `alpha` (log-odds at 40 yd) | 1.747 | 1.70 – 1.80 | **1.907** | 1.822 – 1.993 |
+| `beta` (per yard) | −0.108 | −0.117 – −0.099 | **−0.116** | −0.126 – −0.106 |
+| `gamma` (quadratic / 100) | 0.204 | 0.13 – 0.27 | **0.249** | 0.172 – 0.326 |
+| `delta_cubic` (cubic / 1000) | −0.068 | −0.11 – −0.026 | **−0.081** | −0.128 – −0.035 |
+| **`sigma_kicker`** | **0.342** | **0.268 – 0.417** | **0.385** | 0.305 – 0.467 |
+| `roof[dome]` | +0.285 | +0.176 – +0.393 | +0.246 | +0.127 – +0.366 |
+| `roof[closed]` | +0.294 | +0.180 – +0.411 | +0.250 | +0.123 – +0.375 |
+| `roof[open]` | +0.529 | +0.238 – +0.830 | +0.461 | +0.161 – +0.771 |
+| **`beta_wind`** (per mph) | **−0.0213** | **−0.0305 – −0.0119** | **−0.0224** | −0.0321 – −0.0127 |
+| `beta_temp` (per °F) | +0.00385 | +0.00122 – +0.00655 | +0.00341 | +0.00043 – +0.00641 |
+| `delta_xp` | +0.167 | +0.050 – +0.284 | **+0.122** | **−0.008 – +0.252** |
+| `lambda_xp` | 1.263 | 0.862 – 1.725 | 1.247 | 0.887 – 1.666 |
+
+**Two rows moved enough to change a sentence elsewhere in this document.**
+`sigma_kicker` rose 12.7%, which moves document 05 §3's shrinkage weight from
+0.285 to about 0.336 — a kicker keeps a third of their own record rather than a
+quarter. And `delta_xp`'s interval no longer excludes zero, which retires the
+claim below.
 
 **`sigma_kicker` barely moved** — 0.360 in Phase 2, 0.342 now. That is the check
 that mattered most and it is easy to overlook: if adding weather had collapsed
@@ -796,6 +812,13 @@ kicker effect is therefore supported rather than assumed — which is exactly wh
 
 > `delta_xp` = **+0.167** log-odds, 89% interval +0.050 to +0.284, **excluding
 > zero.**
+
+**Retired 2026-08-18.** On the population that excludes blocked kicks the
+interval is −0.008 to +0.252 and **the claim does not survive** (document 27
+§14c). Field goals lost 1.79% of their attempts to blocks and extra points only
+0.86%, so part of what looked like an extra-point advantage was the two
+populations' different block rates. What follows is the incumbent's reading,
+kept as the record of what was claimed:
 
 An extra point is genuinely easier than a field goal *from the same 33 yards* —
 about **+0.9 pp** at that base rate. A plausible mechanism is that a PAT is a
