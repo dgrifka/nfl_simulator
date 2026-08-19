@@ -28,6 +28,10 @@ because luck is concentrated: 44.4% of games are degenerate (the verdict never
 moves), and what is left carries enough weight to overturn one game in six of
 the 1,535 non-degenerate remainder (255 of 1,535, 16.6%).
 
+That 9.24% is the sign-of-deserved-margin definition. §2a reconciles it with
+the DTW% definition and recommends reporting three buckets rather than one
+number: **195 clear flips (7.06%), 186 too close to call (6.74%)**.
+
 The margin itself moves more than the win/loss verdict does. The median game's
 deserved margin sits 2.37 points from the realized one, and 39.2% of games
 move by more than a field goal.
@@ -46,13 +50,44 @@ of exactly zero.
 | DTW% inside 0.40–0.60 (genuinely undecided) | 186 | 6.74% |
 | Realized ties handed a deserved winner | 10 | 100% of ties |
 
-The two flip definitions disagree by 24 games, and the disagreement is
-informative rather than a defect. The point-estimate flip asks whether the
-average luck-neutralized margin changes sides; the DTW% flip asks whether the
-bootstrap majority does. A game can move its margin across zero while the
-coins still favour the team that won, and vice versa. Product copy should
-quote one definition and name it — the recommendation is the DTW% version,
-because DTW% is the number the product displays.
+### 2a. Which definition — reconciled 2026-08-19
+
+**Correction to this document's first draft.** It said the two definitions
+"disagree by 24 games." That is the *net* difference (279 − 255), not the
+disagreement count. They disagree on **56 games**: 239 games both call a flip,
+16 are sign-flip-only, and 40 are DTW%-flip-only. Each definition catches
+games the other misses, so the net cancels most of the disagreement and is the
+wrong statistic to quote.
+
+The 56 disagreements are not scattered. **Every one has a DTW% between 0.363
+and 0.626**, 49 of the 56 sit inside 0.40–0.60, and their median |deserved
+margin| is 0.28 points (max 1.59). The two definitions agree everywhere except
+in the dead-even zone, which is exactly where a binary flip label carries no
+information in the first place.
+
+That reframes the choice. The problem is not which definition is right; it is
+that a binary label is being asked to describe a coin flip. **Recommendation:
+report three buckets, with "too close to call" at DTW% 0.40–0.60.**
+
+| Bucket | Games | Share |
+|---|---|---|
+| Clear flip (DTW% definition) | 195 | 7.06% |
+| Too close to call (DTW% 0.40–0.60) | 186 | 6.74% |
+| Clear flip (sign definition, for comparison) | 194 | 7.03% |
+
+With the band in place the residual disagreement is **7 games, down from 56** —
+and all 7 have a deserved margin inside ±0.45 points, so they are dead-even
+games that happen to fall just outside the band rather than genuine conflicts.
+The definition choice stops mattering.
+
+If a single number is required despite the above, use the DTW% version, because
+DTW% is what the product displays and a headline that contradicts the on-screen
+number is worse than a slightly different count.
+
+The point-estimate flip asks whether the average luck-neutralized margin
+changes sides; the DTW% flip asks whether the bootstrap majority does. A game
+can move its margin across zero while the coins still favour the team that
+won, and vice versa — §2a is why that distinction only bites near 0.5.
 
 Flips are stable across seasons: 18 (2019) to 33 (2025) per year, on 267–285
 games. No season is carrying the result.
@@ -157,23 +192,29 @@ majority of draws.
 
 ## 7. What this does and does not license
 
-**Licensed:** "The deserved winner differs from the scoreboard winner in about
-one game in eleven (9.2%, 255 of 2,761 games, 2016–2025)." "About 44% of games
-are decided beyond luck's reach." "The median game's margin moves 2.4 points
-when luck is neutralized."
+**Licensed:** "The luck-neutralized verdict clearly overturns the scoreboard in
+about one game in fourteen (7.1%, 195 of 2,761 games, 2016–2025), and calls
+another 6.7% too close to call." "About 44% of games are decided beyond luck's
+reach." "The median game's margin moves 2.4 points when luck is neutralized."
+The single-definition form — "differs in 9.2%, 255 games" — is licensed only if
+the definition is named alongside it (§2a).
 
 **Not licensed:** any claim that the flipped games were *wrongly decided* —
 the flip is about the deserved margin, and the deserved margin is a
 bookkeeping construct, not a claim about who would win a replay (that question
 is out of scope, handoff §1). Nor any single-number summary of the DTW%
 distribution (§4). Nor a coverage or interval claim quoted on the all-games
-figure alone (document 10).
+figure alone (document 10). Nor a bare flip percentage with no definition
+attached — the two definitions differ on 56 games and a reader cannot tell
+which is being quoted (§2a).
 
 ## 8. Known-defect register
 
 | Defect | Evidence | Status |
 |---|---|---|
-| Two flip definitions disagree by 24 games | §2 | **Open by design.** Product must name which one it quotes; recommendation is the DTW% version |
+| The first draft of §2 said the two flip definitions "disagree by 24 games" | §2a | **Corrected 2026-08-19.** 24 is the net difference; the disagreement count is 56. The erroneous figure was never quoted outside this document |
+| Two flip definitions disagree on 56 games | §2a | **Closed by the three-bucket presentation.** All 56 sit at DTW% 0.363–0.626; a "too close to call" band at 0.40–0.60 leaves 7 residual disagreements |
+| The 0.40–0.60 band is a presentation choice, not a fitted threshold | §2a | **Accepted and disclosed.** It is doc 33's own coin-flip band, chosen before this reconciliation and not tuned to minimise the residual |
 | Degenerate share is 44.4% here vs "~50%" in document 10 | §3 | **Closed.** Document 10's figure is synthetic-Gaussian and its own register flagged margin lumpiness as the cause |
 | The margin identity reproduces to 9.6e-4 points, not exactly | Cross-check in this round | **Accepted.** `points_per_epa` is stored rounded to 4 dp (0.8389); the residual is the rounding, not a bookkeeping error |
 | Everything here is a within-window description | Whole document | **Accepted.** No out-of-sample claim is made and none should be read in |

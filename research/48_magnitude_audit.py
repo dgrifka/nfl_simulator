@@ -108,6 +108,54 @@ def main() -> None:
         f"({coin_flip_games.mean() * 100:.2f}%)  [the genuinely undecided games]"
     )
 
+    # ------------------------------------------- flip-definition reconciliation
+    # The two flip counts differ by 24, but that is a NET difference and not the
+    # number of games they disagree about: each definition catches games the
+    # other misses. The disagreement set is what a product has to care about,
+    # so it is counted directly.
+    disagree = flip != dtw_flip
+    sign_only = flip & ~dtw_flip
+    dtw_only = dtw_flip & ~flip
+    both = flip & dtw_flip
+
+    print(f"\n{'=' * 72}\nFLIP-DEFINITION RECONCILIATION — where the two disagree\n{'=' * 72}")
+    print(f"  both definitions agree it flipped   {int(both.sum()):5d}")
+    print(f"  sign flip only                      {int(sign_only.sum()):5d}")
+    print(f"  DTW% flip only                      {int(dtw_only.sum()):5d}")
+    print(
+        f"  disagreements                       {int(disagree.sum()):5d}  "
+        f"(NOT the 24-game net difference)"
+    )
+    print(
+        f"  their DTW% range                    "
+        f"[{dtw[disagree].min():.3f}, {dtw[disagree].max():.3f}]"
+    )
+    print(
+        f"  their |deserved margin|: median {np.median(np.abs(deserved[disagree])):.3f} pt, "
+        f"max {np.abs(deserved[disagree]).max():.3f} pt"
+    )
+    print(
+        f"  of them, inside DTW% 0.40-0.60      "
+        f"{int((coin_flip_games & disagree).sum()):5d} of {int(disagree.sum())}"
+    )
+
+    # A third bucket collapses the argument: call 0.40-0.60 "too close to call"
+    # and the two definitions stop mattering almost everywhere.
+    clear_dtw_flip = dtw_flip & ~coin_flip_games
+    clear_sign_flip = flip & ~coin_flip_games
+    residual = (clear_dtw_flip != clear_sign_flip) & ~realized_tie
+    print(
+        f"\n  With a 'too close to call' band at DTW% 0.40-0.60:"
+        f"\n    too close to call                 {int(coin_flip_games.sum()):5d}  "
+        f"({coin_flip_games.mean() * 100:.2f}%)"
+        f"\n    clear flips (DTW% definition)     {int(clear_dtw_flip.sum()):5d}  "
+        f"({clear_dtw_flip.mean() * 100:.2f}%)"
+        f"\n    clear flips (sign definition)     {int(clear_sign_flip.sum()):5d}  "
+        f"({clear_sign_flip.mean() * 100:.2f}%)"
+        f"\n    residual disagreements            {int(residual.sum()):5d}  "
+        f"(down from {int(disagree.sum())})"
+    )
+
     # ----------------------------------------------------------- degeneracy
     degenerate = (dtw <= DEGENERATE_LOW) | (dtw >= DEGENERATE_HIGH)
     exact = (dtw == 0.0) | (dtw == 1.0)
@@ -243,6 +291,25 @@ def main() -> None:
             "share_dtw_below_even_for_realized_winner": float(dtw_flip.mean()),
             "n_dtw_between_040_and_060": int(coin_flip_games.sum()),
             "share_dtw_between_040_and_060": float(coin_flip_games.mean()),
+        },
+        "flip_definition_reconciliation": {
+            "n_both": int(both.sum()),
+            "n_sign_only": int(sign_only.sum()),
+            "n_dtw_only": int(dtw_only.sum()),
+            "n_disagree": int(disagree.sum()),
+            "net_difference": int(dtw_flip.sum() - flip.sum()),
+            "disagreement_dtw_range": [float(dtw[disagree].min()), float(dtw[disagree].max())],
+            "disagreement_abs_deserved_median": float(np.median(np.abs(deserved[disagree]))),
+            "disagreement_abs_deserved_max": float(np.abs(deserved[disagree]).max()),
+            "n_disagreements_inside_040_060": int((coin_flip_games & disagree).sum()),
+            "with_too_close_band_040_060": {
+                "n_too_close": int(coin_flip_games.sum()),
+                "share_too_close": float(coin_flip_games.mean()),
+                "n_clear_flips_dtw": int(clear_dtw_flip.sum()),
+                "share_clear_flips_dtw": float(clear_dtw_flip.mean()),
+                "n_clear_flips_sign": int(clear_sign_flip.sum()),
+                "n_residual_disagreements": int(residual.sum()),
+            },
         },
         "degeneracy": {
             "definition": f"DTW% <= {DEGENERATE_LOW} or >= {DEGENERATE_HIGH} (document 10, Gate V-3)",
