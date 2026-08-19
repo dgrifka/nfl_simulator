@@ -613,5 +613,320 @@ Results are written back into this document as §14.
 
 ## 14. Results
 
-*To be written by `research/42_fg_refit.py`. The gates above were committed
-before that script existed.*
+*Scripts: `research/42a_fg_refit_power.py` (thresholds), `research/42_fg_refit.py`
+(the fits and gates, §9a and §9b), `research/42b_fg_refit_impact.py` (§9c and
+§9d) and `research/42c_read_side_defect.py` (§14f, written after the round-trip
+check failed). The gates were committed at `88ac49c` before any of them existed.
+Results in `research/outputs/fg_refit_summary.json`,
+`42a_fg_refit_power.json`, `42b_fg_refit_impact.json` and
+`42c_read_side_defect.json`.*
+
+### The verdict, stated first
+
+> **The corrected model passes all six gates on the same cubic curve the
+> incumbent adopted. `p_make` rises by a mean of 1.33 pp across 23,247 kicks and
+> by more the longer the kick — 0.44 pp at 20 yards, 3.03 pp at 55. Kicker skill
+> comes out *larger* rather than smaller, `sigma_kicker` rising from 0.342 to
+> 0.385. And the round-trip check pre-registered in §9d as plumbing found
+> something worse than the defect this round set out to fix: the shipped
+> simulator has never read two of the fitted model's parameters, and prices a
+> 55-yard field goal 6.8 percentage points too generously.**
+
+| Gate | Statistic | Result | Verdict |
+|---|---|---|---|
+| **R-1** — sampler health | 0 divergences, max `r_hat` 1.0048, min `ess_bulk` 746 | — | **Pass** |
+| **R-2** — weather calibration | worst standardized miss **2.145** vs 2.614, 9 cells | — | **Pass** |
+| **R-3** — wind resolvable | `beta_wind` **−0.02241** [−0.03212, −0.01266] vs +0.00360 | Clears by a wide margin | **Pass** |
+| **R-4** — distance calibration | **2.196** vs 2.721 on the cubic *(quadratic failed at 3.010 vs 2.859)* | — | **Pass on the cubic** |
+| **R-5** — posterior predictive | make-rate tail p 0.500, between-kicker variance tail p 0.058 | — | **Pass** |
+| **R-6** — kicker resolvable | `sigma_kicker` **0.385** [0.305, 0.467] vs 0.2407 | Lower bound clears | **Pass** |
+| **R-7** — temperature | `beta_temp` **+0.00341** [+0.00043, +0.00641] vs −0.00071 | Clears the null bound | **Reported, claim permitted** |
+| **R-8** — extra-point transfer | `lambda_xp` **1.247** [0.887, 1.667] — contains 1 | — | **Reported, no claim** |
+
+Per the decision rule committed in §8 — *all gates pass → propose adoption, stop
+at the door* — **nothing merges, and the maintainer decides.**
+
+### 14a. The threshold re-derivation, and an honest note about it
+
+`research/42a_fg_refit_power.py` reproduced document 05b's published null bounds
+**exactly** on the full population, which is the check that it is running the
+same instrument. On the refit population:
+
+| Threshold | Inherited (n = 10,731) | Re-derived (n = 10,539) |
+|---|---|---|
+| R-3, `beta_wind` upper bound | +0.0026759 | **+0.0035955** |
+| R-7, `beta_temp` lower bound | −0.0008393 | **−0.0007101** |
+
+**The wind bound moved by 34% and §7b predicted 0.6%.** The prediction was about
+the standard error, which does move by 0.6%; the *threshold* is a 10th percentile
+of 400 simulated bounds, and a percentile of 400 draws carries Monte Carlo noise
+far larger than the shift in `n`. **The §7b reasoning was right about the
+quantity it named and wrong about the quantity it was applied to**, and it is
+recorded here rather than quietly dropped. It changes nothing: `beta_wind`'s
+89% upper bound is −0.0127, an order of magnitude below either threshold.
+
+### 14b. The arm ladder — and the cubic was not the blocked kicks' fault
+
+The pre-registered quadratic **failed R-4 again**, at 3.010 against a 2.859
+reference, and it also failed R-5's between-kicker variance at a tail p of 0.046.
+The cubic passed both. §7f named this as a finding either way, so here it is:
+
+> **The cubic term document 05b added in Phase 3 was not a curvature correction
+> for a population contaminated by blocked kicks.** Remove every block and the
+> quadratic still cannot bend to the distance curve. The 50–54 yard bin remains
+> the worst bin on the corrected population too, at +2.70 pp and 2.196
+> standardized — down from +2.60 pp on the incumbent, essentially unchanged.
+> Document 05b §9's attempt-selection hypothesis survives this round untouched.
+
+### 14c. §9a — what moved in the model
+
+| Parameter | Incumbent | Refit | Refit 89% interval |
+|---|---|---|---|
+| `alpha` (log-odds at 40 yd) | +1.7472 | **+1.9068** | +1.8215 – +1.9934 |
+| `beta` (per yard) | −0.10804 | **−0.11587** | −0.12596 – −0.10592 |
+| `gamma` (quadratic / 100) | +0.2038 | **+0.2489** | +0.1717 – +0.3257 |
+| `delta_cubic` (cubic / 1000) | −0.0685 | **−0.0811** | −0.1280 – −0.0349 |
+| **`sigma_kicker`** | **0.3420** | **0.3855** | 0.3045 – 0.4674 |
+| `beta_wind` (per mph) | −0.02132 | −0.02241 | −0.03212 – −0.01266 |
+| `beta_temp` (per °F) | +0.00385 | +0.00341 | +0.00043 – +0.00641 |
+| `delta_xp` | +0.1669 | **+0.1222** | **−0.0080 – +0.2524** |
+| `lambda_xp` | 1.2628 | 1.2472 | 0.8866 – 1.6658 |
+| `roof[dome]` | +0.2846 | +0.2457 | +0.1274 – +0.3658 |
+| `roof[closed]` | +0.2943 | +0.2501 | +0.1233 – +0.3748 |
+| `roof[open]` | +0.5292 | +0.4605 | +0.1614 – +0.7711 |
+
+**League make rate, average kicker, outdoors, no weather reading:**
+
+| Distance | Incumbent | Refit | Change |
+|---|---|---|---|
+| 30 yd | 95.38% | 96.48% | **+1.09 pp** |
+| 40 yd | 85.15% | 87.05% | **+1.91 pp** |
+| 45 yd | 77.86% | 80.04% | **+2.19 pp** |
+| 50 yd | 70.47% | 73.03% | **+2.55 pp** |
+| 55 yd | 64.18% | 67.39% | **+3.21 pp** |
+
+**Three things in that table are worth stating out loud.**
+
+**1. Kicker skill got bigger, and §3 predicted the opposite direction was
+possible.** `sigma_kicker` rose 12.7%, from 0.342 to 0.385, and the 89% interval
+moved up with it. §3's failure condition was a *collapse* — that would have
+argued blocks carry kicking information and would have weakened document 26's
+Gate A ruling. The opposite happened: **blocked kicks were noise diluting the
+measured spread between kickers, and removing them made kickers look more
+different from each other.** This is also the first population change in the
+project to *increase* a measured spread; documents 18 and 24 both widened a
+population and watched the spread fall. Narrowing a population on a mechanism
+argument is a different operation from widening it on one, and this is the
+evidence.
+
+**2. That moves document 05 §3's treatment table, and §10 of this document said
+it would not.** §10 asserted the field-goal and extra-point rows "keep their
+treatment and their `w`". The treatment stays partial, but `w` does not stay
+0.285. Holding the median kicker-season's sampling variance fixed at the value
+the incumbent's pair implies, `w = σ²/(σ² + s²)` gives:
+
+> **`w` rises from 0.285 to about 0.336** at the median kicker-season — a kicker
+> keeps a third of their own record rather than a quarter, and field goals are
+> neutralized slightly less.
+
+That is an arithmetic implication, not a re-derivation: **document 05b's
+published 0.285 has no derivation anywhere in this repository**, so the exact
+recomputation cannot be reproduced. It is registered as a defect below. The
+§10 sentence is corrected here rather than edited, because the pre-registration
+is the record.
+
+**3. `delta_xp` no longer excludes zero.** Document 05b §11 claimed *"an extra
+point is genuinely easier than a field goal from the same 33 yards — about
++0.9 pp"*, on an interval of +0.050 to +0.284. On the corrected population the
+interval is **−0.008 to +0.252**. §7i predicted this exact mechanism in advance:
+field goals lose 1.79% of their population to blocks and extra points only 0.86%,
+so part of what looked like an extra-point advantage was the two populations'
+different block rates. **The claim does not survive the correction**, and if the
+refit is adopted, document 05b §11's wording has to change with it.
+
+**Kicker-seasons: 433 → 432.** One dropped, and it is printed rather than
+counted (document 20 §9): **`2025_00-0035042`**, a kicker-season whose only
+charted attempts in the fitted population were blocked. Under the refit that
+kicker falls back to the league curve, which is the documented `w = 0` behaviour
+for an unknown entity. Mean absolute movement in a kicker effect is 0.055
+log-odds; the largest is +0.344 (`2016_00-0025944`).
+
+### 14d. §9b — what moved in `p_make`, kick by kick
+
+Priced through `FieldGoalModel`, the path the product uses:
+
+| Population | n | Mean shift | Median | 89% range | Max |
+|---|---|---|---|---|---|
+| All kicks | 23,247 | **+1.334 pp** | +1.119 pp | +0.448 – +2.943 | 10.33 pp |
+| Field goals | 10,539 | +1.519 pp | +1.175 pp | — | — |
+| Extra points | 12,708 | +1.182 pp | +1.095 pp | — | — |
+
+**The shift is systematic in distance, and that is the answer to §3's open
+question.**
+
+| FG distance bin | n | Mean shift |
+|---|---|---|
+| 20–24 | 1,019 | +0.44 pp |
+| 30–34 | 1,481 | +1.14 pp |
+| 40–44 | 1,546 | +1.64 pp |
+| 50–54 | 1,351 | +2.31 pp |
+| 55–59 | 530 | +3.03 pp |
+| 60–64 | 72 | +4.20 pp |
+
+§3 asked whether blocks are distributed uniformly over distance and refused to
+predict. They are not: **the correction grows monotonically with distance**,
+which is what a population of blocks concentrated on longer, flatter-trajectory
+kicks produces. By roof, the shift is +1.49 pp outdoors against +1.05 pp in a
+dome and +0.98 pp under a closed roof — the same ordering, since long attempts
+are not evenly spread across venues.
+
+### 14e. §9c — what moved in the ledger, on both populations
+
+Both arms share every seed, the v1.2 class tables and the fumble component; the
+only difference is the field-goal posterior.
+
+| | **All 2,761 games with a kick** *(primary)* | 287 games with a blocked kick |
+|---|---|---|
+| Median \|ΔDTW\| | **0.071 pp** | 0.298 pp |
+| Mean \|ΔDTW\| | 0.463 pp | 0.835 pp |
+| Max \|ΔDTW\| | 9.25 pp | 9.25 pp |
+| Median \|Δ deserved margin\| | **0.081 pts** | 0.141 pts |
+| Mean signed Δ deserved margin | +0.001 pts | −0.003 pts |
+| DTW side flips | **18** | 3 |
+
+**The refit is a small change to the product and a large change to the model,
+and both halves of that sentence are true.** A 1.3 pp shift in `p_make` applies
+to every kick in both directions of the ledger — a made kick books less good luck
+and a missed kick books more bad luck — so the game-level effect largely cancels.
+The mean signed change in deserved margin is +0.001 points across 2,761 games.
+Eighteen games change hands, which is a third of what the weather round moved
+(47, document 05b §11).
+
+**These numbers were produced by a read side that does not read the model
+correctly** — see §14f. Both arms carry the same defect, so the comparison is a
+fair statement of *what the product would print*, and it is **not** a statement
+of what the corrected model implies.
+
+### 14f. §9d.3 — the round trip failed, and this is the round's largest finding
+
+§9d asked for a plumbing check on the centring constants. The check failed on
+field goals by up to **40.7 percentage points**, which is not a centring problem.
+Two fitted parameters never reach the simulator:
+
+| Discarded | What it does | Where it goes wrong |
+|---|---|---|
+| **`delta_cubic`** | The cubic distance term of the **adopted** Phase 3 curve | `FieldGoalModel._logit` computes `alpha + beta·d + gamma·d²/100` and stops. `from_posterior` never reads the variable. The simulator prices every kick on a **quadratic curve whose `gamma` was fitted jointly with a cubic term that is then dropped** |
+| **`delta_xp`, `lambda_xp`** | The extra-point offset and the transfer of kicker ability to extra points | The read side has no extra-point terms at all. An extra point is priced on the plain field-goal curve at its 33 yards with the kicker effect at scale 1 |
+
+**Sized on the shipped population** (`research/42c_read_side_defect.py`, 23,549
+kicks, incumbent posterior, incumbent centres — this is v1.2 as it stands):
+
+| FG distance bin | n | Shipped `p_make` | Fitted `p_make` | Error |
+|---|---|---|---|---|
+| 20–24 | 1,024 | 98.67% | 99.06% | −0.39 pp |
+| 30–34 | 1,497 | 94.09% | 94.28% | −0.19 pp |
+| 45–49 | 1,599 | 76.58% | 76.12% | +0.47 pp |
+| **50–54** | **1,392** | **70.86%** | **68.38%** | **+2.48 pp** |
+| **55–59** | **540** | **67.00%** | **60.21%** | **+6.80 pp** |
+| 60–64 | 81 | 63.43% | 47.32% | **+16.11 pp** |
+| 65–69 | 17 | 62.83% | 33.98% | **+28.85 pp** |
+
+- **2,117 field goals are mispriced by more than a point** of make probability,
+  and every one of the **12,818 extra points** is mispriced by −0.98 pp on
+  average, in the same direction on all of them.
+- In ledger terms: a mean **0.045 EPA** of misbooked luck per field goal against
+  a mean |luck| of 0.939 EPA, and **0.010 EPA** per extra point against 0.108.
+  Signed totals across ten seasons: **−385 EPA** on field goals and **+128 EPA**
+  on extra points.
+
+**Three things follow, and none of them is "fix it now".**
+
+1. **This is not a Gate A violation and not this round's candidate.** It is a
+   plumbing defect in `src/nfl_simulator/fg_model.py`, present identically in
+   v1.1 and v1.2, and neither created nor worsened by the refit. Document 28's
+   correctness gate does not govern it, and document 29's audit does not cover
+   it — the audit sweeps for plays booked wrongly, not for parameters read
+   wrongly.
+2. **It is a correction candidate and it needs its own pre-registration**, per
+   the process law this project has run on since document 04. The game-level
+   consequence is unmeasured here on purpose: measuring it first and writing the
+   round afterwards is the thing document 26 §9 warned about.
+3. **If the refit is adopted, this should be fixed in the same ship or the refit
+   is only half-consumed.** The refit's `delta_cubic` is *larger* than the
+   incumbent's (−0.081 against −0.068), so shipping a corrected posterior into an
+   uncorrected read side would carry slightly more of this error, not less.
+
+**The check that found it was pre-registered as a formality.** §9d asked for it
+in one sentence, as a round-trip on the centres. It is the strongest argument in
+this document for writing down cheap checks whose expected result is "fine".
+
+### 14g. §9d.1 and §9d.2 — the two obligations to document 26
+
+**The refit alone enlarges the Gate A violation, exactly as §12 predicted.**
+
+| Component | Population | Incumbent mean \|luck\| | Refit | Change |
+|---|---|---|---|---|
+| Field goal | **blocked (192)** | 3.360 EPA | **3.486 EPA** | **+0.125** |
+| Field goal | not blocked (10,539) | 0.940 EPA | 0.898 EPA | −0.042 |
+| Extra point | **blocked (110)** | 0.941 EPA | **0.961 EPA** | **+0.019** |
+| Extra point | not blocked (12,708) | 0.108 EPA | 0.097 EPA | −0.011 |
+
+A blocked field goal is scored `realized = 0` against a make probability that
+just went up, so it books more luck; every other kick books slightly less,
+because a higher `p_make` sits closer to the outcome that usually happens.
+**Adopting the refit without document 26's correction buys a better model and a
+2.82-point false credit that grows to 2.93 points.**
+
+**Document 26's Gate P-3 floor, recomputed:**
+
+| Posterior | Median 89% DTW half-width on the 287 games |
+|---|---|
+| Incumbent (v1.2) | **1.6250 pp** — reproduces document 26 §4 to four decimals |
+| **Refit** | **1.4409 pp** |
+
+The harness reproducing document 26's published floor exactly is the check that
+this number is comparable to it. **The floor falls by 11.3%** under the refit,
+which is the direction document 26 §9 expected and did not size.
+
+**What this does *not* say.** Document 26's candidate measured 1.167 pp against
+the old floor. Its statistic under the refit is **not measured here** and is
+expected to *rise*, because the rows the correction removes are 3.7% larger. Both
+numbers move and this document deliberately measures only the one that can be
+measured without looking at the candidate. **Re-measuring the candidate is task 4
+of this phase and it happens only if the maintainer approves both this refit and document
+28's gate.**
+
+### 14h. Defects added or discovered by this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **The simulator discards `delta_cubic`** | §14f: 55–59 yd field goals mispriced by +6.80 pp; 2,117 kicks off by more than a point | **Open, and the largest defect this round found.** Present in v1.1 and v1.2. Fixing it is a correction candidate with its own pre-registration |
+| **The simulator discards `delta_xp` and `lambda_xp`** | §14f: every extra point mispriced by −0.98 pp on average | **Open.** Same round as the cubic; the two are one code path |
+| **Document 05b's published `w = 0.285` has no derivation in the repository** | §14c: the recomputation could only be done as an arithmetic implication under a stated assumption | **Open.** Any document quoting `w` for the field-goal row is quoting a number nothing regenerates |
+| **§7b's threshold-drift reasoning was applied to the wrong quantity** | §14a: the bound moved 34% where the argument predicted 0.6% | **Closed by disclosure.** The reasoning was about the standard error and the threshold is a percentile of 400 simulations. No verdict depends on it |
+| **§10 asserted `w` would not move** | §14c: `sigma_kicker` rose 12.7% | **Closed by correction**, stated in §14c rather than edited into §10 |
+| **The §9c impact numbers are computed through the defective read side** | §14f | **Accepted and stated.** Both arms share the defect, so the comparison is what the product would print |
+| **Blocked kicks remain in `components.py`'s empirical swing tables** | Unchanged from §12 | **Open, deliberate.** That is document 26's correction, not this one |
+
+### 14i. What the maintainer is being asked
+
+**One decision, and one flagged item that is not part of it.**
+
+> **Adopt the refitted make-probability posterior as the simulator's field-goal
+> model?** It passes every gate document 05b ever imposed on this model, on the
+> same curve form. It raises `p_make` by 1.33 pp on average and by more the
+> longer the kick, moves the median game by 0.081 points, and flips 18 of 2,761
+> verdicts. It also raises kicker skill by 12.7%, which moves document 05 §3's
+> `w` from 0.285 to about 0.336, and it removes document 05b §11's claim that an
+> extra point is easier than a field goal from the same distance.
+
+- **If yes**, the ship is a v1.3 on the document 19 template, and §10's list of
+  documents to edit applies with §14c's correction folded in.
+- **If no**, the incumbent posterior stays, `research/outputs/trace_fg_refit.nc`
+  stays as the record, and the blocked-kicks row stays on document 05b's defect
+  register with these numbers attached.
+
+**Separately, and not part of that decision:** the read-side defect of §14f is
+larger than the one this round fixed and it is in shipped code today. It needs a
+round of its own, and it should probably come before anything else in this
+project.
