@@ -38,10 +38,16 @@ N_FOLDS = _power.N_FOLDS
 NONINFERIORITY_MARGIN = _power.NONINFERIORITY_MARGIN
 
 
-def build_pairs() -> pl.DataFrame:
-    """Rematch pairs carrying both game-1 predictors."""
+def build_pairs(dtw_artifact: str = "dtw_games.parquet") -> pl.DataFrame:
+    """Rematch pairs carrying both game-1 predictors.
+
+    ``dtw_artifact`` defaults to v1's, so this script reproduces document 07
+    unchanged. Later versions pass their own artifact — v1.3 does, in
+    `research/47_rematch_v13.py`, because a change to `p_make` on every kick is
+    the kind of change document 05b §11's weather round re-earned Gate 1 for.
+    """
     games = pl.read_parquet(paths.RESEARCH_OUTPUT_DIR / "game_components.parquet")
-    dtw = pl.read_parquet(paths.RESEARCH_OUTPUT_DIR / "dtw_games.parquet").select(
+    dtw = pl.read_parquet(paths.RESEARCH_OUTPUT_DIR / dtw_artifact).select(
         "game_id", "deserved_margin", "dtw_home"
     )
 

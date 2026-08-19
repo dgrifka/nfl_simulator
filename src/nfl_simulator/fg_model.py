@@ -11,18 +11,31 @@ deserve-to-win interval to carry the uncertainty in `p` itself, not just the
 coin flip, and a model that collapsed to a mean here would quietly make the
 simulator's intervals too tight.
 
-The adopted form is the quadratic fallback, because the pre-registered linear
-distance term failed Gate FG-2, plus the weather terms added in Phase 3:
+The adopted form is Phase 3's cubic curve — the pre-registered linear term
+failed Gate FG-2 and the quadratic failed Gate W-4 — plus the weather terms and
+the extra-point arm fitted with it:
 
-    logit p = alpha + beta * (distance - 40) + gamma * (distance - 40)^2 / 100
+    logit p = alpha + beta * d + gamma * d^2 / 100 + delta_cubic * d^3 / 1000
               + roof_effect
               + beta_wind * (wind - wind_centre) * has_weather
               + beta_temp * (temp - temp_centre) * has_weather
-              + kicker_effect
+              + delta_xp * is_extra_point
+              + kicker_effect * (1 + (lambda_xp - 1) * is_extra_point)
 
-Weather is optional throughout. A posterior fitted before Phase 3 carries no
-weather parameters, and passing weather to such a model is a no-op rather than
-an error — the Phase 2 ledger has to stay reproducible.
+    where d = distance - distance_centre
+
+**Every fitted term is optional and absent means absent**, never zero-by-
+assumption: a posterior fitted before Phase 3 carries no weather parameters and
+no cubic term, and a quadratic-arm trace carries no `delta_cubic`. Passing
+weather — or asking for an extra point — of such a model is a no-op rather than
+an error, because the v1.1 and v1.2 ledgers have to stay reproducible.
+
+The cubic and extra-point terms were fitted in Phase 3 and **were not read here
+until v1.3** (document 27 §14f). Until then the simulator priced every kick on a
+quadratic curve whose `gamma` had been fitted jointly with a cubic term it then
+discarded, and priced extra points as plain field goals from 33 yards. Document
+30 §5a makes agreement with the fit a gate rather than a hope: the read side
+must reproduce `research/14_fg_weather_model.make_probabilities` on every kick.
 """
 
 from __future__ import annotations
@@ -104,9 +117,15 @@ class FieldGoalModel:
     beta_temp: np.ndarray | None = None
     wind_centre: float = 0.0
     temp_centre: float = 0.0
+    delta_cubic: np.ndarray | None = None
+    delta_xp: np.ndarray | None = None
+    lambda_xp: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         lengths = {len(self.alpha), len(self.beta), len(self.gamma)}
+        for optional in (self.delta_cubic, self.delta_xp, self.lambda_xp):
+            if optional is not None:
+                lengths.add(len(optional))
         if len(lengths) != 1:
             raise ValueError(
                 "alpha, beta and gamma must have the same number of posterior draws, "
@@ -124,15 +143,34 @@ class FieldGoalModel:
     def n_draws(self) -> int:
         return len(self.alpha)
 
-    def _logit(self, distance: float) -> np.ndarray:
+    def _logit(self, distance: float, *, extra_point: bool = False) -> np.ndarray:
         centred = distance - self.distance_centre
-        # Divided by 100 to match the fitted parameterization, which scales the
-        # quadratic so its coefficient sits on the same order as the slope.
-        return self.alpha + self.beta * centred + self.gamma * centred**2 / 100.0
+        # Divided by 100 and 1000 to match the fitted parameterization, which
+        # scales each polynomial term so its coefficient sits on the same order
+        # as the slope. Getting either divisor wrong is silent, so they are
+        # pinned against the fit's own arithmetic by a test.
+        logit = self.alpha + self.beta * centred + self.gamma * centred**2 / 100.0
+        if self.delta_cubic is not None:
+            logit = logit + self.delta_cubic * centred**3 / 1000.0
+        if extra_point and self.delta_xp is not None:
+            logit = logit + self.delta_xp
+        return logit
 
-    def league_make_probability(self, distance: float) -> np.ndarray:
+    def league_make_probability(self, distance: float, *, extra_point: bool = False) -> np.ndarray:
         """Make probability for an average kicker, one value per posterior draw."""
-        return _sigmoid(self._logit(distance))
+        return _sigmoid(self._logit(distance, extra_point=extra_point))
+
+    def _kicker_logit(self, effect: np.ndarray, *, extra_point: bool) -> np.ndarray:
+        """A kicker's effect, transferred to extra points at the fitted rate.
+
+        `lambda_xp` is how much of a kicker's field-goal ability shows up on an
+        extra point; the fit centres it on full transfer and lets the data argue.
+        A posterior without it — anything before Phase 3 — transfers in full,
+        which is what the code did before the parameter existed.
+        """
+        if not extra_point or self.lambda_xp is None:
+            return effect
+        return effect * self.lambda_xp
 
     def _weather_logit(self, weather: Weather | None) -> np.ndarray | float:
         """Log-odds adjustment for conditions. Zero whenever there is nothing to say.
@@ -164,6 +202,7 @@ class FieldGoalModel:
         distance: float,
         *,
         weather: Weather | None = None,
+        extra_point: bool = False,
     ) -> np.ndarray:
         """Make probability for this kicker in these conditions, one value per draw.
 
@@ -174,11 +213,18 @@ class FieldGoalModel:
 
         `weather` is optional so a Phase 2 posterior, which has no weather
         parameters, stays callable and reproduces its original ledger exactly.
+
+        `extra_point` selects the fitted extra-point arm — the `delta_xp` offset
+        and the `lambda_xp` transfer of kicker ability. An extra point carries
+        its own `kick_distance`, so it goes through the same distance curve
+        rather than being pinned at a constant, and `delta_xp` then means what
+        the fit says it means: the difference between an extra point and a field
+        goal *from the same distance*.
         """
         effect = self.kicker_effects.get(kicker_season) if kicker_season else None
-        logit = self._logit(distance) + self._weather_logit(weather)
+        logit = self._logit(distance, extra_point=extra_point) + self._weather_logit(weather)
         if effect is not None:
-            logit = logit + effect
+            logit = logit + self._kicker_logit(effect, extra_point=extra_point)
         return _sigmoid(logit)
 
     # ------------------------------------------------------------------
@@ -194,10 +240,14 @@ class FieldGoalModel:
         wind_centre: float = 0.0,
         temp_centre: float = 0.0,
     ) -> FieldGoalModel:
-        """Load a fitted posterior written by `research/07_` or `research/14_`.
+        """Load a fitted posterior written by `research/07_`, `research/14_` or
+        `research/42_`.
 
-        Weather parameters are read when present and skipped when absent, so the
-        Phase 2 trace and the Phase 3 trace both load through one path. The
+        Every optional parameter is read when present and skipped when absent, so
+        the Phase 2 trace, the quadratic arm, the adopted cubic arm and the v1.3
+        refit all load through one path. **Skipped means the term is not in the
+        model**, never that it is zero by assumption — the distinction is what
+        keeps an older ledger reproducible. The
         centring constants are passed in rather than stored in the trace because
         they are properties of the *sample* the model was fitted on, and a caller
         scoring new seasons must use the same ones the fit did.
@@ -218,6 +268,9 @@ class FieldGoalModel:
         # branching on which arm was adopted.
         gamma = posterior["gamma"].values.ravel() if "gamma" in posterior else np.zeros_like(alpha)
 
+        def optional(name: str) -> np.ndarray | None:
+            return posterior[name].values.ravel() if name in posterior else None
+
         return cls(
             alpha=alpha,
             beta=beta,
@@ -225,10 +278,13 @@ class FieldGoalModel:
             kicker_effects=_indexed_effects(posterior, "kicker", "kicker_season"),
             distance_centre=distance_centre,
             roof_effects=_indexed_effects(posterior, "roof", "roof_level"),
-            beta_wind=(posterior["beta_wind"].values.ravel() if "beta_wind" in posterior else None),
-            beta_temp=(posterior["beta_temp"].values.ravel() if "beta_temp" in posterior else None),
+            beta_wind=optional("beta_wind"),
+            beta_temp=optional("beta_temp"),
             wind_centre=wind_centre,
             temp_centre=temp_centre,
+            delta_cubic=optional("delta_cubic"),
+            delta_xp=optional("delta_xp"),
+            lambda_xp=optional("lambda_xp"),
         )
 
 

@@ -96,10 +96,12 @@ deserved to win, defined in §4.
 
 ---
 
-## 2. The two gates a component must pass
+## 2. The gates a component must pass
 
 Order matters. Gate A is qualitative and comes first; Gate B is the arithmetic
-above and only runs on components that survive Gate A.
+above and only runs on components that survive Gate A. **Gate C**, added by
+amendment C-1 on 2026-08-18, governs the separate case of *correcting* a play a
+shipped component already neutralizes and Gate A denies.
 
 ### Gate A — the branch-point gate
 
@@ -135,6 +137,73 @@ Two consequences worth stating before they surprise anyone:
 - `w` is entity-specific, because `n` is. A kicker with 200 career attempts is
   trusted more than a rookie with 12, from the same `κ`. This falls out of the
   formula and requires no special case.
+
+### Gate C — correcting a Gate A violation inside a shipped component
+
+*Added 2026-08-18 by amendment C-1, proposed in document 28 §5 and accepted by
+the maintainer. The text below is that section's, enacted verbatim.*
+
+A **violation** is a play that a shipped component neutralizes and Gate A
+denies. A correction to a violation is governed by this gate instead of by the
+materiality floor. It is governed by **every other gate unchanged**.
+
+A candidate qualifies for Gate C **only if all four of the following hold**,
+each stated in a pre-registration committed before the correction is measured:
+
+1. **It is a correction, not an addition.** Every play the candidate touches
+   already carries a ledger row from a shipped component, and the candidate
+   removes or re-prices rows without booking a row on any play that carries
+   none today. **A candidate that adds a single new row is an omission and the
+   materiality floor governs the whole of it**, including any corrective part.
+2. **A violation memo.** It quotes the branch document 05 §2 admitted for the
+   component, shows that the population contains plays whose outcome is
+   resolved by something else, and **names what did resolve them** — a specific
+   football act by a specific side. "This play is not really a coin" is not a
+   memo.
+3. **The memo argues the other side, and measures it where it is
+   measurable.** The strongest case that the play *is* a branch is stated, and
+   if it rests on a factual claim the data can settle, the claim is settled.
+   Document 25 §2 is the worked example: the objection that the blocker and the
+   recoverer are the same man was answered with 16 of 144.
+4. **The correction is the one Gate A implies, not a free parameter.**
+   Exclusion where the play has no branch; re-pricing to the correct branch
+   where it has a different one. If more than one correction is Gate
+   A-compatible, the pre-registration argues the choice on mechanism and
+   measures both arms. **A correction whose form was chosen after seeing its
+   size does not qualify.**
+
+A qualifying candidate is then measured against:
+
+- **Identification**, unchanged — the violating population is identifiable from
+  charted fields, with the **rejected rows printed, not their count** (document
+  20 §9).
+- **The ledger-must-sum gate**, unchanged, including the exact row-count
+  arithmetic and a check that removed luck lands in `core`.
+- **The dial gate** (document 20 §5f), unchanged, wherever the correction
+  assumes a `w` the data cannot read.
+- **A materiality *report*, not a threshold.** Median and mean |ΔDTW|, median
+  |Δ deserved margin| and verdict flips, on **both** populations document 18
+  §4b requires: the games containing the violating play, and every game the
+  component touches. Neither number is a pass rule. **Both are printed in the
+  verdict, always.**
+- **A reconciliation.** The per-event luck removed, times the number of events,
+  read against the game-level movement — so that a correction whose size cannot
+  be explained by its own arithmetic is visible as such.
+
+**Verdict.** A candidate that qualifies under clauses 1–4 and clears
+identification, ledger-sum and the dial gate is **correct, and is proposed for
+adoption at whatever size it turns out to have**. Size never fails it. As with
+every other round in this project, adoption requires the maintainer's explicit approval,
+and the size report is what he approves against.
+
+A candidate that qualifies and is **not** adopted is recorded in the
+known-defect register as *a measured Gate A violation, knowingly retained*,
+with both population numbers attached.
+
+**Three things C-1 deliberately does not do** (document 28 §5): it sets no
+threshold of any kind, it carries no sunset clause, and it does not touch Gate A
+itself. Gate A's branch-point question is unchanged word for word; C-1 is a
+procedure for acting on its answer.
 
 ---
 
@@ -297,6 +366,7 @@ margin. That is an identity, not a tolerance, and the simulator asserts it.
 | Gate A is a judgment, not a measurement | No statistic can detect the absence of a branch point | **Accepted, by design.** Stated in §2 so it is arguable rather than hidden |
 | Weather is absent from the FG model | Deferred per the handoff plan | **CLOSED in Phase 3** (05b §10–11). Roof, wind and temperature are in the model; 7,507 of 10,731 field-goal ledger entries were repriced, and systematically by roof (+2.8 pp indoors, −0.2 pp outdoors) |
 | Simultaneous luck events are treated as independent coins | Two fumbles in one game are drawn independently | **Accepted.** They are separate physical events; correlation would have to come through the shared `p` draw, which layer 1 already supplies |
+| A shipped component can neutralize a play Gate A denies, and the materiality floor is the wrong instrument for fixing it | Document 26 §8: the blocked-kick correction is right and missed a floor that the incumbent's own error inflates | **Governed by Gate C since 2026-08-18** (§2, amendment C-1, document 28 §5). A correction to such a play is measured against a materiality *report* rather than a threshold; every other gate is unchanged |
 
 ---
 

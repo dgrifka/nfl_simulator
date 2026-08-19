@@ -613,6 +613,14 @@ Results are written back into this document as §14.
 
 ## 14. Results
 
+> **Approved 2026-08-18 by the maintainer.** The refitted posterior is adopted as the
+> simulator's field-goal model and ships as part of v1.3, on §10's terms with
+> §14c's correction to `w` folded in. The read-side defect of §14f is approved
+> for fixing in the same ship — it is pre-registered in document 30 and measured
+> in isolation there, so v1.3's change decomposes. Document 31 is the ship
+> record.
+
+
 *Scripts: `research/42a_fg_refit_power.py` (thresholds), `research/42_fg_refit.py`
 (the fits and gates, §9a and §9b), `research/42b_fg_refit_impact.py` (§9c and
 §9d) and `research/42c_read_side_defect.py` (§14f, written after the round-trip
@@ -696,6 +704,17 @@ The cubic passed both. §7f named this as a finding either way, so here it is:
 | `roof[open]` | +0.5292 | +0.4605 | +0.1614 – +0.7711 |
 
 **League make rate, average kicker, outdoors, no weather reading:**
+
+> **Superseded 2026-08-18 by document 31 §4.** Every number in the table below
+> was priced through `FieldGoalModel.league_make_probability`, which is the read
+> side §14f found discarding `delta_cubic` — so both columns are a *quadratic*
+> reading of a *cubic* posterior. `research/46_simulator_v13.py` reproduces this
+> table exactly by stripping the cubic term, which is the check that the
+> discrepancy is the defect and not a different fit. The corrected curve is
+> steeper at range: **61.17% at 55 yards, not 67.39%**, against a corrected
+> incumbent of 58.76%. The **change** column, which is what this section was
+> arguing about, barely moves: +2.41 pp at 55 yards instead of +3.21 pp. The
+> table is kept as printed because the pre-registration is the record.
 
 | Distance | Incumbent | Refit | Change |
 |---|---|---|---|

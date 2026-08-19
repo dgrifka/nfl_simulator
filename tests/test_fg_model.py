@@ -257,7 +257,7 @@ def test_a_roof_effect_of_the_wrong_length_is_rejected():
 # ---- loading a fitted posterior ------------------------------------------
 
 
-def _write_posterior(path, *, with_weather: bool):
+def _write_posterior(path, *, with_weather: bool, with_cubic: bool = False):
     """A tiny fitted posterior on disk, in the shape `research/14_*` writes.
 
     Built here rather than read from `research/outputs/`, so the suite never
@@ -281,6 +281,11 @@ def _write_posterior(path, *, with_weather: bool):
         draws["beta_wind"] = (("chain", "draw"), np.array([[-0.015, -0.014]]))
         draws["beta_temp"] = (("chain", "draw"), np.array([[0.001, 0.001]]))
         coords["roof_level"] = ["dome", "closed"]
+    if with_cubic:
+        # The adopted Phase 3 curve, plus the extra-point arm fitted with it.
+        draws["delta_cubic"] = (("chain", "draw"), np.array([[-0.081, -0.079]]))
+        draws["delta_xp"] = (("chain", "draw"), np.array([[0.167, 0.160]]))
+        draws["lambda_xp"] = (("chain", "draw"), np.array([[1.263, 1.250]]))
 
     # ArviZ 1.x stores a fit as an xarray DataTree with one group per role, which
     # is what `az.from_netcdf` hands back and what the loader indexes into.
@@ -313,3 +318,207 @@ def test_loading_a_phase_two_posterior_without_weather_still_works(tmp_path):
     assert model.roof_effects == {}
     assert model.beta_wind is None
     assert model.make_probability("2024_GOOD", 45.0).shape == (2,)
+
+
+# --------------------------------------------------------------------------
+# the cubic distance term and the extra-point arm — docs/research/30 §2
+#
+# Both were fitted in Phase 3 and neither reached the simulator, so every kick
+# beyond ~50 yards was priced too generously and every extra point too harshly
+# (document 27 §14f). These tests pin the read side to the fitted arithmetic.
+# --------------------------------------------------------------------------
+
+DELTA_CUBIC = np.array([-0.081, -0.079])
+DELTA_XP = np.array([0.167, 0.160])
+LAMBDA_XP = np.array([1.263, 1.250])
+
+
+def build_full_model(**overrides) -> FieldGoalModel:
+    """A posterior carrying every fitted parameter, weather included."""
+    kwargs = {
+        "alpha": ALPHA,
+        "beta": BETA,
+        "gamma": GAMMA,
+        "delta_cubic": DELTA_CUBIC,
+        "delta_xp": DELTA_XP,
+        "lambda_xp": LAMBDA_XP,
+        "kicker_effects": {"2024_GOOD": np.array([0.5, 0.5])},
+        "distance_centre": 40.0,
+        **WEATHER_KWARGS,
+    }
+    kwargs.update(overrides)
+    return FieldGoalModel(**kwargs)
+
+
+def fitted_logit(
+    distance: float,
+    *,
+    kicker: np.ndarray | float = 0.0,
+    roof: np.ndarray | float = 0.0,
+    wind: float | None = None,
+    temp: float | None = None,
+    extra_point: bool = False,
+) -> np.ndarray:
+    """The linear predictor exactly as `research/14_fg_weather_model.py` builds it.
+
+    Written out here rather than imported, so the test is an independent
+    statement of what the fit means and not a shared helper that could drift
+    with the code under test.
+    """
+    centred = distance - 40.0
+    is_xp = 1.0 if extra_point else 0.0
+    eta = (
+        ALPHA
+        + BETA * centred
+        + GAMMA * centred**2 / 100.0
+        + DELTA_CUBIC * centred**3 / 1000.0
+        + roof
+        + DELTA_XP * is_xp
+        + kicker * (1.0 + (LAMBDA_XP - 1.0) * is_xp)
+    )
+    if wind is not None and temp is not None:
+        eta = eta + WEATHER_KWARGS["beta_wind"] * (wind - WEATHER_KWARGS["wind_centre"])
+        eta = eta + WEATHER_KWARGS["beta_temp"] * (temp - WEATHER_KWARGS["temp_centre"])
+    return eta
+
+
+def test_the_cubic_term_bends_the_long_range_curve():
+    """It is negative, so a 55-yarder is harder than the quadratic alone says."""
+    with_cubic = build_full_model().league_make_probability(55.0).mean()
+    without = build_full_model(delta_cubic=None).league_make_probability(55.0).mean()
+    assert with_cubic < without - 0.01
+
+
+def test_the_read_side_reproduces_the_fitted_field_goal_probability():
+    """Gate S-1 in miniature: the product must price what the model fitted."""
+    model = build_full_model()
+    expected = 1.0 / (
+        1.0
+        + np.exp(
+            -fitted_logit(
+                52.0,
+                kicker=np.array([0.5, 0.5]),
+                roof=WEATHER_KWARGS["roof_effects"]["dome"],
+            )
+        )
+    )
+    np.testing.assert_allclose(
+        model.make_probability("2024_GOOD", 52.0, weather=Weather("dome", None, None)),
+        expected,
+        atol=1e-12,
+    )
+
+
+def test_the_read_side_reproduces_the_fitted_extra_point_probability():
+    model = build_full_model()
+    expected = 1.0 / (
+        1.0
+        + np.exp(
+            -fitted_logit(
+                33.0,
+                kicker=np.array([0.5, 0.5]),
+                wind=12.0,
+                temp=41.0,
+                extra_point=True,
+            )
+        )
+    )
+    np.testing.assert_allclose(
+        model.make_probability(
+            "2024_GOOD", 33.0, weather=Weather("outdoors", 12.0, 41.0), extra_point=True
+        ),
+        expected,
+        atol=1e-12,
+    )
+
+
+def test_an_extra_point_is_easier_than_a_field_goal_from_the_same_distance():
+    """`delta_xp` is what the fit means by that, and it must reach the product."""
+    model = build_full_model()
+    as_xp = model.make_probability(None, 33.0, extra_point=True).mean()
+    as_fg = model.make_probability(None, 33.0).mean()
+    assert as_xp > as_fg
+
+
+def test_a_kickers_ability_transfers_to_extra_points_at_lambda_xp():
+    """A half-transfer must halve the kicker's log-odds edge, not keep it whole."""
+    model = build_full_model(lambda_xp=np.full(2, 0.5))
+    edge_on_a_field_goal = _logit_of(model.make_probability("2024_GOOD", 33.0)) - _logit_of(
+        model.make_probability(None, 33.0)
+    )
+    edge_on_an_extra_point = _logit_of(
+        model.make_probability("2024_GOOD", 33.0, extra_point=True)
+    ) - _logit_of(model.make_probability(None, 33.0, extra_point=True))
+    np.testing.assert_allclose(edge_on_an_extra_point, edge_on_a_field_goal * 0.5, rtol=1e-9)
+
+
+def _logit_of(p: np.ndarray) -> np.ndarray:
+    return np.log(p / (1.0 - p))
+
+
+def test_a_posterior_without_extra_point_terms_prices_an_extra_point_as_a_field_goal():
+    """Gate S-2: a Phase 2 trace has no `delta_xp`, and must keep pricing as it did."""
+    model = build_model()
+    np.testing.assert_allclose(
+        model.make_probability("2024_K", 33.0, extra_point=True),
+        model.make_probability("2024_K", 33.0),
+    )
+
+
+def test_a_posterior_without_a_cubic_term_prices_exactly_as_the_quadratic_curve():
+    """Gate S-2: the linear and quadratic arms must be unaffected by this change."""
+    model = build_model()
+    centred = 55.0 - 40.0
+    expected = 1.0 / (1.0 + np.exp(-(ALPHA + BETA * centred + GAMMA * centred**2 / 100.0)))
+    np.testing.assert_allclose(model.league_make_probability(55.0), expected, atol=1e-12)
+
+
+def test_the_league_curve_can_be_asked_for_an_extra_point():
+    model = build_full_model()
+    np.testing.assert_allclose(
+        model.league_make_probability(33.0, extra_point=True),
+        model.make_probability(None, 33.0, extra_point=True),
+    )
+
+
+def test_a_cubic_term_of_the_wrong_length_is_rejected():
+    with pytest.raises(ValueError, match="same number of posterior draws"):
+        build_full_model(delta_cubic=np.array([-0.081, -0.079, -0.077]))
+
+
+def test_loading_a_posterior_recovers_the_cubic_and_extra_point_terms(tmp_path):
+    path = _write_posterior(tmp_path / "trace.nc", with_weather=True, with_cubic=True)
+    model = FieldGoalModel.from_posterior(path, wind_centre=8.12, temp_centre=58.16)
+    np.testing.assert_allclose(model.delta_cubic, [-0.081, -0.079])
+    np.testing.assert_allclose(model.delta_xp, [0.167, 0.160])
+    np.testing.assert_allclose(model.lambda_xp, [1.263, 1.250])
+
+
+def test_a_loaded_posterior_actually_applies_its_cubic_term(tmp_path):
+    """Loading the numbers is not enough — they have to reach the probability."""
+    path = _write_posterior(tmp_path / "trace.nc", with_weather=True, with_cubic=True)
+    model = FieldGoalModel.from_posterior(path, wind_centre=8.12, temp_centre=58.16)
+    quadratic_only = FieldGoalModel(
+        alpha=model.alpha, beta=model.beta, gamma=model.gamma, distance_centre=40.0
+    )
+    assert (
+        model.league_make_probability(60.0).mean()
+        < quadratic_only.league_make_probability(60.0).mean() - 0.01
+    )
+
+
+def test_a_loaded_posterior_actually_applies_its_extra_point_terms(tmp_path):
+    path = _write_posterior(tmp_path / "trace.nc", with_weather=True, with_cubic=True)
+    model = FieldGoalModel.from_posterior(path, wind_centre=8.12, temp_centre=58.16)
+    assert (
+        model.make_probability("2024_GOOD", 33.0, extra_point=True).mean()
+        > model.make_probability("2024_GOOD", 33.0).mean()
+    )
+
+
+def test_a_phase_two_posterior_still_loads_without_the_new_parameters(tmp_path):
+    path = _write_posterior(tmp_path / "trace.nc", with_weather=False)
+    model = FieldGoalModel.from_posterior(path)
+    assert model.delta_cubic is None
+    assert model.delta_xp is None
+    assert model.lambda_xp is None

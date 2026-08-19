@@ -28,6 +28,12 @@ management) is explicitly **out of scope**.
 
 ## Status
 
+**Shipped: simulator v1.3** (2026-08-18) — the field-goal model refitted without
+blocked kicks, a read side that applies every parameter the model fits, and 302
+blocked kicks out of the ledger under the correctness gate added in the same
+release. Documents 15–31 cover Phases 5 to 8; the ship record is
+[31 — Simulator v1.3](docs/research/31-simulator-v13.md).
+
 **Phase 4 — the research program is closed.** Phase 1 classified the components;
 Phase 2 turned that classification into a working simulator under a single rule;
 Phase 3 tested every remaining candidate and closed the two defects a public
