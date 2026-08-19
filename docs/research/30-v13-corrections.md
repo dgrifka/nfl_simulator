@@ -413,3 +413,76 @@ nothing merges until the ship record is written and the suite is green.
 | Measurement seed, Parts A and B | 20260818 | documents 26 and 27's rounds |
 
 Results are written back into this document as §13.
+
+---
+
+## 13. Results
+
+*Scripts: `research/44_read_side_fix.py` (Part A) and
+`research/45_blocked_exclusion_c1.py` (Part B). The gates were committed at
+`b9e44c4` before either script existed. The ship record is document 31.*
+
+### The verdict, stated first
+
+> **Both corrections pass everything that could fail them, and both are
+> smaller in the median game and larger in the games they touch than the
+> headline numbers suggested. Part A's round trip now agrees to 7e-15 where it
+> once disagreed by 40 percentage points; Part B removes 302 rows, moves the
+> median blocked-kick game by 2.68 points, and moves the median kick game by
+> nothing at all.**
+
+| Gate | Statistic | Verdict |
+|---|---|---|
+| **S-1** — the round trip | max \|read − fitted\| **5.7e-15** (refit), **6.8e-15** (incumbent), against a 1e-9 tolerance | **Pass** |
+| **S-2** — backward compatibility | `dtw_games_v12.parquet` replayed on 2,761 games, max \|Δ\| **0.00e+00** | **Pass** |
+| **S-3** — the ledger must sum | rows unchanged at 10,731 / 12,818 / 6,505; identity residual 0.00e+00 | **Pass** |
+| **§7a** — identification | 192 + 110 rows, every one printed | **Pass** |
+| **§7b** — ledger-sum | −192 and −110 exactly; the four fumble-overlap plays keep their row; partition residual 4.4e-16 | **Pass** |
+| **§7c** — the dial gate | no `w` is assumed | **Absent by design** |
+| **§7d** — the materiality report | printed on both populations, below | **Reported, no pass rule** |
+| **§7e** — the reconciliation | median gap **0.019 points**, max 0.316 | **Reported** |
+
+### Part A — what the fix does
+
+| Population | n | Median \|ΔDTW\| | Median \|Δ margin\| | Mean signed | Flips |
+|---|---|---|---|---|---|
+| All games with a kick | 2,761 | **0.034 pp** | **0.047 pts** | +0.003 | **13** |
+| Games with a 50+ yard attempt | 1,393 | 0.171 pp | 0.145 pts | +0.005 | 12 |
+
+`p_make` falls a mean of 0.797 pp on field goals and rises 0.984 pp on every
+extra point. Per row the correction is **0.0447 EPA** on a field goal and
+**0.0100 EPA** on an extra point, against document 27 §14f's 0.0446 and 0.0100.
+
+### Part B — what the exclusion does, on v1.3's arithmetic
+
+| | 287 games with a blocked kick | All 2,761 games with a kick |
+|---|---|---|
+| Median \|ΔDTW\| | **0.983 pp** | **0.000 pp** |
+| Mean \|ΔDTW\| | 8.202 pp | 0.963 pp |
+| Max \|ΔDTW\| | 60.70 pp | 60.70 pp |
+| Median \|Δ deserved margin\| | **2.682 pts** | 0.018 pts |
+| Mean signed Δ deserved margin | −0.287 pts | −0.028 pts |
+| DTW side flips | **22** | 26 |
+
+Document 26 measured 1.167 pp, 2.688 pts and 22 flips on v1.2's arithmetic. The
+median DTW movement **fell 16%** under the refit and the corrected read side,
+while the deserved-margin movement and the flip count are essentially unchanged.
+
+### How the predictions did
+
+| Prediction | Outcome |
+|---|---|
+| §4: `p_make` falls beyond ~45 yd, rises on every extra point | **Right.** −0.80 pp mean on field goals, +0.98 pp on extra points |
+| §4: median game moves less than 0.1 points | **Right**, 0.047 |
+| §4: fewer than 25 side flips | **Right**, 13 |
+| §4: first-order size ≈0.078 points on the mean game | **Wrong, and wrong in its derivation.** It read document 27 §14f's signed totals, which are in the kicking team's perspective, as if they were in the ledger's home-team perspective. The two components' errors largely cancel across teams; the mean game moves +0.003 points. The per-row means are the convention-free comparison and they agree to four decimals |
+| §7e: ≈2.27 points of deserved margin on the median affected game | **Right and slightly low**, 2.68 |
+| §7b: the removed EPA lands in `core` | **Wrong for six of 192.** Those also carry a penalty flag, so their EPA lands in `penalty`. The invariant that holds is the five-way partition |
+
+### Defects this round found in its own instruments
+
+| Defect | Status |
+|---|---|
+| The reconciliation's sign was inverted, producing a 5.354-point median gap | **Closed by correction**, recorded in document 31 §5 |
+| Document 30 §7b's `core` assertion is false for six plays | **Closed by correction**, recorded in document 31 §5 |
+| Document 27 §14c's league-curve table was priced through the defect §14f found | **Closed by disclosure.** Document 31 §4; §14c is annotated as superseded rather than edited |

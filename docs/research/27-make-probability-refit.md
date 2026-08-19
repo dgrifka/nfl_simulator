@@ -705,6 +705,17 @@ The cubic passed both. §7f named this as a finding either way, so here it is:
 
 **League make rate, average kicker, outdoors, no weather reading:**
 
+> **Superseded 2026-08-18 by document 31 §4.** Every number in the table below
+> was priced through `FieldGoalModel.league_make_probability`, which is the read
+> side §14f found discarding `delta_cubic` — so both columns are a *quadratic*
+> reading of a *cubic* posterior. `research/46_simulator_v13.py` reproduces this
+> table exactly by stripping the cubic term, which is the check that the
+> discrepancy is the defect and not a different fit. The corrected curve is
+> steeper at range: **61.17% at 55 yards, not 67.39%**, against a corrected
+> incumbent of 58.76%. The **change** column, which is what this section was
+> arguing about, barely moves: +2.41 pp at 55 yards instead of +3.21 pp. The
+> table is kept as printed because the pre-registration is the record.
+
 | Distance | Incumbent | Refit | Change |
 |---|---|---|---|
 | 30 yd | 95.38% | 96.48% | **+1.09 pp** |
