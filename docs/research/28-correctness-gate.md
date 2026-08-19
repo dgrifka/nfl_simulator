@@ -448,4 +448,33 @@ strength of this document.
 
 ## 10. Decision
 
-*Awaiting the maintainer.*
+**Status: accepted. Decided 2026-08-18 by the maintainer**, on the recommendation of §8.
+
+**Amendment C-1 is adopted, unnarrowed.** §9's acceptance actions are enacted in
+the same commit as this line:
+
+- **Document 05 §2 gains §5's text as a third subsection**, *Gate C — correcting
+  a Gate A violation inside a shipped component*, verbatim. The section heading
+  changes from "the two gates" to "the gates".
+- **Document 05 §5's register gains a line** recording that a shipped component
+  can neutralize a play Gate A denies, and that Gate C — not the materiality
+  floor — governs the correction.
+- **Document 26's candidate becomes measurable under it.** Per §9, that
+  re-measurement runs on document 27's refit arithmetic, which the maintainer approved on
+  the same day, because document 26 §9 recorded that the candidate's numbers are
+  not stable under the refit. It is task 3 of Phase 8 and lands in document 30.
+
+What this settles, so it is not re-derived:
+
+- **Size never fails a correction.** A candidate that qualifies under clauses
+  1–4 and clears identification, ledger-sum and the dial gate is proposed for
+  adoption at whatever size it turns out to have. The materiality report is
+  mandatory, is printed on both populations, and is what the maintainer approves against.
+- **The materiality floor is untouched for additions.** A candidate that books a
+  row on any play carrying none today is an omission, and the floor governs the
+  whole of it — clause 1, unchanged.
+- **Gate A itself is unamended.** C-1 is a procedure for acting on Gate A's
+  answer, not a change to the branch-point question. That is the second
+  consecutive amendment round in which Gate A survived intact; document 21's A-2
+  was rejected outright.
+

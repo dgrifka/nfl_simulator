@@ -613,6 +613,14 @@ Results are written back into this document as §14.
 
 ## 14. Results
 
+> **Approved 2026-08-18 by the maintainer.** The refitted posterior is adopted as the
+> simulator's field-goal model and ships as part of v1.3, on §10's terms with
+> §14c's correction to `w` folded in. The read-side defect of §14f is approved
+> for fixing in the same ship — it is pre-registered in document 30 and measured
+> in isolation there, so v1.3's change decomposes. Document 31 is the ship
+> record.
+
+
 *Scripts: `research/42a_fg_refit_power.py` (thresholds), `research/42_fg_refit.py`
 (the fits and gates, §9a and §9b), `research/42b_fg_refit_impact.py` (§9c and
 §9d) and `research/42c_read_side_defect.py` (§14f, written after the round-trip
