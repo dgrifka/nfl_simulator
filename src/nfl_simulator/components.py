@@ -237,12 +237,33 @@ def fit_fumble_baseline(pbp: pl.DataFrame, min_class_size: int = 30) -> FumbleBa
 # --------------------------------------------------------------------------
 
 
-def fg_attempt_mask() -> pl.Expr:
-    return (pl.col("play_type") == "field_goal") & pl.col("kick_distance").is_not_null()
+def fg_attempt_mask(include_blocked: bool = False) -> pl.Expr:
+    """Field-goal attempts the ledger adjudicates.
+
+    A **blocked** kick is not one of them. Gate A asks whether the outcome was
+    resolved by a mechanism outside either team's control, and on a blocked kick
+    the ball never flew: what resolved it was the defending team's rush beating
+    the protection, which is a football act by a specific side (documents 26 §2
+    and 30 §7). v1.2 neutralized these 192 kicks and v1.3 does not.
+
+    ``include_blocked=True`` restores the v1.1/v1.2 population. It exists for the
+    same reason ``live_fumble_mask`` was kept when the fumble component widened:
+    a shipped version's artifacts have to stay reproducible.
+
+    **Narrow this mask, never the play frame.** Four blocked field goals also
+    carry a fumble row, and a frame-level filter would silently delete them —
+    document 26 §8 names the trap and a test pins it.
+    """
+    mask = (pl.col("play_type") == "field_goal") & pl.col("kick_distance").is_not_null()
+    if include_blocked:
+        return mask
+    # `fill_null(True)` keeps an attempt whose result was never charted, which is
+    # what the v1.2 population did with it. Only a charted block is removed.
+    return mask & (pl.col("field_goal_result") != "blocked").fill_null(True)
 
 
-def _fg_frame(pbp: pl.DataFrame) -> pl.DataFrame:
-    return pbp.filter(fg_attempt_mask()).with_columns(
+def _fg_frame(pbp: pl.DataFrame, include_blocked: bool = False) -> pl.DataFrame:
+    return pbp.filter(fg_attempt_mask(include_blocked)).with_columns(
         (pl.col("field_goal_result") == "made").cast(pl.Int8).alias("made"),
         # Cast first: a frame with no attempts leaves kick_distance as dtype
         # Null, which has no floor-division.
@@ -259,14 +280,16 @@ class FieldGoalBaseline:
     table: pl.DataFrame  # fg_bin, n, p_make, epa_made, epa_missed, swing_value
 
 
-def fit_fg_baseline(pbp: pl.DataFrame, min_bin_size: int = 30) -> FieldGoalBaseline:
+def fit_fg_baseline(
+    pbp: pl.DataFrame, min_bin_size: int = 30, *, include_blocked: bool = False
+) -> FieldGoalBaseline:
     """Empirical make rate and branch EPA means, per 5-yard distance bin.
 
-    Blocked kicks count as misses here. A block is partly a skill event (the
-    protection broke down) but it is rare enough — under 2% of attempts — that
-    separating it would add a class without changing any conclusion.
+    Fitted on the same population the ledger books, so the class table and the
+    events cannot drift apart — which is why the blocked-kick exclusion is one
+    change to ``fg_attempt_mask`` rather than two changes that have to agree.
     """
-    attempts = _fg_frame(pbp)
+    attempts = _fg_frame(pbp, include_blocked)
     table = (
         attempts.group_by("fg_bin")
         .agg(
@@ -333,8 +356,16 @@ def _fill_sparse_fg_bins(table: pl.DataFrame, min_bin_size: int) -> pl.DataFrame
 # --------------------------------------------------------------------------
 
 
-def xp_attempt_mask() -> pl.Expr:
-    return (pl.col("extra_point_attempt") == 1) & pl.col("extra_point_result").is_not_null()
+def xp_attempt_mask(include_blocked: bool = False) -> pl.Expr:
+    """Extra-point attempts the ledger adjudicates; see :func:`fg_attempt_mask`.
+
+    The 110 blocked extra points leave for the same reason the 192 blocked field
+    goals do, and ``include_blocked=True`` restores the v1.2 population.
+    """
+    mask = (pl.col("extra_point_attempt") == 1) & pl.col("extra_point_result").is_not_null()
+    if include_blocked:
+        return mask
+    return mask & (pl.col("extra_point_result") != "blocked")
 
 
 @dataclass
@@ -358,7 +389,9 @@ class ExtraPointBaseline:
         return self.epa_made - self.epa_missed
 
 
-def fit_xp_baseline(pbp: pl.DataFrame, min_attempts: int = 30) -> ExtraPointBaseline | None:
+def fit_xp_baseline(
+    pbp: pl.DataFrame, min_attempts: int = 30, *, include_blocked: bool = False
+) -> ExtraPointBaseline | None:
     """Empirical make rate and branch EPA means for extra points.
 
     Returns ``None`` when the frame holds too few attempts to estimate either
@@ -367,7 +400,7 @@ def fit_xp_baseline(pbp: pl.DataFrame, min_attempts: int = 30) -> ExtraPointBase
     """
     if "extra_point_attempt" not in pbp.columns:
         return None
-    attempts = pbp.filter(xp_attempt_mask()).with_columns(
+    attempts = pbp.filter(xp_attempt_mask(include_blocked)).with_columns(
         (pl.col("extra_point_result") == "good").cast(pl.Int8).alias("made")
     )
     made = attempts.filter(pl.col("made") == 1)["epa"]
@@ -392,11 +425,17 @@ def decompose_plays(
     pbp: pl.DataFrame,
     fumble_baseline: FumbleBaseline,
     fg_baseline: FieldGoalBaseline,
+    *,
+    include_blocked: bool = False,
 ) -> pl.DataFrame:
     """Attach one column per component to every play, in home perspective.
 
     The five component columns sum to ``epa_home`` on every row by construction,
     which :func:`decompose_games` asserts.
+
+    A blocked kick books no ``fg_luck`` from v1.3 on, so its EPA lands in
+    ``core`` instead — which is where luck the ledger declines to adjudicate is
+    supposed to go.
     """
     df = add_home_perspective_epa(pbp)
 
@@ -418,7 +457,7 @@ def decompose_plays(
     )
 
     # --- field goal swing -------------------------------------------------
-    attempts = _fg_frame(df).join(
+    attempts = _fg_frame(df, include_blocked).join(
         fg_baseline.table.select("fg_bin", "p_make", "swing_value"), on="fg_bin", how="left"
     )
     fg_swing = attempts.select(

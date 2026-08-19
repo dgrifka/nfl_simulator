@@ -719,3 +719,156 @@ def test_more_coin_draws_produce_a_narrower_dtw_interval():
         return float(np.percentile(dtw, 94.5) - np.percentile(dtw, 5.5))
 
     assert width(1600) < width(50)
+
+
+# --------------------------------------------------------------------------
+# the extra-point arm reaches the ledger — docs/research/30 §2
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def full_fg_model():
+    """A posterior carrying the cubic curve and the extra-point arm.
+
+    Constant across draws, so a ledger entry's `expected` is a single number a
+    test can state in closed form.
+    """
+    return FieldGoalModel(
+        alpha=np.full(50, 1.9),
+        beta=np.full(50, -0.115),
+        gamma=np.full(50, 0.13),
+        delta_cubic=np.full(50, -0.081),
+        delta_xp=np.full(50, 0.5),
+        lambda_xp=np.full(50, 0.5),
+        kicker_effects={"2024_K_GOOD": np.full(50, 0.6), "2024_K_BAD": np.full(50, -0.6)},
+    )
+
+
+def test_an_extra_point_is_priced_through_the_fitted_extra_point_arm(
+    baselines, full_fg_model, xp_baseline
+):
+    """`delta_xp` and `lambda_xp` were fitted and discarded until v1.3."""
+    result = run(
+        [play(1.0), xp_play(2.0, kicker="K_GOOD", made=True)],
+        baselines,
+        full_fg_model,
+        xp_baseline=xp_baseline,
+    )
+    entry = next(e for e in result.ledger if e.component == "extra_point")
+    expected = full_fg_model.make_probability("2024_K_GOOD", 33.0, extra_point=True).mean()
+    assert entry.expected == pytest.approx(float(expected))
+
+
+def test_an_extra_point_is_not_priced_as_a_field_goal_from_the_same_distance(
+    baselines, full_fg_model, xp_baseline
+):
+    """The bug this pins: the read side used to have no extra-point path at all."""
+    result = run(
+        [play(1.0), xp_play(2.0, kicker="K_GOOD", made=True)],
+        baselines,
+        full_fg_model,
+        xp_baseline=xp_baseline,
+    )
+    entry = next(e for e in result.ledger if e.component == "extra_point")
+    as_a_field_goal = float(full_fg_model.make_probability("2024_K_GOOD", 33.0).mean())
+    assert entry.expected != pytest.approx(as_a_field_goal, abs=1e-6)
+
+
+def test_a_field_goal_is_priced_through_the_cubic_curve(baselines, full_fg_model):
+    result = run(
+        [fg_play(1.0, kicker="K_GOOD", distance=52.0, made=False)], baselines, full_fg_model
+    )
+    entry = next(e for e in result.ledger if e.component == "field_goal")
+    expected = full_fg_model.make_probability("2024_K_GOOD", 52.0).mean()
+    assert entry.expected == pytest.approx(float(expected))
+
+
+# --------------------------------------------------------------------------
+# blocked kicks leave the ledger — docs/research/26 §2, 30 §7
+# --------------------------------------------------------------------------
+
+
+def blocked_fg_play(play_id: float, *, kicker: str, distance: float, **overrides) -> dict:
+    return play(
+        play_id,
+        posteam=HOME,
+        play_type="field_goal",
+        epa=-2.5,
+        field_goal_result="blocked",
+        kick_distance=distance,
+        kicker_player_id=kicker,
+        **overrides,
+    )
+
+
+def blocked_xp_play(play_id: float, *, kicker: str, team: str = HOME) -> dict:
+    return play(
+        play_id,
+        posteam=team,
+        play_type="extra_point",
+        epa=-0.95,
+        extra_point_attempt=1,
+        extra_point_result="blocked",
+        kick_distance=33.0,
+        kicker_player_id=kicker,
+    )
+
+
+def test_a_blocked_field_goal_books_no_ledger_row(baselines, fg_model):
+    """Gate A denies it: the ball never flew, so there is no branch to neutralize."""
+    result = run(
+        [play(1.0), blocked_fg_play(2.0, kicker="K_GOOD", distance=48.0)], baselines, fg_model
+    )
+    assert [e for e in result.ledger if e.component == "field_goal"] == []
+
+
+def test_a_blocked_extra_point_books_no_ledger_row(baselines, fg_model, xp_baseline):
+    result = run(
+        [play(1.0), blocked_xp_play(2.0, kicker="K_GOOD")],
+        baselines,
+        fg_model,
+        xp_baseline=xp_baseline,
+    )
+    assert [e for e in result.ledger if e.component == "extra_point"] == []
+
+
+def test_a_blocked_field_goal_that_was_also_fumbled_keeps_its_fumble_row(baselines, fg_model):
+    """Document 26 §8's trap: four real blocked field goals carry a fumble row.
+
+    Filtering the play frame would delete them and the ledger would stop summing.
+    The correction narrows the two kick masks, never the frame.
+    """
+
+    def blocked_and_fumbled(play_id: float, *, recoverer: str) -> dict:
+        return blocked_fg_play(
+            play_id,
+            kicker="K_GOOD",
+            distance=48.0,
+            fumble=1,
+            fumbled_1_team=HOME,
+            fumble_recovery_1_team=recoverer,
+        )
+
+    # A fumble class of its own, because in the real data these plays are the
+    # whole of `field_goal/live` (document 19 §3, n = 4).
+    corpus = frame(
+        [blocked_and_fumbled(1000.0 + i, recoverer=HOME if i < 20 else AWAY) for i in range(40)]
+    )
+    fumble_baseline = fit_fumble_baseline(corpus, min_class_size=10)
+    result = run(
+        [play(1.0), blocked_and_fumbled(2.0, recoverer=AWAY)],
+        (fumble_baseline, baselines[1]),
+        fg_model,
+    )
+    assert [e.component for e in result.ledger] == ["fumble"]
+
+
+def test_the_v12_kicking_population_is_still_reproducible(baselines, fg_model):
+    """v1.1's and v1.2's ledgers are artifacts of this repository; they must replay."""
+    result = run(
+        [play(1.0), blocked_fg_play(2.0, kicker="K_GOOD", distance=48.0)],
+        baselines,
+        fg_model,
+        include_blocked=True,
+    )
+    assert [e.component for e in result.ledger] == ["field_goal"]

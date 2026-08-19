@@ -181,6 +181,8 @@ def field_goal_events(
     fg_model: FieldGoalModel | None,
     n_draws: int,
     rng: np.random.Generator,
+    *,
+    include_blocked: bool = False,
 ) -> list[LuckEvent]:
     """Field goals, neutralized partially against the kicker's shrunk rate.
 
@@ -195,7 +197,7 @@ def field_goal_events(
 
     from nfl_simulator.components import _fg_frame
 
-    attempts = _fg_frame(plays.filter(fg_attempt_mask())).join(
+    attempts = _fg_frame(plays.filter(fg_attempt_mask(include_blocked)), include_blocked).join(
         baseline.table.select("fg_bin", "swing_value"), on="fg_bin", how="left"
     )
 
@@ -243,6 +245,8 @@ def extra_point_events(
     fg_model: FieldGoalModel | None,
     n_draws: int,
     rng: np.random.Generator,
+    *,
+    include_blocked: bool = False,
 ) -> list[LuckEvent]:
     """Extra points, neutralized partially against the kicker's shrunk rate.
 
@@ -253,22 +257,31 @@ def extra_point_events(
 
     `p` comes from the same hierarchical model the field goals use, which is
     what "folded into the kicker model" means: one `sigma_kicker`, one set of
-    per-kicker effects, and an extra-point intercept offset. The EPA swing still
+    per-kicker effects, and an extra-point intercept offset — and since v1.3 the
+    offset and the transfer coefficient are actually applied. The EPA swing still
     comes from the empirical branch means, because document 05 §4's layer 1
     draws probabilities, not EPA values.
     """
     if baseline is None or "extra_point_attempt" not in plays.columns:
         return []
 
-    attempts = plays.filter(xp_attempt_mask())
+    attempts = plays.filter(xp_attempt_mask(include_blocked))
     events = []
     for row in attempts.iter_rows(named=True):
         kicker_season = (
             f"{row['season']}_{row['kicker_player_id']}" if row.get("kicker_player_id") else None
         )
         if fg_model is not None and row.get("kick_distance") is not None:
+            # `extra_point=True` selects the fitted extra-point arm — the
+            # `delta_xp` offset and the `lambda_xp` transfer of kicker ability.
+            # Both were fitted in Phase 3 and neither reached the ledger until
+            # v1.3; document 27 §14f sized the omission at −0.98 pp on every
+            # extra point in the sample.
             draws = fg_model.make_probability(
-                kicker_season, float(row["kick_distance"]), weather=_weather_for(row)
+                kicker_season,
+                float(row["kick_distance"]),
+                weather=_weather_for(row),
+                extra_point=True,
             )
             expected = _resample(draws, n_draws, rng)
         else:
@@ -359,6 +372,7 @@ def simulate_game(
     n_posterior_draws: int = DEFAULT_POSTERIOR_DRAWS,
     n_coin_draws: int = DEFAULT_COIN_DRAWS,
     seed: int = DEFAULT_SEED,
+    include_blocked: bool = False,
 ) -> SimulationResult:
     """Deserve-to-win for one game.
 
@@ -372,9 +386,16 @@ def simulate_game(
     actual_margin = float(plays["result"][0])
     rng = np.random.default_rng(seed)
 
+    # The fumble builder always receives the unfiltered frame. Four blocked field
+    # goals also carry a fumble row, and dropping them here would leave the
+    # ledger short — document 26 §8's trap, pinned by a test.
     events = fumble_events(plays, fumble_baseline, n_posterior_draws, rng)
-    events += field_goal_events(plays, fg_baseline, fg_model, n_posterior_draws, rng)
-    events += extra_point_events(plays, xp_baseline, fg_model, n_posterior_draws, rng)
+    events += field_goal_events(
+        plays, fg_baseline, fg_model, n_posterior_draws, rng, include_blocked=include_blocked
+    )
+    events += extra_point_events(
+        plays, xp_baseline, fg_model, n_posterior_draws, rng, include_blocked=include_blocked
+    )
 
     ledger = Ledger(tuple(event.to_entry() for event in events))
     total_luck_epa = ledger.total_luck_epa()

@@ -14,6 +14,7 @@ from nfl_simulator.components import (
     decompose_plays,
     fit_fg_baseline,
     fit_fumble_baseline,
+    fit_xp_baseline,
     variance_shares,
 )
 
@@ -379,3 +380,102 @@ class TestDegenerateBaselines:
         heave = table.filter(pl.col("fg_bin") == 65)
         assert heave["borrowed_from"].item() == 60
         assert heave["p_make"].item() == pytest.approx(16 / 40)
+
+
+class TestBlockedKicks:
+    """Blocked kicks leave the kicking populations — docs/research/26 §2, 30 §7.
+
+    A blocked kick has no branch point: the ball never flew, and what resolved
+    the play was the defending team's rush beating the protection. Gate A denies
+    it, so v1.3 stops neutralizing it. The v1.2 population stays reachable
+    because v1.1's and v1.2's artifacts have to remain reproducible.
+    """
+
+    @staticmethod
+    def _fg_corpus() -> pl.DataFrame:
+        rows = [
+            make_play(
+                game_id=f"g{i}",
+                play_id=i,
+                play_type="field_goal",
+                kick_distance=42.0,
+                field_goal_result="made" if i < 10 else "blocked",
+                epa=1.0 if i < 10 else -3.0,
+                posteam="BBB",
+                defteam="AAA",
+            )
+            for i in range(20)
+        ]
+        # A miss, so the bin has both branches and a usable swing value.
+        rows.append(
+            make_play(
+                game_id="g20",
+                play_id=20,
+                play_type="field_goal",
+                kick_distance=42.0,
+                field_goal_result="missed",
+                epa=-3.0,
+                posteam="BBB",
+                defteam="AAA",
+            )
+        )
+        return pl.DataFrame(rows)
+
+    @staticmethod
+    def _xp_corpus() -> pl.DataFrame:
+        rows = []
+        for i in range(30):
+            result = "good" if i < 20 else ("failed" if i < 25 else "blocked")
+            rows.append(
+                make_play(
+                    game_id=f"x{i}",
+                    play_id=i,
+                    play_type="extra_point",
+                    extra_point_attempt=1,
+                    extra_point_result=result,
+                    kick_distance=33.0,
+                    epa=0.07 if result == "good" else -0.95,
+                    posteam="BBB",
+                    defteam="AAA",
+                )
+            )
+        return pl.DataFrame(rows)
+
+    def test_a_blocked_field_goal_is_not_a_field_goal_attempt(self):
+        table = fit_fg_baseline(self._fg_corpus(), min_bin_size=1).table
+        assert table["n"].to_list() == [11]
+        assert table["p_make"].to_list() == [pytest.approx(10 / 11)]
+
+    def test_the_v12_field_goal_population_is_still_reproducible(self):
+        table = fit_fg_baseline(self._fg_corpus(), min_bin_size=1, include_blocked=True).table
+        assert table["n"].to_list() == [21]
+        assert table["p_make"].to_list() == [pytest.approx(10 / 21)]
+
+    def test_a_blocked_extra_point_is_not_an_extra_point_attempt(self):
+        baseline = fit_xp_baseline(self._xp_corpus(), min_attempts=10)
+        assert baseline.n == 25
+        assert baseline.p_make == pytest.approx(0.8)
+
+    def test_the_v12_extra_point_population_is_still_reproducible(self):
+        baseline = fit_xp_baseline(self._xp_corpus(), min_attempts=10, include_blocked=True)
+        assert baseline.n == 30
+        assert baseline.p_make == pytest.approx(20 / 30)
+
+    def test_a_blocked_kicks_epa_lands_in_core(self):
+        """The luck the ledger stops booking has to go somewhere, and this is it."""
+        corpus = self._fg_corpus()
+        plays = decompose_plays(
+            corpus, fit_fumble_baseline(corpus), fit_fg_baseline(corpus, min_bin_size=1)
+        )
+        blocked = plays.filter(pl.col("field_goal_result") == "blocked")
+        assert blocked.height == 10
+        assert np.allclose(blocked["fg_luck"].to_numpy(), 0.0)
+        np.testing.assert_allclose(blocked["core"].to_numpy(), blocked["epa_home"].to_numpy())
+
+    def test_the_decomposition_still_partitions_epa_with_a_blocked_kick_in_it(self):
+        corpus = self._fg_corpus()
+        plays = decompose_plays(
+            corpus, fit_fumble_baseline(corpus), fit_fg_baseline(corpus, min_bin_size=1)
+        )
+        total = sum(plays[component].to_numpy() for component in COMPONENTS)
+        np.testing.assert_allclose(total, plays["epa_home"].to_numpy(), atol=1e-12)
