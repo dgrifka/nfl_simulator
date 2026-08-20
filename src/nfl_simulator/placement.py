@@ -139,27 +139,184 @@ class PlacementScore:
         return self.red_zone + self.late_down + self.other
 
 
-def score_team_game(epa_priced: np.ndarray, cell: np.ndarray) -> PlacementScore:
-    """Placement points for one team-game."""
+def score_team_game(
+    epa_priced: np.ndarray, cell: np.ndarray, mu: np.ndarray | None = None
+) -> PlacementScore:
+    """Placement points for one team-game.
+
+    ``mu`` is document 36 §2's expected profile — the EPA per play a team of this
+    quality produces in each cell, fitted league-wide and leave-one-team-out. Each
+    cell is centred on it *before* the count multiplies anything, and the baseline
+    is taken over the centred values:
+
+        cell_points = ( sum(epa in cell) - n_cell*mu_cell - n_cell*baseline ) * ppe
+        baseline    = sum over cells of ( sum(epa in cell) - n_cell*mu_cell ) / n_all
+
+    With ``mu`` left at ``None`` — or set to zeros — this is document 35's score,
+    character for character, because the baseline collapses to the team-game mean.
+    The redesign is a strict generalisation of what it replaces, which is what
+    lets it inherit that design's defences rather than re-argue them.
+    """
     n_all = len(epa_priced)
     if n_all == 0:
         return PlacementScore(0.0, 0.0, 0.0, 0, 0, 0)
 
-    mean_all = float(epa_priced.mean())
+    profile = np.zeros(3) if mu is None else np.asarray(mu, dtype=float)
+    masks = [cell == CELL_RED_ZONE, cell == CELL_LATE_DOWN, cell == CELL_OTHER]
+    counts = np.array([int(mask.sum()) for mask in masks], dtype=float)
+    sums = np.array([float(epa_priced[mask].sum()) for mask in masks])
+    centred = sums - counts * profile
+    baseline = centred.sum() / n_all
+    points = (centred - counts * baseline) * POINTS_PER_EPA
 
-    def cell_points(mask: np.ndarray) -> float:
-        return (float(epa_priced[mask].sum()) - int(mask.sum()) * mean_all) * POINTS_PER_EPA
-
-    is_rz = cell == CELL_RED_ZONE
-    is_ld = cell == CELL_LATE_DOWN
     return PlacementScore(
-        red_zone=cell_points(is_rz),
-        late_down=cell_points(is_ld),
-        other=cell_points(cell == CELL_OTHER),
+        red_zone=float(points[0]),
+        late_down=float(points[1]),
+        other=float(points[2]),
         n_all=n_all,
-        n_red_zone=int(is_rz.sum()),
-        n_late_down=int(is_ld.sum()),
+        n_red_zone=int(counts[0]),
+        n_late_down=int(counts[1]),
     )
+
+
+# --------------------------------------------------------------------------
+# the expected profile — document 36 §2
+# --------------------------------------------------------------------------
+#
+# The incumbent scored a cell against the team's own game-wide mean. That bar
+# carries the league's structural profile — late downs run 0.048 EPA per play
+# below the league — and the score is n_cell-scaled, so every team-game was
+# dragged in proportion to how often that team was in a situation its own quality
+# had put it in. Bad offences face far more third downs, and gate M-4 read the
+# resulting leak at +0.5435 against a bound of 0.1065.
+#
+# Document 36 §5 derives what can and cannot fix that. The leak is a product of
+# two factors — a structural cell offset and a quality-correlated cell count — and
+# replacing the realised count with the count quality predicts leaves the second
+# factor exactly as quality-correlated as it was. Only the offset can be zeroed,
+# and centring on the fitted profile zeroes it by construction.
+
+
+def leave_one_out_rate(total: np.ndarray, count: np.ndarray, group: np.ndarray) -> np.ndarray:
+    """Each row's group rate computed *without* that row — ``s0_loo`` in §2.
+
+    The game being scored never enters its own baseline. This is document 05 §5's
+    contamination defence applied at the input rather than bounded after the fact.
+    A group with a single row has no rest-of-group and returns ``nan`` rather than
+    a quietly wrong zero.
+    """
+    _, inverse = np.unique(np.asarray(group), return_inverse=True)
+    total_rest = np.bincount(inverse, weights=total)[inverse] - np.asarray(total, dtype=float)
+    count_rest = np.bincount(inverse, weights=count)[inverse] - np.asarray(count, dtype=float)
+    return np.divide(
+        total_rest, count_rest, out=np.full(len(total_rest), np.nan), where=count_rest > 0
+    )
+
+
+def loto_weighted_linear_fit(
+    y_mean: np.ndarray, weight: np.ndarray, x: np.ndarray, group: np.ndarray
+) -> np.ndarray:
+    """Weighted least squares of ``y_mean`` on ``[1, x]``, leave-one-**group**-out.
+
+    Returns a fitted value for every row, from coefficients estimated without any
+    row belonging to that row's group. Two things ride on the details, and both
+    are deliberate.
+
+    * **The weight is the count the score multiplies that cell by**, which makes
+      the fit's own orthogonality condition *be* the leak condition rather than
+      merely resemble it: the normal equations set ``sum(weight * residual * x)``
+      to zero, and ``weight * residual`` is exactly what the score sums.
+    * **The fold is the franchise, not the game.** A fit that included the team
+      would make gate M-4 read its own arithmetic — in-sample residuals are
+      orthogonal to ``x`` by the normal equations, so the gate would be reading a
+      guarantee rather than evidence. Out-of-fold residuals carry no such
+      guarantee, and document 36 §7 measures what is left.
+
+    Held out one group at a time by *subtracting* that group's contribution from
+    the pooled sufficient statistics, so the cost is one pass rather than one
+    refit per franchise.
+    """
+    y_mean = np.asarray(y_mean, dtype=float)
+    weight = np.asarray(weight, dtype=float)
+    x = np.asarray(x, dtype=float)
+    group = np.asarray(group)
+
+    pooled = np.array(
+        [
+            weight.sum(),
+            (weight * x).sum(),
+            (weight * x * x).sum(),
+            (weight * y_mean).sum(),
+            (weight * y_mean * x).sum(),
+        ]
+    )
+    fitted = np.empty(len(weight))
+    for held_out in np.unique(group):
+        rows = group == held_out
+        w, xi, yi = weight[rows], x[rows], y_mean[rows]
+        s_w, s_wx, s_wxx, s_y, s_yx = pooled - np.array(
+            [w.sum(), (w * xi).sum(), (w * xi * xi).sum(), (w * yi).sum(), (w * yi * xi).sum()]
+        )
+        slope = (s_w * s_yx - s_wx * s_y) / (s_w * s_wxx - s_wx * s_wx)
+        fitted[rows] = (s_y - slope * s_wx) / s_w + slope * xi
+    return fitted
+
+
+def expected_profile(
+    counts: np.ndarray, sums: np.ndarray, s0: np.ndarray, group: np.ndarray
+) -> np.ndarray:
+    """``mu[row, cell]`` — the EPA per play a team of this quality produces there.
+
+    Three two-parameter fits, one per cell, each weighted by that cell's play
+    count and each estimated leave-one-team-out. A team-game with no play in a
+    cell has a cell mean of 0/0; it enters at weight zero, so the undefined mean
+    never reaches the arithmetic.
+    """
+    counts = np.asarray(counts, dtype=float)
+    sums = np.asarray(sums, dtype=float)
+    mean_cell = np.divide(sums, counts, out=np.zeros_like(sums), where=counts > 0)
+    return np.column_stack(
+        [loto_weighted_linear_fit(mean_cell[:, c], counts[:, c], s0, group) for c in range(3)]
+    )
+
+
+def redesigned_cell_points(
+    n_all: np.ndarray, counts: np.ndarray, sums: np.ndarray, mu: np.ndarray
+) -> np.ndarray:
+    """``points[row, cell]`` — ``score_team_game``'s arithmetic over many team-games.
+
+    The score reads only each team-game's cell counts and cell EPA sums, so the
+    gates run on this form rather than looping over play arrays. It is checked
+    against the per-team-game function rather than assumed to agree with it.
+    """
+    counts = np.asarray(counts, dtype=float)
+    centred = np.where(counts > 0, np.asarray(sums, dtype=float) - counts * mu, 0.0)
+    baseline = centred.sum(axis=1) / np.asarray(n_all, dtype=float)
+    return (centred - counts * baseline[:, None]) * POINTS_PER_EPA
+
+
+def profile_shift(counts: np.ndarray, mu: np.ndarray, n_all: np.ndarray) -> np.ndarray:
+    """The per-team-game constant the redesign subtracts from the incumbent score.
+
+    Document 36 §6's carry-forward proof in one line: with the three cell sizes
+    held fixed — which every rung of the ladder does — the profile a draw
+    subtracts is the same whichever plays land where, so
+
+        redesigned_score = incumbent_score - C
+
+    for the realised score **and every null draw alike**. The PIT is a rank of the
+    realised score inside its own draws, ranks are invariant to a common shift, so
+    M-2's coverage, its rung adoption and its power table carry forward untouched.
+    """
+    counts = np.asarray(counts, dtype=float)
+    mu = np.asarray(mu, dtype=float)
+    leverage = counts[:, CELL_RED_ZONE] + counts[:, CELL_LATE_DOWN]
+    in_leverage = (
+        counts[:, CELL_RED_ZONE] * mu[:, CELL_RED_ZONE]
+        + counts[:, CELL_LATE_DOWN] * mu[:, CELL_LATE_DOWN]
+    )
+    weighted_mean_mu = (counts * mu).sum(axis=1) / np.asarray(n_all, dtype=float)
+    return (in_leverage - leverage * weighted_mean_mu) * POINTS_PER_EPA
 
 
 def game_differential(home: PlacementScore, away: PlacementScore) -> float:
