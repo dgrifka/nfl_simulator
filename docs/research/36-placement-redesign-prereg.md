@@ -41,6 +41,12 @@ Three decisions arrived settled and are recorded here rather than re-argued.
 > and §8 stops the round here rather than routing onward. Nothing gated has been
 > computed. The fork is stated in §8 and belongs to the maintainer.
 
+> **Resolved 2026-08-20: the maintainer chose (i)** — the full meter, M-4 demoted to
+> descriptive, rung 3 left recorded rather than fixed. The stop did its job; the
+> round then ran §8's order and reported after each gate. Results in §11. This
+> block is left as written so the record shows the stop happened *before* the
+> decision, not after it.
+
 ---
 
 ## 1. One-page story
@@ -615,11 +621,212 @@ the maintainer's to weigh.
 | `REFERENCE_R` | 0.12 | document 02, via document 08 |
 
 Results are written back into this document as §11 by
-`research/52_placement_redesign.py`, which does not yet exist and will not be
-written until §8's fork is decided.
+`research/52_placement_redesign.py`. *(Written 2026-08-20, after §8's fork was
+decided. Everything above this line was committed before it existed —
+`git log --follow` on this file is the check.)*
 
 ---
 
 ## 11. Results
 
-*Not yet run. §8 stops this round at the pre-registration.*
+*Run 2026-08-20 by `research/52_placement_redesign.py`, against the thresholds
+§§4–7 committed above and nothing else. the maintainer chose §8's fork option **(i)** on
+2026-08-20 — the full meter, M-4 demoted to descriptive, rung 3 left recorded
+rather than fixed. Gates ran in §8's order and each was reported before the next
+started.*
+
+**Verdict in one line: M-1 PASS, M-2 PASS, M-3 PASS, M-4 descriptive (reported
+with its ceiling), M-5 report, M-6 PASS.** Every gate with teeth passed. Two
+findings that were not predicted are in §11f and both are disclosed rather than
+smoothed: the redesign has driven the split-half correlation *negative*, and the
+same-season M-4 read sits above its own no-leak reference.
+
+### M-1 — the identities: **PASS**
+
+| Check | Result |
+|---|---|
+| Three cells sum to zero | worst residual **6.2 × 10⁻¹⁵** points, tolerance 1 × 10⁻⁹ |
+| Empty red-zone cell scores exactly 0.0 | 124 team-games (2.25%), all exactly zero |
+| Empty late-down cell | none exist |
+| Ledger reconciliation | the 5,541 re-priced plays are exactly the ledger rows surviving the S0–S2 filter; summed repricing gap **0.0** EPA |
+| Differential recomputes | worst gap **0.0** points over 2,761 games |
+| **Reduction** *(new)* | with every `mu_c` zero, **4.4 × 10⁻¹⁵** points worst gap against document 35 §11's scores, on all 5,522 team-games |
+| **No self-baselining** *(new)* | **0.0035** points worst move over 40 team-games, tolerance 0.05 |
+| Stream reproduces §2 | 343,543 plays / 2,761 games / 5,541 ledger-carrying plays / 5,522 team-games |
+
+The reduction check is the one that matters most for what follows. The redesign
+is a strict generalisation of document 35's score to fifteen decimal places, so
+every defence that design earned is inherited rather than re-argued.
+
+### M-2 — the band: **PASS**, and the carry-forward holds
+
+| Rung | Coverage | Document 35 §11 | Gap | Fresh-seed arm |
+|---|---|---|---|---|
+| 1 `raw` | 82.27% | 82.27% | 0.001 pp | 82.52% |
+| **4 `raw_var_matched`** *(adopted)* | **87.45%** | **87.45%** | **0.000 pp** | 87.70% |
+| 2 `down_stratified` | 85.30% | 85.37% | 0.075 pp | 85.04% |
+| 3 `down_stratified_var_matched` | 89.06% | 89.10% | 0.038 pp | 89.03% |
+
+All four reproduce within the committed 0.1 pp. **The two non-zero gaps are
+exactly where §6 predicted them** — only the down-stratified rungs move, and rung
+2 moves most, because those are the most discrete nulls and a 10⁻¹⁵ difference
+turns a band-edge tie into a strict inequality. §6 measured this on 40 team-games
+(3 PITs moved on rung 2); at full size it is 4 team-games of 5,522 on rung 2 and
+2 on rung 3.
+
+> **A departure from the literal wording of §6, flagged rather than taken
+> quietly.** The 0.1 pp assertion is only a test of the carry-forward against
+> document 35's own draw stream: an independent seed moves coverage by roughly
+> 0.25 pp of pure resampling noise, which is *wider than the tolerance*, so a
+> document-36 seed would have tested the resampler instead. The primary arm
+> therefore re-uses seed 20260819 and the document-36-seeded arm (20260820) is
+> reported beside it. Rung 4 sits inside [87.0%, 91.0%] under both. Recorded in
+> §11g.
+
+Rung 4 stays adopted at 87.45% of an 89% band — a pass by 0.45 pp against a
+binomial SD of 0.421 pp. Read as "not detectably miscalibrated at this
+tolerance", never as "exactly calibrated".
+
+### M-3 — the luck licence: **PASS**
+
+> Split-half r = **−0.0986** across 320 team-seasons and 5,522 team-games, 200
+> within-season splits, against a pre-registered threshold of r > 0.0636 for "not
+> luck". Per-split 5th–95th: −0.1689 to −0.0320.
+
+**The word "luck" is licensed for the shipped score**, at 0.916 power against
+r = 0.12 — better powered than the incumbent's gate was.
+
+It passes in the safe direction, and how far it passes is itself a finding. See
+§11f.
+
+### M-4 — skill preservation: **descriptive, no verdict**
+
+| Reading | Redesign | Incumbent | Reference / bound |
+|---|---|---|---|
+| vs **same-season** quality | **+0.2191** | +0.5435 | pipeline no-leak +0.1681 ± 0.0112 (**+4.55 SD**); bound 0.1857 |
+| vs **other-seasons** quality | **+0.0883** | **+0.2098** | bound 0.1073 — **inside** |
+| Late-down cell vs quality | +0.1956 | +0.5258 | — |
+| Red-zone cell vs quality | +0.0421 | +0.0670 | — |
+| Expected-mix arm *(reported, not shipped)* | +0.2296 | — | other-seasons +0.0983; max \|score\| 34.30 pts |
+| Secondary: score spread vs quality | −0.0811 | — | no rule |
+
+Both committed cross-checks reproduce exactly: the incumbent reads **+0.2098**
+against other-seasons quality, the number §7 committed, and **+0.5435** against
+same-season quality, the number document 35 §11 failed at. Document 35 §7's
+independent nulls (bounds 0.1077 and 0.1104) are reported so the change of
+reference is visible rather than silent.
+
+**On the clean covariate the correction worked**: +0.2098 down to +0.0883, inside
+the bound. **On the same-season covariate it did not go all the way**: +0.2191
+sits 4.6 SD above the no-leak pipeline reference. §9 already discloses why that
+reference is conservative — the simulation carries only the structural-offset
+channel and reproduced the incumbent's leak at +0.187 where the real data gave
++0.5435, a 2.9× understatement; the redesign's ratio is 1.3×. So the excess is
+consistent with the disclosed defect and far smaller than the incumbent's, and
+**M-4 has no power to tell those two stories apart.** That is the gate's ceiling,
+not a result. Per §8 there is no routing: M-4 is reported with its ceiling in the
+same breath, and it licenses nothing about leaks.
+
+### M-5 — magnitude: report, no threshold
+
+| Reading | Value |
+|---|---|
+| Score mean / SD | −0.0719 / **4.856** points |
+| Median \|score\| / q95 / max | 3.263 / 9.591 / 21.560 |
+| Differential SD / median \|·\| | 6.851 / 4.656 points over 2,761 games |
+| Team-games outside their own rung-4 band | **12.55%** *(the complement of 87.45%)* |
+| Profile shift `C` — mean / SD / range | −0.383 / **0.451** / −2.141 … +0.917 points |
+| … as a share of the score's own SD | **9.3%** |
+| corr(placement differential, DTW%) | **+0.3454** |
+| 195 clear-flip games: mean \|differential\| | **4.94** points, against **5.52** elsewhere |
+| Per-season mean / SD | −0.258 … +0.129 / 4.59 … 5.00 |
+
+**The meter is 91% realised placement and 9% fitted correction.** The redesign
+changed the level, not the magnitude.
+
+**Placement is not what makes a game flip.** Clear-flip games carry *less*
+placement differential than the rest (4.94 against 5.52 points), so the meter
+tells a different story beside DTW% rather than a louder version of the same one
+— which is what document 08 §6's two-meters contract wants.
+
+Example games, document 33 §6's:
+
+| Game | Differential | DTW% | Actual | Deserved |
+|---|---|---|---|---|
+| `2018_05_GB_DET` | +1.95 | 0.054 | +8 | −8.28 |
+| `2021_14_LV_KC` | +2.46 | 1.000 | +39 | +27.93 |
+| `2025_17_DET_MIN` | −9.61 | 0.548 | +13 | +0.70 |
+
+### M-6 — the rematch: **PASS**
+
+| Arm | Mean Δ log loss | 95% upper | vs margin +0.010 |
+|---|---|---|---|
+| Challenger = deserved − placement | −0.00354 | **+0.00813** | **passes** |
+| Deserved margin alone *(reported beside)* | −0.00357 | +0.00218 | — |
+
+531 pairs, 10 folds, seed 20260817. The two rows say how it passes: the point
+estimate barely moves (−0.00354 against −0.00357) while the interval more than
+triples in width. Subtracting the placement differential adds noise to the
+predictor without adding information, which is what "placement is exchangeable
+luck" predicts. Read with §7's committed rates — power to pass 0.965, false-pass
+**0.26**. A pass is evidence, not proof.
+
+### 11f. Two findings this round did not predict
+
+**1. The redesign has driven persistence negative.** M-3's r is −0.0986, which is
+2.4 null SDs *below* the null mean of −0.0002 (null SD 0.0408), not near it. A
+post-hoc diagnostic on the same splits — run after the verdict was fixed, moving
+no threshold — locates the mechanism:
+
+| Quantity | Split-half r |
+|---|---|
+| Redesigned score | **−0.0986** |
+| Incumbent score | +0.0447 *(document 35 §11: +0.0436)* |
+| Profile shift `C` alone | **+0.9921** |
+
+The correction is almost perfectly persistent, because it is a smooth function of
+season-level quality. Subtracting it from a near-noise quantity removes the
+persistent component and overshoots. Anti-persistence is not "luck" in the plain
+sense: it says a team that placed well in one half of its season placed slightly
+*badly* in the other. The gate is one-sided by pre-registration and this is on
+its passing side, so the verdict stands — but the product copy should not say
+"placement does not persist" when what was measured is "placement anti-persists".
+
+A candidate cause worth a round of its own: `s0_loo` is shared across a season's
+games, so a good game raises its team-mates' baselines and lowers their scores,
+which is a mechanical negative dependence the full-pipeline simulation could not
+carry (its per-game truth is constant within a season).
+
+**2. The same-season M-4 read exceeds its no-leak reference** by 4.6 SD, detailed
+above. It cannot be adjudicated by this gate at this construction.
+
+Neither finding changes a gate's verdict. Both are §11g rows.
+
+### 11g. Register additions from this round
+
+| Defect | Evidence | Status |
+|---|---|---|
+| **The redesigned score anti-persists**: split-half r = −0.0986, 2.4 null SDs below the null mean, where the incumbent read +0.0447 | §11f, and the post-hoc diagnostic on the same splits | **Open, disclosed.** M-3 is one-sided and this is its passing side, so the verdict stands. Copy must not read it as "does not persist". Candidate mechanism — `s0_loo` shared within a season — is not measured |
+| **The same-season M-4 read is +0.2191 against a no-leak reference of +0.1681 ± 0.0112** | §11d | **Open, disclosed.** Consistent with §9's disclosed conservatism of the pipeline reference (2.9× understatement on the incumbent, 1.3× here); M-4 has no power to separate that from a residual leak |
+| **M-2's primary arm re-uses document 35's seed** rather than §10's, because an independent stream's 0.25 pp of resampling noise exceeds the 0.1 pp tolerance | §11b | **Open by choice, flagged.** The document-36-seeded arm is reported beside it; rung 4 is inside tolerance under both |
+| M-6 passes with a 95% upper of +0.00813 against a margin of +0.010 | §11e | **Accepted, disclosed.** §7 committed the false-pass rate at 0.26 before the gate ran; a pass here is evidence, not proof |
+
+Every row of §9 stands unchanged. Rung 3's baseline inconsistency remains
+**recorded and unfixed** by the maintainer's 2026-08-20 decision: it is not the adopted
+null, its band is not displayed, and a correction would re-run M-2 under
+amendment C-1 for a rung nothing reads.
+
+### 11h. What ships, and the sentence it carries
+
+The full meter — red zone plus late downs — gated on M-1, M-2 (carried forward,
+rung 4 at 87.45%), M-3 (r = −0.0986 against 0.0636, power 0.916) and M-6 (95%
+upper +0.00813 against +0.010, power 0.965), with M-4 reported descriptively and
+its ceiling printed beside it.
+
+> *The placement meter is constructed so that a team's quality cannot appear in
+> it, and that construction is not independently testable.*
+
+What is irreducibly lost is the ability to distinguish "the count artifact" from
+"good offences genuinely place better". Document 08's persistence verdict is the
+only evidence that the second is not real, and M-3 keeps re-checking it — which,
+after §11f, it now does from the other side of zero.
