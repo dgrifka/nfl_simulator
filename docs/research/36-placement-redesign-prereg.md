@@ -830,3 +830,166 @@ What is irreducibly lost is the ability to distinguish "the count artifact" from
 "good offences genuinely place better". Document 08's persistence verdict is the
 only evidence that the second is not real, and M-3 keeps re-checking it — which,
 after §11f, it now does from the other side of zero.
+
+---
+
+## 12. Pre-ship diagnostics
+
+*Run 2026-08-20 by `research/53_placement_diagnostics.py`, after §11's verdicts
+were fixed. **Nothing here moves a threshold, re-runs a gate or changes a
+verdict.** These are the two questions the maintainer queued off §11f and §11g, and what
+they change is the sentence the product carries, not whether the meter ships.
+Amendment C-1 is not engaged: no Gate A violation is being corrected, and no
+pre-registered statistic is recomputed against a different bar.*
+
+### 12a. Where the −0.0986 comes from
+
+Five arms, all scored by the production path — the same three weighted
+leave-one-franchise-out fits, the same centring, the same points scale. The only
+thing that differs is which plays the quality baseline `s0` is allowed to see.
+All five are read on **the same 200 splits**, and each gets its own permutation
+null rather than borrowing the shipped score's.
+
+| Arm | `s0` for a game in half A | Cross-half channel | Split-half r | z vs own null | Paired move vs shipped |
+|---|---|---|---|---|---|
+| `shipped` | the season minus this game | present | **−0.0986** | **−2.56** | — |
+| `within_half` | half A minus this game | **cut** | **−0.0275** | **−0.78** | **+0.0711 ± 0.0043** |
+| `cross_half` | all of half B | amplified, sign flipped | **−0.1377** | **−3.54** | −0.0391 ± 0.0108 |
+| `shared_half` | a fixed half-sized subsample, minus this game | present, at `within_half`'s noise | −0.0653 | −1.73 | +0.0332 ± 0.0008 |
+| `other_seasons` | this franchise's other seasons | absent entirely | **+0.0192** | **+0.40** | +0.1177 ± 0.0014 |
+
+Every arm's null is the same to three decimals — +0.0034 ± 0.0398 over 500
+replicates — so the column of z-scores is a fair comparison rather than five
+different yardsticks.
+
+**The reading is one-directional and it is not close.** Cut the shared baseline
+and the correlation goes to −0.0275, three quarters of one null SD below zero —
+indistinguishable from no persistence. Replace the baseline with one that shares
+nothing with the season at all and it goes to **+0.0192, above zero**. Amplify
+the sharing by pointing each half's baseline at the *other* half and it falls to
+−0.1377. The anti-persistence tracks the channel in both directions.
+
+`shared_half` is the control that keeps this honest, because `within_half` halves
+the baseline's sample as a side effect and a smaller sample attenuates the fitted
+slope on its own. It splits the +0.0711 in two: **+0.0332 is the baseline's
+sample size** and **+0.0378 is the cross-half channel at matched baseline noise**.
+The split is not exactly additive — a noisier baseline attenuates the correction
+*and* the channel together — but both halves of it are properties of how the
+quality baseline is estimated, and neither is a property of placement.
+
+### 12b. The pipeline null, rebuilt — and a correction to §11f
+
+§11f named the wrong limitation. It said the full-pipeline simulation could not
+carry the shared-baseline channel because its per-game truth is constant within a
+season. **That is measured here and it is not the binding limitation.** The
+binding one is a level down: in that simulation every cell responds to team
+quality with slope 1, and the profile shift the redesign subtracts,
+
+    C = [n_rz·mu_rz + n_ld·mu_ld − (n_rz + n_ld)·Σ n_c·mu_c / n_all] · points
+
+has, with `mu_c = a_c + b_c·s0`, its entire loading on the baseline in
+
+    B = [n_rz·b_rz + n_ld·b_ld − (n_rz + n_ld)·Σ n_c·b_c / n_all] · points
+
+which is **identically zero when every b_c is equal**. A simulation with equal
+cell slopes subtracts nothing that depends on the baseline, so no amount of
+within-season truth variation can make the channel appear in it. On the real
+stream the fitted slopes are nowhere near equal — **red zone 0.764, late down
+1.201, elsewhere 0.606** — and B has mean **+4.66** points per EPA per play with
+SD 0.86. `B·s0` has SD 0.428 points against the profile shift's own 0.451, so the
+shift is essentially all baseline loading.
+
+Both knobs were turned, so which one binds is measured rather than asserted.
+Placement is **pure noise by construction in all four arms**; 300 replicates each.
+
+| Arm | Within-season truth SD | Cell slopes | Split-half r |
+|---|---|---|---|
+| `reference` *(= §7's `none` arm)* | 0 | equal | **+0.0059 ± 0.0413** |
+| `within_only` | 0.0695 | equal | **+0.0039 ± 0.0407** |
+| `slopes_only` | 0 | real | **−0.0455 ± 0.0409** |
+| `slopes_and_within` | 0.0695 | real | **−0.0412 ± 0.0391** |
+
+The reference arm reproduces §7's +0.0038 ± 0.0390. **Within-season truth
+variation moves the null by −0.0020, which is nothing** — and not for want of
+size: the real within-season game-to-game truth spread measured here is 0.0695
+EPA per play (observed within-season SD 0.1870, of which 86.2% of the variance is
+play-sampling), against a between-season spread of 0.0888. It is a real and large
+source of variation and it does not touch the statistic. **Differential cell
+slopes alone drive the null to −0.0455.**
+
+So in a world where placement is *pure noise by construction*, this construction
+reads −0.041 ± 0.039 rather than zero, and the shipped −0.0986 sits **1.47 SD**
+from it — against 2.63 SD from §7's equal-slope null. Ordinary sampling variation
+around an artifact, not a finding.
+
+The two lines are independent — one re-estimates the baseline on real data, the
+other simulates a null with no placement signal in it — and they agree.
+**The anti-persistence is an artifact of the construction, not a property of
+placement.** The residual gap between the simulated −0.041 and the observed
+−0.0986 is not adjudicated here, and the same conservatism §9 discloses for the
+pipeline reference applies: the simulation carries one quality driver where the
+real cells carry more structure, so it is expected to understate.
+
+### 12c. Seed robustness
+
+**M-3, five split seeds.** The threshold is r > 0.0636 for "not luck".
+
+| Seed | 20260820 *(§11's primary)* | 20260821 | 20260822 | 20260823 | 20260824 |
+|---|---|---|---|---|---|
+| Split-half r | −0.0986 | −0.0989 | −0.0959 | −0.1003 | −0.0952 |
+
+Mean **−0.0978**, total spread **0.0051** — two orders below the distance to the
+threshold. All five pass. The gate does not depend on its seed.
+
+**M-2, the adopted rung on five band seeds.** Tolerance [87.0%, 91.0%].
+
+| Stream | Coverage |
+|---|---|
+| document 35's *(the carry-forward arm)* | 87.45% |
+| document 36's *(the fresh-seed arm)* | 87.70% |
+| three further seeds | 87.52% / 87.65% / 87.54% |
+
+Mean **87.57%**, SD **0.102 pp**, range 87.45–87.70%. **All five inside the
+tolerance**, so rung 4's adoption is seed-independent and the fresh-seed arm is
+promoted from reported-beside to a read of its own: **the adopted rung covers
+87.57% ± 0.10 pp of an 89% band.**
+
+This also puts a number on §11g's third row. The resampler's SD across seeds is
+0.102 pp and its observed range across five is 0.25 pp, so the 0.1 pp
+carry-forward tolerance is **about one resampler SD** — a fresh seed would miss it
+roughly a third of the time on a construction that is exactly right. Re-using
+document 35's stream for the primary arm was the correct call, and it is now
+measured rather than estimated.
+
+### 12d. Register, after the diagnostics
+
+| §11g row | Status now |
+|---|---|
+| **The redesigned score anti-persists** | **Resolved — artifact.** §12a: cutting the shared baseline moves r to −0.0275 (0.78 null SD) and an external baseline to +0.0192; §12b: a null with no placement signal reads −0.041 ± 0.039 under this construction. Copy must not read −0.0986 as negative persistence; the licensed reading is **no** persistence |
+| **§11f's named mechanism** | **Corrected.** Within-season truth variation is not the binding limitation of the pipeline reference (it moves the null by −0.0020); **equal cell slopes** are, and B is identically zero under them. §11f is left as written; this row is the correction |
+| **M-2's primary arm re-uses document 35's seed** | **Resolved — the choice is vindicated and quantified.** §12c: five seeds give 87.57% ± 0.102 pp, all inside tolerance; the 0.1 pp tolerance is one resampler SD, so a fresh primary arm would have tested the resampler |
+| **The same-season M-4 read is +0.2191** | **Open, unchanged.** Not addressed here; the avenue that would separate reference conservatism from a residual leak stays parked |
+| M-6 passes with a 95% upper of +0.00813 | **Accepted, disclosed, unchanged** |
+
+### 12e. The product sentence, set
+
+§11h's shipped sentence stands unchanged. The persistence sentence, which §11f
+left explicitly unset pending this round, is:
+
+> **Placement does not persist.** A team that placed well in one half of its
+> season is no more likely to place well in the other.
+
+The long form, for anywhere the number itself is shown:
+
+> The measured half-to-half correlation is **−0.0986**, against a bar of +0.0636
+> above which placement would have been called a team property. It sits below
+> zero because the meter's quality correction is estimated from the rest of the
+> same season: with placement simulated as pure noise this construction reads
+> −0.041 ± 0.039, and re-estimating quality without the other half moves the real
+> reading to −0.028, which is indistinguishable from zero. It is read as *no*
+> persistence, never as negative persistence.
+
+What is still not claimed: that placement's true persistence is exactly zero. The
+diagnostics locate the negative sign in the construction and put every
+channel-free arm within one null SD of zero; they do not measure a small genuine
+tendency out of existence, and M-3 keeps re-checking it every round.
