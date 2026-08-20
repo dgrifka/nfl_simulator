@@ -122,9 +122,37 @@ MATERIAL_COVERAGE_SHIFT = 0.02
 # rows, so this is the expensive one.
 N_M6_REPLICATES = 400
 
-# The three rungs of document 34 §4's constraint ladder, least constrained
-# first. The adoption rule in the pre-registration reads this order.
+# The three rungs of document 34 §4's constraint ladder, in the order `main`
+# simulates them. This tuple is frozen: the random stream is consumed rung by
+# rung and then handed on to M-3, M-4 and M-6, so appending to it would move
+# thresholds that document 35 has already committed.
 LADDER = ("raw", "down_stratified", "down_stratified_var_matched")
+
+# The fourth rung, approved by the maintainer on 2026-08-19 from the pre-registration's
+# parked list and added by amendment before any calibration statistic ran. It
+# fills the gap document 35 §5 derived: rung 1 re-randomizes the late-down cell
+# but ignores its second moment (1.99x the league), and rungs 2 and 3 respect
+# that moment only by freezing the cell entirely. Rung 4 is the only one that
+# does both — a fully unconstrained shuffle whose leverage-assigned plays are
+# stretched to their own cell's second moment.
+#
+# It is simulated by `ladder_addendum` on a *separate* generator and merged into
+# the existing results file, so every number already committed in document 35
+# reproduces bit-for-bit rather than merely being expected to.
+LADDER_ADDENDUM = ("raw_var_matched",)
+
+# The constraint order document 35 §6's adoption rule reads — least constrained
+# first, where "constrained" means how much of the realized configuration the
+# null holds fixed. Rung 4 holds no play's cell membership fixed and only
+# corrects second moments, so it spends less exchangeability licence than the
+# down-stratified rungs, which freeze every third- and fourth-down play's
+# contribution outright.
+ADOPTION_LADDER = (
+    "raw",
+    "raw_var_matched",
+    "down_stratified",
+    "down_stratified_var_matched",
+)
 
 
 # --------------------------------------------------------------------------
@@ -408,6 +436,68 @@ def _null_draws_down_stratified(
     return (totals - k * mean_all) * POINTS_PER_EPA
 
 
+def _null_draws_raw_var_matched(
+    epa: np.ndarray,
+    cell: np.ndarray,
+    down: np.ndarray,
+    n_draws: int,
+    rng: np.random.Generator,
+    cell_scales: tuple[float, float, float],
+) -> np.ndarray:
+    """Rung 4 — rung 1's unconstrained shuffle, with every cell's second moment restored.
+
+    Approved by the maintainer 2026-08-19 from document 35 §5's parked list. The gap it
+    fills is stated there: the score is the sum over the leverage *union*, so a
+    rung that holds each play's down fixed freezes the whole late-down half of
+    the meter (rungs 2 and 3), while the rung that does re-randomize it (rung 1)
+    shuffles league-variance plays into a cell whose real play-level EPA variance
+    is 1.99x the league. Neither is a null for the meter as a whole *and* honest
+    about its second moment.
+
+    Here every play is exchangeable across all three cells, exactly as in rung 1.
+    A draw assigns ``n_rz`` plays to the red-zone cell, ``n_ld`` to the late-down
+    cell and the rest to the third, and each play's deviation from the team-game
+    mean is then stretched by *its assigned cell's* ``sqrt(var_cell / var_all)``.
+    The third cell is stretched too — it shrinks, at 0.82 — because the score's
+    baseline is the team-game mean over all plays, so a correction applied to the
+    leverage cells alone lands in the baseline as well and inflates the null.
+
+    Writing ``dev`` for deviations from the team-game mean and ``A``/``B`` for
+    the drawn red-zone and late-down deviation sums, the third cell's sum is
+    ``-(A + B)`` because deviations sum to zero, and the score reduces to
+
+        ppe * [ (1 - k/n) * (s_rz * A + s_ld * B) + (k/n) * s_other * (A + B) ]
+
+    which is exactly rung 1 when all three scales are 1 — the rung is a strict
+    generalization of the one it sits above in the ladder, not an inflation of it.
+
+    An earlier draft of this rung stretched only the two leverage cells and left
+    the baseline alone. Measured before anything was committed, it was 1.27x too
+    wide under an exchangeable truth (96.0% coverage of an 89% band) and still
+    1.12x too wide under the real structure it was built for (94.5%), because the
+    correction landed in ``mean_all`` as well as in the leverage sum. Recorded in
+    document 35's defect register rather than silently replaced.
+
+    As in rung 3 the stretch touches the *null* only; the realized score is never
+    rescaled, so M-1's identities are unaffected.
+    """
+    n = len(epa)
+    n_rz = int(np.count_nonzero(cell == CELL_RED_ZONE))
+    n_ld = int(np.count_nonzero(cell == CELL_LATE_DOWN))
+    k = n_rz + n_ld
+    if k == 0 or k == n:
+        return np.zeros(n_draws)
+
+    s_rz, s_ld, s_other = cell_scales
+    dev = epa - epa.mean()
+    order = np.argsort(rng.random((n_draws, n)), axis=1)
+    a = dev[order[:, :n_rz]].sum(axis=1) if n_rz else np.zeros(n_draws)
+    b = dev[order[:, n_rz:k]].sum(axis=1) if n_ld else np.zeros(n_draws)
+    share = k / n
+    totals = (1.0 - share) * (s_rz * a + s_ld * b) + share * s_other * (a + b)
+    return totals * POINTS_PER_EPA
+
+
 def null_draws(
     rung: str,
     epa: np.ndarray,
@@ -416,6 +506,7 @@ def null_draws(
     n_draws: int,
     rng: np.random.Generator,
     rz_scale: float,
+    cell_scales: tuple[float, float, float] = (1.0, 1.0, 1.0),
 ) -> np.ndarray:
     if rung == "raw":
         return _null_draws_raw(epa, cell, down, n_draws, rng)
@@ -423,6 +514,8 @@ def null_draws(
         return _null_draws_down_stratified(epa, cell, down, n_draws, rng, rz_scale=1.0)
     if rung == "down_stratified_var_matched":
         return _null_draws_down_stratified(epa, cell, down, n_draws, rng, rz_scale=rz_scale)
+    if rung == "raw_var_matched":
+        return _null_draws_raw_var_matched(epa, cell, down, n_draws, rng, cell_scales)
     raise ValueError(f"unknown rung {rung!r}")
 
 
@@ -591,6 +684,46 @@ def synthetic_team_game(
     return epa, cell, down
 
 
+def calibration_scenarios(design: dict, pool_mean: float) -> list[dict]:
+    """The six simulated truths M-2's power is read at.
+
+    `var_*` are multiples of the league play-level variance; `mean_*` are
+    additive shifts in EPA per play. The "real" scenario carries the second- and
+    first-moment structure actually measured from the play stream, which is the
+    miscalibration the ladder has to survive in production — the truth the power
+    column has to be read at.
+
+    Extracted from `main` when rung 4 was added by amendment, so the addendum
+    run and the original run cannot drift apart in what they simulate.
+    """
+    return [
+        {"name": "exchangeable", "var_rz": 1.0, "var_ld": 1.0, "mean_rz": 0.0, "mean_ld": 0.0},
+        {"name": "rz_var_1.10", "var_rz": 1.10, "var_ld": 1.0, "mean_rz": 0.0, "mean_ld": 0.0},
+        {
+            "name": "rz_var_real",
+            "var_rz": design["variance_ratio_rz_over_all"],
+            "var_ld": 1.0,
+            "mean_rz": 0.0,
+            "mean_ld": 0.0,
+        },
+        {"name": "rz_var_1.30", "var_rz": 1.30, "var_ld": 1.0, "mean_rz": 0.0, "mean_ld": 0.0},
+        {
+            "name": "ld_var_real",
+            "var_rz": 1.0,
+            "var_ld": design["variance_ratio_ld_over_all"],
+            "mean_rz": 0.0,
+            "mean_ld": 0.0,
+        },
+        {
+            "name": "real_structure",
+            "var_rz": design["variance_ratio_rz_over_all"],
+            "var_ld": design["variance_ratio_ld_over_all"],
+            "mean_rz": design["red_zone"]["mean"] - pool_mean,
+            "mean_ld": design["late_down_outside_rz"]["mean"] - pool_mean,
+        },
+    ]
+
+
 def pit_distribution_under(
     scenario: dict,
     rung: str,
@@ -601,6 +734,7 @@ def pit_distribution_under(
     n_games: int,
     n_draws: int,
     rng: np.random.Generator,
+    cell_scales: tuple[float, float, float] = (1.0, 1.0, 1.0),
 ) -> np.ndarray:
     """PIT values for `n_games` synthetic team-games under one calibration truth.
 
@@ -629,7 +763,7 @@ def pit_distribution_under(
             scenario["mean_ld"],
             rng,
         )
-        draws = null_draws(rung, epa, cell, down, n_draws, rng, rz_scale)
+        draws = null_draws(rung, epa, cell, down, n_draws, rng, rz_scale, cell_scales)
         pit[kept] = pit_of(realized_score(epa, cell), draws)
         kept += 1
     return pit[:kept]
@@ -646,6 +780,7 @@ def direct_ks_null(
     replicates: int,
     rng: np.random.Generator,
     label: str = "",
+    cell_scales: tuple[float, float, float] = (1.0, 1.0, 1.0),
 ) -> tuple[np.ndarray, np.ndarray]:
     """KS statistics from `replicates` *fresh* synthetic seasons of `n_units` games.
 
@@ -674,6 +809,7 @@ def direct_ks_null(
             n_games=n_units,
             n_draws=N_BAND_DRAWS_POWER,
             rng=rng,
+            cell_scales=cell_scales,
         )
         ks[replicate] = ks_statistic(pit)
         pooled.append(pit)
@@ -1041,37 +1177,7 @@ def main() -> None:
     down_pool = plays["down"].to_numpy().astype(np.int64)
     pool_mean = float(epa_pool.mean())
 
-    # The scenario grid. `var_*` are multiples of the league play-level variance;
-    # `mean_*` are additive shifts in EPA per play. The "real" scenario carries
-    # the second- and first-moment structure actually measured above, which is
-    # the miscalibration the ladder has to survive in production — the truth the
-    # power column has to be read at.
-    scenarios = [
-        {"name": "exchangeable", "var_rz": 1.0, "var_ld": 1.0, "mean_rz": 0.0, "mean_ld": 0.0},
-        {"name": "rz_var_1.10", "var_rz": 1.10, "var_ld": 1.0, "mean_rz": 0.0, "mean_ld": 0.0},
-        {
-            "name": "rz_var_real",
-            "var_rz": design["variance_ratio_rz_over_all"],
-            "var_ld": 1.0,
-            "mean_rz": 0.0,
-            "mean_ld": 0.0,
-        },
-        {"name": "rz_var_1.30", "var_rz": 1.30, "var_ld": 1.0, "mean_rz": 0.0, "mean_ld": 0.0},
-        {
-            "name": "ld_var_real",
-            "var_rz": 1.0,
-            "var_ld": design["variance_ratio_ld_over_all"],
-            "mean_rz": 0.0,
-            "mean_ld": 0.0,
-        },
-        {
-            "name": "real_structure",
-            "var_rz": design["variance_ratio_rz_over_all"],
-            "var_ld": design["variance_ratio_ld_over_all"],
-            "mean_rz": design["red_zone"]["mean"] - pool_mean,
-            "mean_ld": design["late_down_outside_rz"]["mean"] - pool_mean,
-        },
-    ]
+    scenarios = calibration_scenarios(design, pool_mean)
 
     n_units = int(cells["n_team_games"])
     m2 = {"rz_stretch": rz_scale, "n_units": n_units, "scenarios": {}}
@@ -1307,11 +1413,191 @@ def main() -> None:
             "min_games": MIN_GAMES,
             "reference_r": REFERENCE_R,
             "ladder": list(LADDER),
+            "adoption_ladder": list(ADOPTION_LADDER),
         },
     }
     out = paths.RESEARCH_OUTPUT_DIR / "49_placement_power.json"
     out.write_text(json.dumps(payload, indent=2))
     print(f"\nwrote {out}")
+
+
+def ladder_addendum() -> None:
+    """Simulate the amendment rung's M-2 power and merge it into a finished run.
+
+    Rung 4 was approved after `main` had already run and after document 35 had
+    committed M-3's threshold and M-4's bound. `main` consumes one generator rung
+    by rung and then hands it to M-3, M-4 and M-6, so simulating the new rung
+    inside that loop would shift every downstream draw and move two thresholds
+    that are already on the record — a goalpost move by accident rather than by
+    intent.
+
+    So the new rung runs here instead, on its own generator seeded
+    ``RANDOM_SEED + 4``, and only *adds* keys to the results file. Nothing already
+    written is recomputed, which makes the integrity claim checkable rather than
+    promised: the file's existing numbers are the same bytes they were before.
+
+        uv run python research/49_placement_power.py --ladder-addendum
+    """
+    out = paths.RESEARCH_OUTPUT_DIR / "49_placement_power.json"
+    payload = json.loads(out.read_text())
+    before = (
+        json.dumps(payload["m3_persistence"], sort_keys=True),
+        json.dumps(payload["m4_skill_preservation"], sort_keys=True),
+    )
+
+    rng = np.random.default_rng(RANDOM_SEED + 4)
+    plays, _ = load_luck_priced_plays()
+    arrays = team_game_arrays(plays)
+    meta = arrays["meta"]
+    scores = placement_scores(meta)
+    design = design_parameters(plays, arrays, scores)
+
+    rz_scale = float(np.sqrt(design["variance_ratio_rz_over_all"]))
+    ld_scale = float(np.sqrt(design["variance_ratio_ld_over_all"]))
+    other_scale = float(np.sqrt(design["other"]["var"] / design["all_plays"]["var"]))
+    cell_scales = (rz_scale, ld_scale, other_scale)
+    print(
+        f"  rung 4 stretch factors: red zone {rz_scale:.4f}   late down {ld_scale:.4f}   "
+        f"everything else {other_scale:.4f}"
+    )
+
+    denominators = np.column_stack(
+        [meta["n_all"].to_numpy(), meta["n_rz"].to_numpy(), meta["n_ld"].to_numpy()]
+    ).astype(int)
+    epa_pool = plays["epa_priced"].to_numpy().astype(float)
+    down_pool = plays["down"].to_numpy().astype(np.int64)
+    scenarios = calibration_scenarios(design, float(epa_pool.mean()))
+
+    m2 = payload["m2_calibration"]
+    n_units = int(m2["n_units"])
+    ks_nulls: dict[str, np.ndarray] = {}
+    pit_pools: dict[str, np.ndarray] = {}
+
+    for rung in LADDER_ADDENDUM:
+        print(f"\n  --- rung: {rung} ---")
+        for scenario in scenarios:
+            replicates = (
+                N_KS_REPLICATES_EXCHANGEABLE
+                if scenario["name"] == "exchangeable"
+                else N_KS_REPLICATES_GRADED
+            )
+            ks, pit = direct_ks_null(
+                scenario,
+                rung,
+                denominators,
+                down_pool,
+                epa_pool,
+                rz_scale,
+                n_units,
+                replicates,
+                rng,
+                label=f"{rung}/{scenario['name']}",
+                cell_scales=cell_scales,
+            )
+            resampled = resampled_ks_null(pit, n_units, N_KS_RESAMPLES, rng)
+            ks_nulls[scenario["name"]] = resampled
+            pit_pools[scenario["name"]] = pit
+            print(
+                f"    {scenario['name']:<16} KS direct {ks.mean():.4f} / resampled "
+                f"{resampled.mean():.4f}  95th {np.quantile(resampled, 0.95):.4f}  |  "
+                f"89% coverage {coverage_of(pit) * 100:5.2f}%  PIT mean {pit.mean():.4f}"
+            )
+            m2["scenarios"].setdefault(rung, {})[scenario["name"]] = {
+                "leagues_simulated": int(replicates),
+                "pool_over_sample": float(len(pit) / n_units),
+                "ks_direct_mean": float(ks.mean()),
+                "ks_resampled_mean": float(resampled.mean()),
+                "ks_p95": float(np.quantile(resampled, 0.95)),
+                "coverage_89": coverage_of(pit),
+                "pit_mean": float(pit.mean()),
+                "pit_sd": float(pit.std(ddof=1)),
+            }
+            if scenario["name"] == "exchangeable":
+                m2["two_nulls_agreement"][rung] = {
+                    "direct_mean": float(ks.mean()),
+                    "direct_sd": float(ks.std(ddof=1)),
+                    "resampled_mean": float(resampled.mean()),
+                    "resampled_sd": float(resampled.std(ddof=1)),
+                    "ratio": float(resampled.mean() / ks.mean()),
+                }
+
+        tolerance = {
+            "p50": float(np.quantile(ks_nulls["exchangeable"], 0.50)),
+            "p95": float(np.quantile(ks_nulls["exchangeable"], 0.95)),
+            "p99": float(np.quantile(ks_nulls["exchangeable"], 0.99)),
+            "coverage_under_truth": coverage_of(pit_pools["exchangeable"]),
+        }
+        m2["tolerances"][rung] = tolerance
+        print(
+            f"\n    KS null under its own exchangeable truth: median {tolerance['p50']:.4f}  "
+            f"95th {tolerance['p95']:.4f}  99th {tolerance['p99']:.4f}  "
+            f"coverage under truth {tolerance['coverage_under_truth'] * 100:.2f}%"
+        )
+
+        rows = [
+            {
+                "scenario": scenario["name"],
+                "coverage": coverage_of(pit_pools[scenario["name"]]),
+                "ks_mean": float(ks_nulls[scenario["name"]].mean()),
+            }
+            for scenario in scenarios
+        ]
+        material = [r for r in rows if abs(r["coverage"] - 0.89) > MATERIAL_COVERAGE_SHIFT]
+        m2["materiality"][rung] = {
+            "rows": rows,
+            "ks_at_materiality": min((r["ks_mean"] for r in material), default=None),
+        }
+        m2["power_at_own_tolerance"][rung] = {
+            "tolerance": tolerance["p95"],
+            "flag_rate": {
+                scenario["name"]: float(np.mean(ks_nulls[scenario["name"]] > tolerance["p95"]))
+                for scenario in scenarios
+            },
+        }
+
+        # The gate with teeth is coverage, not KS — closed-form binomial, same
+        # tolerance the other three rungs were graded against.
+        low, high = 0.89 - MATERIAL_COVERAGE_SHIFT, 0.89 + MATERIAL_COVERAGE_SHIFT
+        gate = m2.setdefault(
+            "coverage_gate",
+            {
+                "tolerance_low": low,
+                "tolerance_high": high,
+                "binomial_sd_pp": float(np.sqrt(0.89 * 0.11 / n_units) * 100),
+                "table": {},
+            },
+        )
+        gate["table"][rung] = {}
+        print("\n    coverage gate, the one with teeth:")
+        for scenario in scenarios:
+            coverage = coverage_of(pit_pools[scenario["name"]])
+            flagged = coverage_power(coverage, n_units, low, high)
+            gate["table"][rung][scenario["name"]] = {
+                "true_coverage": coverage,
+                "flag_rate": flagged,
+            }
+            verdict = "FLAGGED" if not low <= coverage <= high else "passes"
+            print(
+                f"      {scenario['name']:<16} true coverage {coverage * 100:6.2f}%  "
+                f"P(flag a single league) {flagged:.3f}   [{verdict} at truth]"
+            )
+
+    m2["rung4_cell_stretch"] = {
+        "red_zone": rz_scale,
+        "late_down": ld_scale,
+        "other": other_scale,
+    }
+    payload["constants"]["ladder_addendum"] = list(LADDER_ADDENDUM)
+    payload["constants"]["adoption_ladder"] = list(ADOPTION_LADDER)
+    payload["constants"]["addendum_seed"] = RANDOM_SEED + 4
+
+    after = (
+        json.dumps(payload["m3_persistence"], sort_keys=True),
+        json.dumps(payload["m4_skill_preservation"], sort_keys=True),
+    )
+    assert before == after, "the addendum must not touch a committed threshold"
+    out.write_text(json.dumps(payload, indent=2))
+    print(f"\n  M-3 and M-4 blocks verified untouched.\nupdated {out}")
 
 
 def coverage_addendum() -> None:
@@ -1362,5 +1648,7 @@ def coverage_addendum() -> None:
 if __name__ == "__main__":
     if "--coverage-only" in sys.argv:
         coverage_addendum()
+    elif "--ladder-addendum" in sys.argv:
+        ladder_addendum()
     else:
         main()

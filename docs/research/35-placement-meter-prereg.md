@@ -6,6 +6,16 @@ computed**. Power calculation: `research/49_placement_power.py`, results in
 `research/50_placement_meter.py` exists, so goalpost integrity is checkable by
 commit archaeology.*
 
+***Amended 2026-08-19, before any calibration statistic ran.** the maintainer approved
+the fourth ladder rung that this document had parked, and it is added here —
+with its own power measured first, exactly as the other three were — rather than
+adopted mid-round. The amendment only *adds*: it runs on a separate generator
+(`--ladder-addendum`, seed `RANDOM_SEED + 4`) and every number committed in the
+first version of this document reproduces byte-for-byte, which the addendum
+asserts rather than assumes. **The existing rungs keep their numbers**; the new
+one is rung 4 throughout, and only the *adoption order* changes. Nothing gated
+has been computed. Changes are confined to §1, §5, §6, §9 and §10.*
+
 *This document executes step 1 of document 34 §10. Document 34 is the settled
 design — its §2 decision table is the maintainer's and is not reopened here. What this
 document adds is the part document 34 explicitly deferred: **thresholds, each
@@ -28,13 +38,13 @@ decided:
 | Gate | Question | Verdict on its own power |
 |---|---|---|
 | **M-1** identities | Do the books balance? | Identity check, no power needed |
-| **M-2** calibration | Is the band honest? | **Teeth.** Coverage gate, false-alarm 0.000, power 0.92–0.98 at the miscalibrations that matter |
+| **M-2** calibration | Is the band honest? | **Teeth.** Coverage gate, false-alarm 0.000, power 0.92–0.98 at the miscalibrations that matter. Four rungs after the amendment |
 | **M-3** luck licence | Is the shipped score still luck? | **Teeth.** Power **0.900** at r = 0.12 |
 | **M-4** skill preservation | Does the baseline leak skill? | **Teeth as a flag, with a stated ceiling.** Power 0.48 at a leak of 0.11, 0.80 only at ≈ 0.16 |
 | **M-5** magnitude | How often does it matter? | Report, no threshold (Gate C convention) |
 | **M-6** rematch | Does subtracting it lose information? | **Teeth.** Power to pass **0.973** — but the gate false-passes 32% of the time when the subtraction is pure harm |
 
-### Three things this round learned before it fitted anything
+### Four things this round learned before it fitted anything
 
 1. **The exchangeability problem is not where document 34 expected it.** Doc 34
    §4 built the constraint ladder around the red zone, whose play-level EPA
@@ -45,7 +55,17 @@ decided:
 2. **Rungs 2 and 3 freeze the late-down cell entirely**, by arithmetic, not by
    measurement. §5 derives it. Their band answers a strictly narrower question
    than rung 1's, and that fact is on the record before any of them is run.
-3. **The meter is big.** The home-minus-away placement differential has a
+3. **The rung that fills that gap is the only unconstrained one that is
+   calibrated.** Rung 4, the amendment, shuffles every play across all three
+   cells — so it is a null for the whole meter, unlike rungs 2 and 3 — and
+   restores each cell's second moment inside the draw. Under the real structure
+   it covers **90.57%** of team-games against the 89% its copy claims, inside
+   the tolerance; rung 1, the other unconstrained rung, covers 86.00% and is
+   flagged 98% of the time. The price is symmetric: rung 4 is 3.7 pp too *wide*
+   under an exchangeable truth, so it is right only when the structure it
+   corrects for is really there (§6).
+
+4. **The meter is big.** The home-minus-away placement differential has a
    standard deviation of **6.86 points** across 2,761 games. For scale, the
    whole v1.3 luck ledger moves the margin by a median of 2.37 points
    (document 33). The meter is not a rounding correction to the adjudication;
@@ -155,8 +175,9 @@ No threshold is negotiable here; these are arithmetic.
 
 ## 5. The constraint ladder, and an arithmetic fact about two of its rungs
 
-Document 34 §4's three rungs, least constrained first. The adoption rule in §6
-reads this order.
+Document 34 §4's three rungs, plus the fourth added by amendment. The rungs keep
+the numbers they were committed with; what the amendment changes is the order
+§6's adoption rule walks them in.
 
 1. **`raw`** — every play exchangeable across all three cells.
 2. **`down_stratified`** — plays keep their down; only field-position
@@ -165,6 +186,43 @@ reads this order.
    red-zone cell have their deviations from that down-stratum's mean stretched
    by `sqrt(var_rz / var_all)` = **1.0892**. The stretch touches the null only;
    the realized score is never rescaled, so M-1's identities are unaffected.
+4. **`raw_var_matched`** *(the amendment, approved by the maintainer 2026-08-19)* — every
+   play exchangeable across all three cells exactly as in rung 1, and then each
+   play's deviation from the team-game mean stretched by **its assigned cell's**
+   `sqrt(var_cell / var_all)`: **1.0892** red zone, **1.4116** late down,
+   **0.8237** everything else. Like rung 3's, the stretch touches the null only.
+
+**Adoption order, which is constraint order:** `raw`, `raw_var_matched`,
+`down_stratified`, `down_stratified_var_matched` — rung 1, rung 4, rung 2,
+rung 3. "Constrained" means how much of the realized configuration the null
+holds fixed, not how much arithmetic it does. Rung 4 holds no play's cell
+membership fixed and only corrects second moments, so it spends less
+exchangeability licence than the down-stratified rungs, which freeze every
+third- and fourth-down play's contribution outright (the derivation below).
+
+### Why rung 4 stretches the third cell too, and what happened when it did not
+
+The score's baseline is the team-game mean over **all** plays, so a correction
+applied to the leverage cells alone lands in the baseline as well and inflates
+the null. Writing `dev` for deviations from the team-game mean and `A`, `B` for
+one draw's red-zone and late-down deviation sums — the third cell's sum is
+`−(A + B)`, because deviations sum to zero — rung 4's score is
+
+```
+points_per_epa * [ (1 − k/n) * (s_rz * A + s_ld * B) + (k/n) * s_other * (A + B) ]
+```
+
+which collapses to rung 1's `points_per_epa * (A + B)` when every `s` is 1. Rung
+4 is therefore a strict generalization of the rung above it, not an inflation of
+it, and that identity is checked in code.
+
+**A first draft of rung 4 stretched only the two leverage cells.** Measured
+before anything was committed, its band was 1.27× too wide under an exchangeable
+truth — 95.96% coverage of an 89% band — and still 1.12× too wide under the real
+structure it was built for, at 94.46%: the correction had landed in `mean_all`
+as well as in the leverage sum. The consistent construction above is what §6's
+power table reports. The discarded draft is recorded in §9 rather than quietly
+replaced.
 
 ### The fact, derived before any rung was run
 
@@ -188,10 +246,17 @@ the realized late-down contribution rather than near zero. This is derived, not
 measured, and it is recorded here so that a narrow band from rung 2 is read as a
 property of the rung and not as a finding about a game.
 
+**This is the gap rung 4 was approved to fill.** It re-randomizes the late-down
+cell — so it is a null for the whole meter — while pricing that cell at its own
+second moment, which is the one thing rung 1 gets wrong and the down-stratified
+rungs buy only by freezing the cell.
+
 It also has a benign consequence, which the power table in §6 confirms: because
 the late-down cell is the one whose second moment is badly non-exchangeable
 (1.99× the league), freezing it is accidentally the right thing to do. Rung 1,
-which shuffles it, is the rung the real structure breaks.
+which shuffles it and prices it at league variance, is the rung the real
+structure breaks — and rung 4 is the rung that shuffles it and prices it
+correctly.
 
 ---
 
@@ -253,14 +318,14 @@ offsets, and is the truth production actually faces.
 True coverage each rung's band achieves, and the probability a single league is
 flagged:
 
-| Truth | rung 1 `raw` | rung 2 `down_stratified` | rung 3 `…var_matched` |
-|---|---|---|---|
-| exchangeable *(false alarm)* | 88.73% → **0.000** | 88.98% → **0.000** | 91.90% → **0.993** |
-| red-zone variance 1.10× | 88.69% → 0.000 | 88.10% → 0.006 | 91.10% → 0.602 |
-| red-zone variance real (1.19×) | 88.36% → 0.001 | 87.24% → 0.296 | 90.40% → 0.064 |
-| red-zone variance 1.30× | 88.35% → 0.001 | 86.43% → 0.892 | 89.68% → 0.001 |
-| late-down variance real (1.99×) | 86.36% → **0.917** | 88.88% → 0.000 | 90.57% → 0.139 |
-| **real structure** | 86.00% → **0.984** | 87.35% → 0.219 | 89.40% → 0.000 |
+| Truth | rung 1 `raw` | rung 2 `down_stratified` | rung 3 `…var_matched` | rung 4 `raw_var_matched` |
+|---|---|---|---|---|
+| exchangeable *(false alarm)* | 88.73% → **0.000** | 88.98% → **0.000** | 91.90% → **0.993** | 92.68% → **1.000** |
+| red-zone variance 1.10× | 88.69% → 0.000 | 88.10% → 0.006 | 91.10% → 0.602 | 92.62% → 1.000 |
+| red-zone variance real (1.19×) | 88.36% → 0.001 | 87.24% → 0.296 | 90.40% → 0.064 | 92.72% → 1.000 |
+| red-zone variance 1.30× | 88.35% → 0.001 | 86.43% → 0.892 | 89.68% → 0.001 | 92.48% → 1.000 |
+| late-down variance real (1.99×) | 86.36% → **0.917** | 88.88% → 0.000 | 90.57% → 0.139 | 90.90% → 0.394 |
+| **real structure** | 86.00% → **0.984** | 87.35% → 0.219 | 89.40% → 0.000 | **90.57% → 0.139** |
 
 Read it as three separate findings, all available before any real data is
 touched:
@@ -275,22 +340,46 @@ touched:
 - **Rung 2 sits between them and is the least fragile**, passing under four of
   the six truths, but §5 is the price: it is not a null for the late-down half
   of the meter at all.
+- **Rung 4 is the mirror image of rung 1, and it is the only unconstrained rung
+  that survives the real structure.** It is 3.7 pp too wide whenever the cells
+  do *not* carry their real second moments — flagged with certainty under all
+  four of those truths — and lands at **90.57%** under the structure the play
+  stream actually has. That pass is by 0.43 pp against a binomial SD of
+  0.421 pp, so it is a **one-standard-deviation pass**: if production faces the
+  real structure exactly, rung 4 is still flagged about 14% of the time. Read a
+  rung-4 pass as "not detectably miscalibrated at this tolerance", never as
+  "exactly calibrated".
+
+Rung 4's column is what makes the ladder answer document 34 §4's question in
+both directions. Before the amendment, every rung that priced the late-down
+cell correctly did so by refusing to randomize it, so a calibrated band and a
+band for the whole meter were mutually exclusive. They no longer are — and
+which one the real data supports is what M-2 decides.
 
 The simulated-league count is 40 for the exchangeable truth and 12 for each
 graded truth, pooled to 221,000 and 66,000 PIT values respectively; the KS
 resampler that reads those pools agrees with direct per-league simulation to
-within 3% on all three rungs.
+within 3% on all four rungs. Rung 4's column was simulated by the amendment on
+its own generator at the same depths, so its numbers are drawn from the same
+design as the other three and none of theirs moved.
 
 ### The adoption rule, committed
 
-> Run all three rungs and report all three. **Adopt the least-constrained rung
-> whose coverage falls in [87.0%, 91.0%] on the real data**, ladder order as
-> listed in §5. If no rung qualifies, **the meter ships without a band** and the
-> score is displayed alone with the reason stated in copy.
+> Run all **four** rungs and report all four. **Adopt the least-constrained rung
+> whose coverage falls in [87.0%, 91.0%] on the real data**, in the adoption
+> order §5 commits: `raw`, `raw_var_matched`, `down_stratified`,
+> `down_stratified_var_matched`. If no rung qualifies, **the meter ships without
+> a band** and the score is displayed alone with the reason stated in copy.
 
 Least-constrained rather than best-fitting, because every constraint narrows the
 null toward the observed configuration and spends exchangeability licence; the
 simplest calibrated null is the one that has claimed the least.
+
+The amendment does not loosen this rule; it inserts one more candidate ahead of
+the two rungs §5 shows are not a null for the whole meter. If both rung 4 and a
+down-stratified rung qualify, rung 4 wins on ladder order, which is the outcome
+the ordering was chosen to produce — a calibrated null for the whole meter beats
+a calibrated null for half of it.
 
 **One outcome forks to the maintainer rather than routing automatically.** If a rung
 fails the coverage tolerance but its KS distance is within its own
@@ -448,7 +537,10 @@ mechanism document 30 established.
 |---|---|---|
 | **The real M-3 split-half correlation was printed during a smoke test of the power machinery, before this document was committed.** A single value at a preliminary seed, `r = 0.050`, below the 0.0671 threshold committed in §7 | timing check of `split_half_r` while sizing the run | **Open, disclosed.** The threshold *rule* — the permutation null's 95th percentile — is fixed by process law inherited from document 05 §7 and is computed by simulation, so knowing the value could not move it, and the committed threshold is one the peeked value fails. Recording it is the only defence available; hiding it would be worse. Document 08 §7 is the precedent |
 | The late-down cell prices an EPA gap where document 08's S2 verdict was on success rate | document 34 §3 | **Open, by design.** M-3 exists to re-license the shipped score itself |
-| Rungs 2 and 3 are not a null for the late-down half of the meter | §5, derived | **Open, disclosed before any run.** Reported wherever a rung-2 or rung-3 band is displayed |
+| Rungs 2 and 3 are not a null for the late-down half of the meter | §5, derived | **Open, disclosed before any run.** Reported wherever a rung-2 or rung-3 band is displayed. Rung 4, added by amendment, is the rung that does not have this property |
+| **Rung 4's first construction stretched only the leverage cells and left the baseline alone.** Its band was 1.27× too wide under an exchangeable truth (95.96% coverage) and 1.12× too wide under the real structure (94.46%) | §5, measured before commit | **Closed by construction, disclosed.** The shipped rung stretches all three cells and reduces to rung 1 exactly when the factors are 1. Neither the discarded draft nor the shipped one had touched a gated statistic |
+| Rung 4 passes under its own design truth by one binomial SD (90.57% against a 91.0% edge, SD 0.421 pp) | §6 | **Open, disclosed.** A rung-4 pass licenses "not detectably miscalibrated", not "calibrated". The same asymmetry the M-4 ceiling carries |
+| Rung 4 is flagged with certainty under every truth whose cells lack their real second moments | §6 | **Accepted, by design.** It is a correction that is only correct when the thing it corrects for is present — rung 3's property, in the opposite direction and larger |
 | The dominant exchangeability failure is the late-down cell (1.99×), which no rung's variance matching addresses | §3, §6 | **Open.** Document 34's ladder was built around the red zone. Rungs 2 and 3 handle it only by freezing it |
 | M-2's power ran at 300 permutation draws; production uses 2,000 | §6 vs §10 | **Accepted.** Finer discreteness moves the mid-P PIT closer to uniform, so the measured false-alarm rate is an over-statement and the tolerance is conservative |
 | M-2's coverage power uses a binomial closed form, treating the two team-games in one game as independent | §6 | **Accepted.** They are built from disjoint play sets. The simulated leagues carry the exact dependence and their coverage agrees |
@@ -457,6 +549,7 @@ mechanism document 30 established.
 | M-6's power arm adds a synthetic contamination layer on top of the real placement luck already inside both margins | `m6_power` | **Accepted, and the reason the false-pass arm is reported beside it.** Neither arm alone is a verdict |
 | Cell counts are endogenous to quality | document 34 §11 | **Open.** M-4's secondary read watches it |
 | Special-teams placement is outside the meter | document 34 §5 | **Accepted, by design.** Stated wherever the meter is documented |
+| The amendment adds a rung after the first version of this document was committed | header, §5, §6 | **Accepted, and made checkable.** The addendum runs on its own generator and only adds keys; it asserts that the M-3 and M-4 blocks are unchanged, and the full results file was diffed key-by-key against its pre-amendment copy. Every previously committed number reproduces byte-for-byte |
 | No gated statistic in this document has run against data | whole document | **By construction.** That is what a pre-registration is |
 
 ---
@@ -475,11 +568,13 @@ mechanism document 30 established.
 | `N_SPLITS` / `MIN_GAMES` | 200 / 8 | document 08's, inherited |
 | M-3 null / power replicates | 500 / 500 | `research/49_placement_power.py` |
 | `REFERENCE_R` | 0.12 | document 02, via document 08 |
-| Ladder | raw, down_stratified, down_stratified_var_matched | §5 |
+| Ladder, adoption order | raw, raw_var_matched, down_stratified, down_stratified_var_matched | §5 |
 | Rung-3 stretch factor | 1.0892 | §5, = sqrt(1.1863) |
+| Rung-4 stretch factors | 1.0892 red zone, 1.4116 late down, 0.8237 everything else | §5, = sqrt of each cell's variance ratio |
+| Amendment generator seed | 20260823 (`RANDOM_SEED + 4`) | `research/49_placement_power.py --ladder-addendum` |
 | **M-1 identity tolerance** | **1 × 10⁻⁹ points** | §4 |
 | **M-2 coverage tolerance** | **[87.0%, 91.0%]** | §6 |
-| M-2 KS reference nulls (secondary) | 0.0198 / 0.0305 / 0.0399 | §6, per rung |
+| M-2 KS reference nulls (secondary) | 0.0198 / 0.0305 / 0.0399 / 0.0414 | §6, per rung, rungs 1–4 |
 | **M-3 threshold** | **r > 0.0671** | §7 |
 | **M-4 bound** | **\|r\| ≤ 0.1065** | §7 |
 | **M-6 margin** | **+0.010 log loss, 95% upper** | §7, document 06's |
