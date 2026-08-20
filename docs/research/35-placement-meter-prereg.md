@@ -582,3 +582,122 @@ mechanism document 30 established.
 
 Results are written back into this document as §11 by
 `research/50_placement_meter.py`, which does not yet exist.
+
+---
+
+## 11. Results
+
+*Written 2026-08-19 by `research/50_placement_meter.py`, gate by gate, against
+the thresholds §§4, 6 and 7 committed above. The round stopped at M-4 on the
+routing §8 fixed in advance. Nothing below moved a threshold; every number is
+read against a line that was already on the record.*
+
+### M-1 — the identities: **PASS**
+
+| Check | Result |
+|---|---|
+| Three cells sum to zero | worst residual **6.2 × 10⁻¹⁵** points, against a 10⁻⁹ tolerance |
+| Empty red-zone cell scores exactly 0.0 | 124 team-games (2.25%), all exactly zero |
+| Empty late-down cell | none exist |
+| Ledger reconciliation | the 5,541 re-priced plays are **exactly** the ledger rows surviving the S0–S2 filter, all of them fumbles; summed repricing gap **0.0** EPA |
+| Differential recomputes | worst gap **0.0** points over 2,761 games |
+| Stream reproduces §2 | 343,543 plays / 2,761 games / 5,541 ledger-carrying plays — all three as pre-registered |
+
+The books balance and the input stream is the one §2 committed.
+
+### M-2 — calibration: a rung qualifies, and the two readings disagree
+
+2,000 draws per team-game, 89% equal-tailed, all four rungs run and reported.
+
+| Rung | Coverage of the 89% band | Gate | KS | vs its own null's 95th | Median band width |
+|---|---|---|---|---|---|
+| 1 `raw` | **82.27%** | fails | 0.0722 | outside (0.0198) | 13.00 pts |
+| **4 `raw_var_matched`** | **87.45%** | **qualifies** | 0.0438 | outside (0.0414) | 14.69 pts |
+| 2 `down_stratified` | **85.37%** | fails | 0.0302 | within (0.0305) | 6.72 pts |
+| 3 `down_stratified_var_matched` | **89.10%** | qualifies | 0.0140 | within (0.0399) | 7.36 pts |
+
+**The adoption rule selects rung 4**, the least-constrained qualifying rung —
+the rung the maintainer approved by amendment. Without it the rule would have selected
+rung 3, which §5 derives is not a null for the late-down half of the meter at
+all; the two are not interchangeable, and the band widths say so — 14.69 points
+against 7.36.
+
+Rung 1's real-data coverage, 82.27%, is **worse than the 86.00% the real-structure
+simulation predicted**, so the exchangeability failure in the live data is larger
+than the simulated truth built from the same moments. Rung 4 absorbs it and lands
+at 87.45%, inside the tolerance by 0.45 pp — about one binomial SD, exactly the
+one-SD pass §6 warned to expect.
+
+**Two rungs' readings disagree, which §6 and §8 route to the maintainer rather than
+resolving here.** Rung 4 passes coverage while its KS sits 6% above its own
+exchangeable-truth 95th percentile; rung 2 fails coverage while its KS sits just
+inside. Neither disagreement is resolved in this document.
+
+### M-3 — the luck licence: **PASS**
+
+Split-half r = **+0.0436** across 320 team-seasons and 5,522 team-games, 200
+within-season splits, against a pre-registered threshold of r > 0.0671 for "not
+luck". Per-split 5th–95th: −0.0190 to +0.1144.
+
+At 90% power against r = 0.12, **the word "luck" is licensed for the shipped
+score** — with the caveat M-4 immediately supplies. (§9's disclosed peek was
+r = 0.050 at a preliminary seed; the committed run lands at 0.0436, the same side
+of the threshold.)
+
+### M-4 — skill preservation: **FAIL**
+
+> corr(team-season mean placement points, S0 offensive quality) = **+0.5435**,
+> against a pre-registered bound of |r| ≤ 0.1065.
+
+Not a marginal miss: five times the bound, on a gate whose 95th-percentile null
+was 0.1065 and whose 99th was 0.1378.
+
+**Where the leak lives**, correlations with S0 quality:
+
+| Channel | r |
+|---|---|
+| red-zone cell score | +0.0670 |
+| **late-down cell score** | **+0.5258** |
+| share of plays in the red zone | +0.7179 |
+| **share of plays on late downs** | **−0.7873** |
+
+The red-zone half of the meter is clean. The late-down half is not, and the
+mechanism is the one document 34 §11 and §9 above both listed as open —
+**cell-count endogeneity, and it turns out to be the whole story.** Bad offenses
+face far more third and fourth downs (share correlates −0.79 with quality); late
+downs carry a league mean 0.048 EPA per play below the league (§3), worth −0.477
+points per team-game; and the score is `n_cell`-scaled, so a team's placement
+number is dragged down roughly in proportion to how often it is in the situation
+its own quality put it in. The league mean placement score is **−0.4545 points
+per team-game**, matching §3's predicted offset almost exactly.
+
+**The own-game baseline defends the cell *means* and does nothing about the cell
+*counts*.** A uniformly good team still scores zero — the property §1 claimed is
+true and M-1 confirms it — but a team is not scored against its own play mix,
+and the play mix is skill.
+
+**M-3 and M-4 are not in contradiction**, which matters because a contradiction
+would have been the finding instead. The variance components say why: the
+between-team-season SD of mean score is 1.229 points per game against a
+within-season per-game SD of 4.782 over 17.3 games, which implies a split-half
+r of **0.0652** — right beside M-3's measured 0.0436. Correlating a statistic
+against a known covariate is far more powerful than correlating it with itself,
+so a team component this size is invisible to M-3 by design and unmissable to
+M-4. **M-3's pass is therefore not evidence against M-4's failure**; the two
+gates were sized differently on purpose, and this round is the case that shows
+why the design carried both.
+
+### M-5 and M-6 — not run
+
+§8's routing: **M-4 failing sends the design back to the maintainer, not the round
+onward.** M-5 would describe, and M-6 would validate the subtraction of, a score
+whose baseline is known broken. Both are cheap once a redesigned score exists.
+
+### Round verdict
+
+M-1 and M-3 pass. M-2 selects rung 4 and hands the maintainer one open disagreement.
+**M-4 fails, and by document 34 §6 that means the baseline is broken and the
+design goes back — not patched at the output.** The three-cell identity, the
+band ladder, the luck licence and the production module all survive; what does
+not survive is the claim that the own-game baseline is a sufficient skill
+defence.
