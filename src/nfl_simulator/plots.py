@@ -25,6 +25,7 @@ layer, no dark mode.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import matplotlib as mpl
@@ -333,5 +334,283 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             color=INK_MUTED,
             va="top",
             wrap=True,
+        )
+        return fig, ax
+
+
+# --------------------------------------------------------------------------
+# the luck ledger
+# --------------------------------------------------------------------------
+
+# Below this many points a bar is a sliver a reader cannot see, and a game with
+# five extra points in it would spend five rows drawing nothing. Folding is not
+# dropping: the folded row carries their exact sum, so the waterfall still
+# reconciles. Presentation only — the ledger itself keeps every event.
+POINTS_FLOOR = 0.1
+
+# Totals are not luck, so they do not wear a team's colour.
+ANCHOR = "#8a8985"
+
+COMPONENT_NAMES = {
+    "fumble": "fumble",
+    "field_goal": "field goal",
+    "extra_point": "extra point",
+}
+
+
+@dataclass(frozen=True)
+class LuckBar:
+    """One signed step from the realized margin toward the deserved one."""
+
+    label: str
+    points: float
+    play_id: float | None = None
+    n_events: int = 1
+
+
+def _bar_label(row: dict) -> str:
+    """`"45-49 yd field goal — MIN"`, or `"extra point — GB"` when the class is
+    the component said twice."""
+    component = COMPONENT_NAMES.get(row["component"], str(row["component"]).replace("_", " "))
+    event_class = str(row["event_class"])
+    head = component if event_class == component else f"{event_class} {component}"
+    return f"{head} — {row['charged_team']}"
+
+
+def luck_bars(
+    rows,
+    *,
+    points_per_epa: float,
+    floor: float = POINTS_FLOOR,
+    chronological: bool = False,
+) -> list[LuckBar]:
+    """One bar per ledger row: the points neutralizing that event takes off the margin.
+
+    The simulator's identity is ``deserved = actual - total_luck_epa * points_per_epa``,
+    so a bar is ``-luck_epa * points_per_epa`` — luck that favoured the home team
+    comes *off* the home team's margin. Because the identity is a sum, the bars
+    reconcile the two ends exactly no matter what order they are drawn in.
+
+    Default order is biggest mover first, which answers the question the figure is
+    asked ("what moved the verdict"). ``chronological=True`` orders by play instead,
+    which tells the game's story rather than the adjudication's.
+    """
+    bars = [
+        LuckBar(
+            label=_bar_label(row),
+            points=-float(row["luck_epa"]) * points_per_epa,
+            play_id=float(row["play_id"]),
+        )
+        for row in rows
+    ]
+    small = [bar for bar in bars if abs(bar.points) < floor]
+    # A lone sliver is left where it is — "1 events under 0.1 pt" is a worse row
+    # than the event itself.
+    if len(small) < 2:
+        small = []
+    kept = [bar for bar in bars if bar not in small]
+
+    if chronological:
+        kept.sort(key=lambda bar: bar.play_id)
+    else:
+        kept.sort(key=lambda bar: abs(bar.points), reverse=True)
+
+    if small:
+        kept.append(
+            LuckBar(
+                label=f"{len(small)} events under {floor:g} pt",
+                points=sum(bar.points for bar in small),
+                play_id=None,
+                n_events=len(small),
+            )
+        )
+    return kept
+
+
+def running_totals(bars: Sequence[LuckBar], start: float) -> list[tuple[float, float]]:
+    """Where each step begins and ends, walking from the realized margin."""
+    spans, running = [], start
+    for bar in bars:
+        spans.append((running, running + bar.points))
+        running += bar.points
+    return spans
+
+
+def plot_luck_ledger(
+    verdict: GameVerdict,
+    rows,
+    *,
+    points_per_epa: float,
+    floor: float = POINTS_FLOOR,
+    chronological: bool = False,
+):
+    """The luck ledger as a waterfall: realized margin at one end, deserved at the other.
+
+    Every bar is one neutralized event, signed to the home team's margin, and the
+    bars are checked against the verdict before anything is drawn — a ledger that
+    does not reconcile belongs to another game or another slope, and drawing it
+    would put a decomposition under a headline it does not explain.
+
+    Returns ``(figure, axes)``.
+    """
+    bars = luck_bars(rows, points_per_epa=points_per_epa, floor=floor, chronological=chronological)
+    gap = verdict.deserved_margin - verdict.actual_margin
+    drift = abs(sum(bar.points for bar in bars) - gap)
+    if drift > 1e-6:
+        raise ValueError(
+            f"the ledger does not reconcile with {verdict.game_id}: its bars move the margin "
+            f"by {sum(bar.points for bar in bars):+.4f} but the verdict moves it by {gap:+.4f} "
+            f"({drift:.2e} apart). Stop rather than draw it."
+        )
+
+    with mpl.rc_context(STYLE):
+        fig, ax = plt.subplots(figsize=(7.6, 1.9 + 0.34 * (len(bars) + 2)))
+
+        if not bars:
+            ax.text(
+                0.5,
+                0.5,
+                "This game had no luck events to neutralise.\n"
+                "The deserved margin is the realized one.",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+                fontsize=11,
+                color=INK_MUTED,
+            )
+            ax.set_xticks([])
+            ax.set_yticks([])
+        else:
+            spans = running_totals(bars, verdict.actual_margin)
+            rows_y = np.arange(len(bars) + 2, dtype=float)
+
+            ax.barh(
+                rows_y[0],
+                abs(verdict.actual_margin),
+                left=min(0.0, verdict.actual_margin),
+                height=0.62,
+                color=ANCHOR,
+                zorder=2,
+            )
+            for y, bar, (begin, end) in zip(rows_y[1:-1], bars, spans, strict=True):
+                ax.barh(
+                    y,
+                    abs(bar.points),
+                    left=min(begin, end),
+                    height=0.62,
+                    color=HOME_HUE if bar.points > 0 else AWAY_HUE,
+                    zorder=2,
+                )
+                ax.annotate(
+                    # A folded row can land under half a tenth, and "-0.0" reads
+                    # as a rounding failure rather than as a small number.
+                    f"{bar.points:+.2f}" if abs(bar.points) < 0.1 else f"{bar.points:+.1f}",
+                    xy=(end, y),
+                    xytext=(6 if bar.points > 0 else -6, 0),
+                    textcoords="offset points",
+                    ha="left" if bar.points > 0 else "right",
+                    va="center",
+                    fontsize=8,
+                    color=INK_MUTED,
+                    zorder=5,
+                )
+            ax.barh(
+                rows_y[-1],
+                abs(verdict.deserved_margin),
+                left=min(0.0, verdict.deserved_margin),
+                height=0.62,
+                color=ANCHOR,
+                zorder=2,
+            )
+
+            # Connectors, so a step is visibly picked up where the last one left off.
+            for y, (_begin, end) in zip(rows_y[1:-1], spans, strict=True):
+                ax.plot(
+                    [end, end],
+                    [y - 0.31, y + 0.69],
+                    color=GRID,
+                    linewidth=1.0,
+                    zorder=1,
+                )
+
+            ax.set_yticks(rows_y)
+            ax.set_yticklabels(
+                [f"realized {verdict.actual_margin:+.0f}"]
+                + [bar.label for bar in bars]
+                + [f"deserved {verdict.deserved_margin:+.1f}"],
+                fontsize=9,
+            )
+            ax.invert_yaxis()
+            ax.axvline(0.0, color=INK_MUTED, linewidth=1.0, dashes=(2, 3), zorder=1)
+            # Only the directions the game actually has. A key for a colour that
+            # appears nowhere sends a reader hunting the figure for it.
+            handles = []
+            if any(bar.points < 0 for bar in bars):
+                handles.append(
+                    Patch(facecolor=AWAY_HUE, label=f"moves the margin toward {verdict.away_team}")
+                )
+            if any(bar.points > 0 for bar in bars):
+                handles.append(
+                    Patch(facecolor=HOME_HUE, label=f"moves the margin toward {verdict.home_team}")
+                )
+            ax.legend(
+                handles=handles,
+                loc="upper center",
+                # Same reason as the titles: a fixed fraction of a height that
+                # changes with the row count is not a fixed gap.
+                bbox_to_anchor=(0.5, -34 / (ax.get_position().height * fig.get_figheight() * 72)),
+                ncol=2,
+                frameon=False,
+                fontsize=9,
+                handlelength=1.1,
+                handleheight=0.9,
+            )
+            # The outermost bar ends at the outermost x, and its value label sits
+            # beyond that — without room reserved for it the label runs out of the
+            # frame and lands on the row names.
+            xs = [0.0, verdict.actual_margin, verdict.deserved_margin]
+            xs += [x for span in spans for x in span]
+            low, high = min(xs), max(xs)
+            pad = max(0.12 * (high - low), 0.5)
+            ax.set_xlim(low - pad, high + pad)
+
+            ax.grid(axis="x", color=GRID, linewidth=0.8)
+            ax.set_axisbelow(True)
+            ax.set_xlabel(f"margin, {verdict.home_team} perspective", fontsize=9, color=INK_MUTED)
+
+        # A waterfall's height grows with its row count, so anything placed in
+        # axes fractions drifts further from the plot the more events a game had.
+        # These are offsets in points, which hold still.
+        ax.annotate(
+            f"{verdict.headline()}    ·    {verdict.bucket}",
+            xy=(0, 1),
+            xycoords="axes fraction",
+            xytext=(0, 28),
+            textcoords="offset points",
+            va="bottom",
+            fontsize=14,
+            fontweight="bold",
+            color=INK,
+        )
+        ax.annotate(
+            f"{verdict.game_id} — every luck event, and what neutralising it was worth",
+            xy=(0, 1),
+            xycoords="axes fraction",
+            xytext=(0, 14),
+            textcoords="offset points",
+            va="bottom",
+            fontsize=9,
+            color=INK_MUTED,
+        )
+        ax.annotate(
+            "The bars are a sum, not a sequence: their order does not change where the "
+            "waterfall lands.",
+            xy=(0, 0),
+            xycoords="axes fraction",
+            xytext=(0, -58),
+            textcoords="offset points",
+            va="top",
+            fontsize=8,
+            color=INK_MUTED,
         )
         return fig, ax

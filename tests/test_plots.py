@@ -27,7 +27,10 @@ from nfl_simulator.plots import (  # noqa: E402
     SCOREBOARD_HOLDS,
     TOO_CLOSE,
     GameVerdict,
+    luck_bars,
     plot_bootstrap_distribution,
+    plot_luck_ledger,
+    running_totals,
 )
 
 
@@ -255,3 +258,228 @@ def test_the_interval_is_stated_for_the_team_the_headline_names():
 def test_the_interval_is_mirrored_when_the_away_side_is_favoured():
     note = verdict(dtw_home=0.054, interval=(0.036, 0.075)).interval_note()
     assert "DET's share runs 92–96%" in note
+
+
+# --------------------------------------------------------------------------
+# the luck ledger — arithmetic
+# --------------------------------------------------------------------------
+
+
+PPE = 0.8389495557652871  # v1.3's shipped points-per-EPA slope
+
+
+def ledger_row(
+    luck_epa: float,
+    component: str = "fumble",
+    event_class: str = "pass/live",
+    charged_team: str = "DET",
+    play_id: float = 100.0,
+) -> dict:
+    return {
+        "play_id": play_id,
+        "component": component,
+        "event_class": event_class,
+        "charged_team": charged_team,
+        "luck_epa": luck_epa,
+    }
+
+
+def test_a_bar_is_the_points_neutralising_the_event_takes_off_the_margin():
+    """Luck that favoured the home team comes off the home team's margin."""
+    (bar,) = luck_bars([ledger_row(2.0)], points_per_epa=PPE)
+    assert bar.points == pytest.approx(-2.0 * PPE)
+
+
+def test_luck_against_the_home_team_moves_the_margin_the_other_way():
+    (bar,) = luck_bars([ledger_row(-2.0)], points_per_epa=PPE)
+    assert bar.points == pytest.approx(2.0 * PPE)
+
+
+def test_the_bars_sum_to_the_gap_between_the_realized_and_deserved_margins():
+    """The waterfall has to reconcile, or it is not the ledger it claims to be."""
+    rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
+    bars = luck_bars(rows, points_per_epa=PPE)
+    total = sum(bar.points for bar in bars)
+    assert total == pytest.approx((3.42 - 0.80) * -PPE)
+
+
+def test_bars_are_ordered_biggest_mover_first():
+    rows = [
+        ledger_row(0.4, play_id=1.0),
+        ledger_row(-3.0, play_id=2.0),
+        ledger_row(1.5, play_id=3.0),
+    ]
+    sizes = [abs(bar.points) for bar in luck_bars(rows, points_per_epa=PPE, floor=0.0)]
+    assert sizes == sorted(sizes, reverse=True)
+
+
+def test_chronological_order_follows_the_play_clock_instead():
+    rows = [
+        ledger_row(0.4, play_id=3000.0),
+        ledger_row(-3.0, play_id=100.0),
+        ledger_row(1.5, play_id=900.0),
+    ]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0, chronological=True)
+    assert [bar.play_id for bar in bars] == [100.0, 900.0, 3000.0]
+
+
+def test_events_below_the_floor_fold_into_one_row_that_says_how_many():
+    """A 0.03-point bar is an invisible sliver; four of them are four blank rows."""
+    rows = [ledger_row(3.0, play_id=1.0)] + [
+        ledger_row(0.03, component="extra_point", event_class="extra point", play_id=float(i))
+        for i in range(2, 6)
+    ]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.1)
+    assert len(bars) == 2
+    assert bars[-1].n_events == 4
+    assert "4" in bars[-1].label
+
+
+def test_the_folded_row_carries_their_exact_sum_so_nothing_is_dropped():
+    rows = [ledger_row(3.0, play_id=1.0)] + [
+        ledger_row(0.03, play_id=float(i)) for i in range(2, 6)
+    ]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.1)
+    assert sum(bar.points for bar in bars) == pytest.approx(3.12 * -PPE)
+
+
+def test_the_folded_row_is_last_even_though_it_can_outweigh_a_real_one():
+    rows = [ledger_row(0.4, play_id=1.0)] + [
+        ledger_row(0.09, play_id=float(i)) for i in range(2, 8)
+    ]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.1)
+    assert bars[-1].n_events == 6
+
+
+def test_a_floor_of_zero_shows_every_event():
+    rows = [ledger_row(0.01, play_id=float(i)) for i in range(5)]
+    assert len(luck_bars(rows, points_per_epa=PPE, floor=0.0)) == 5
+
+
+def test_a_bar_is_labelled_by_its_class_component_and_the_team_charged():
+    (bar,) = luck_bars(
+        [ledger_row(2.0, component="field_goal", event_class="45-49 yd", charged_team="MIN")],
+        points_per_epa=PPE,
+    )
+    assert bar.label == "45-49 yd field goal — MIN"
+
+
+def test_an_extra_point_does_not_repeat_itself_in_its_label():
+    (bar,) = luck_bars(
+        [ledger_row(2.0, component="extra_point", event_class="extra point", charged_team="GB")],
+        points_per_epa=PPE,
+    )
+    assert bar.label == "extra point — GB"
+
+
+def test_running_totals_start_at_the_realized_margin_and_land_on_the_deserved_one():
+    rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
+    bars = luck_bars(rows, points_per_epa=PPE)
+    spans = running_totals(bars, start=8.0)
+    assert spans[0][0] == pytest.approx(8.0)
+    assert spans[-1][1] == pytest.approx(8.0 - (3.42 - 0.80) * PPE)
+
+
+def test_each_step_begins_where_the_previous_one_ended():
+    rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
+    spans = running_totals(luck_bars(rows, points_per_epa=PPE), start=8.0)
+    for before, after in zip(spans, spans[1:], strict=False):
+        assert before[1] == pytest.approx(after[0])
+
+
+# --------------------------------------------------------------------------
+# the luck ledger — the figure
+# --------------------------------------------------------------------------
+
+
+def test_the_waterfall_refuses_a_ledger_that_does_not_reconcile():
+    """A ledger from another game, or a different slope, would draw a lie."""
+    rows = [ledger_row(3.42, play_id=1.0)]
+    with pytest.raises(ValueError, match="reconcile"):
+        plot_luck_ledger(
+            verdict(actual_margin=8.0, deserved_margin=-8.28), rows, points_per_epa=PPE
+        )
+
+
+def test_the_waterfall_draws_one_bar_per_row_plus_the_two_anchors():
+    rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
+    gap = (3.42 - 0.80) * PPE
+    fig, ax = plot_luck_ledger(
+        verdict(actual_margin=8.0, deserved_margin=8.0 - gap), rows, points_per_epa=PPE
+    )
+    assert len(ax.patches) == 4
+
+
+def test_the_waterfall_names_both_ends_with_their_margins():
+    rows = [ledger_row(3.42, play_id=1.0)]
+    fig, ax = plot_luck_ledger(
+        verdict(actual_margin=8.0, deserved_margin=8.0 - 3.42 * PPE), rows, points_per_epa=PPE
+    )
+    labels = [label.get_text() for label in ax.get_yticklabels()]
+    assert any("realized" in label for label in labels)
+    assert any("deserved" in label for label in labels)
+
+
+def test_the_waterfall_legends_both_directions_so_colour_is_never_alone():
+    rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
+    gap = (3.42 - 0.80) * PPE
+    fig, ax = plot_luck_ledger(
+        verdict(actual_margin=8.0, deserved_margin=8.0 - gap), rows, points_per_epa=PPE
+    )
+    labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert any("MIN" in label for label in labels)
+    assert any("DET" in label for label in labels)
+
+
+def test_a_game_with_no_luck_events_is_drawn_as_a_note_rather_than_a_waterfall():
+    fig, ax = plot_luck_ledger(
+        verdict(actual_margin=7.0, deserved_margin=7.0), [], points_per_epa=PPE
+    )
+    text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
+    assert "no luck events" in text.lower()
+
+
+def test_the_waterfall_carries_the_headline_and_the_bucket():
+    rows = [ledger_row(3.42, play_id=1.0)]
+    fig, ax = plot_luck_ledger(
+        verdict(dtw_home=0.78, actual_margin=8.0, deserved_margin=8.0 - 3.42 * PPE),
+        rows,
+        points_per_epa=PPE,
+    )
+    text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
+    assert "MIN 78% / DET 22%" in text
+
+
+def test_the_waterfall_says_the_order_of_the_bars_does_not_change_the_total():
+    """A waterfall looks sequential; this one is a sum, and readers assume wrong."""
+    rows = [ledger_row(3.42, play_id=1.0)]
+    fig, ax = plot_luck_ledger(
+        verdict(actual_margin=8.0, deserved_margin=8.0 - 3.42 * PPE), rows, points_per_epa=PPE
+    )
+    text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
+    assert "order" in text.lower()
+
+
+def test_the_value_labels_stay_inside_the_frame():
+    """The last bar of a lopsided game ends at the axis edge, and its label ran off it."""
+    rows = [ledger_row(9.0, play_id=1.0), ledger_row(0.15, play_id=2.0)]
+    gap = 9.15 * PPE
+    fig, ax = plot_luck_ledger(
+        verdict(actual_margin=8.0, deserved_margin=8.0 - gap), rows, points_per_epa=PPE
+    )
+    fig.canvas.draw()
+    frame = ax.get_window_extent()
+    for text in ax.texts:
+        box = text.get_window_extent()
+        assert frame.x0 <= box.x0 and box.x1 <= frame.x1, f"{text.get_text()!r} runs off the frame"
+
+
+def test_the_legend_names_only_the_directions_the_game_actually_has():
+    """A blue key beside a figure with no blue bar sends the reader hunting for one."""
+    rows = [ledger_row(3.42, play_id=1.0), ledger_row(0.80, play_id=2.0)]
+    gap = 4.22 * PPE
+    fig, ax = plot_luck_ledger(
+        verdict(actual_margin=8.0, deserved_margin=8.0 - gap), rows, points_per_epa=PPE
+    )
+    labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert labels == ["moves the margin toward DET"]
