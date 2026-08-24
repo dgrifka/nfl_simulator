@@ -25,6 +25,7 @@ layer, no dark mode.
 
 from __future__ import annotations
 
+import textwrap
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -809,3 +810,175 @@ def plot_band_sweep(rows: Sequence[BandRow], *, shipped_half_width: float = 0.10
             transform=axes[1].transAxes,
         )
         return fig, axes
+
+
+# --------------------------------------------------------------------------
+# the overtime toss — reported, not neutralized
+# --------------------------------------------------------------------------
+
+# Document 16's verdict: the toss is a real branch worth about two points, and it
+# was measured and left out of the ledger because it missed the materiality floor
+# by 0.13 pp. The product therefore has to say it out loud rather than let a
+# reader assume the simulator never noticed. Figures are strings for the same
+# reason the coverage constants above are: they are quotations from a committed
+# document, not quantities this module is free to recompute or re-round.
+REPORTED_NOT_NEUTRALIZED = "reported, not neutralized"
+OVERTIME_TITLE = f"Overtime — {REPORTED_NOT_NEUTRALIZED}"
+
+OVERTIME_GAMES = "155"  # §3, 2016–2025
+OVERTIME_SWING = "2.05"  # §8 Gate O-1, points of final margin
+OVERTIME_SWING_ETI = "+1.04 to +3.07"
+OVERTIME_MEDIAN_MOVE = "3.93 pp"  # §8 Gate O-3
+OVERTIME_FLOOR = "4.06 pp"  # the incumbent's own median 89% half-width
+OVERTIME_SIDE_FLIPS = "14 of 155"
+# §8's impact run was simulator v1.1. The share this module prints is v1.3, so a
+# per-game move quoted beside it is a size and not a correction.
+OVERTIME_IMPACT_VERSION = "v1.1"
+# §4d, pre-registered: the era split cannot be read as a finding either way.
+OVERTIME_NEW_RULES_SEASON = 2025
+OVERTIME_NEW_RULES_POWER = "0.243"
+OVERTIME_NEW_RULES_TRIGGER = "60"
+
+SIDEBAR_WIDTH_IN = 2.7
+SIDEBAR_GAP_IN = 0.30
+SIDEBAR_WRAP = 42
+
+
+@dataclass(frozen=True)
+class OvertimeToss:
+    """One game's overtime toss, as a fact reported beside the adjudication.
+
+    ``received`` is the team that took the first overtime possession, which is a
+    *proxy* for winning the toss — nflverse has no coin-toss field, and document
+    16 §6 registers that as the component's most serious open defect. The panel
+    says so rather than letting the label pass as a measurement.
+
+    ``delta_dtw_home`` is optional and, when given, is the move in the **home**
+    team's share from `research/outputs/26_overtime_games.parquet`.
+    """
+
+    received: str
+    season: int
+    delta_dtw_home: float | None = None
+
+
+def overtime_lines(verdict: GameVerdict, toss: OvertimeToss) -> list[str]:
+    """The sidebar's paragraphs, in order.
+
+    Kept separate from the drawing so the wording is testable as wording. Four
+    paragraphs always, plus one for a per-game move and one for a game played
+    under the 2025 rulebook.
+    """
+    lines = [
+        f"{toss.received} took the first overtime possession. Across "
+        f"{OVERTIME_GAMES} overtime games 2016–2025 that is worth "
+        f"{OVERTIME_SWING} points of final margin ({NOMINAL_COVERAGE} interval "
+        f"{OVERTIME_SWING_ETI}), and the figure books all of it as deserved.",
+        "nflverse carries no coin-toss field, so first possession stands in for "
+        "winning the toss — document 16 §6's most serious open defect.",
+        "The component was measured and refused, not overlooked: neutralizing it "
+        f"moves the median overtime game's share by {OVERTIME_MEDIAN_MOVE}, under "
+        f"the {OVERTIME_FLOOR} interval the product already prints on those games. "
+        f"It changes the deserved winner in {OVERTIME_SIDE_FLIPS}.",
+        f"The swing is a league average. {OVERTIME_GAMES} games cannot say which "
+        "offenses gain more from receiving, so it is not this game's own number.",
+    ]
+
+    if toss.delta_dtw_home is not None:
+        favoured = verdict.deserved_winner
+        # The stored move is on the home share, and the headline may name the
+        # away team. Mirroring it is the same correction `interval_note` makes.
+        move = toss.delta_dtw_home if favoured == verdict.home_team else -toss.delta_dtw_home
+        lines.append(
+            f"Here the toss is worth {move * 100:+.0f} pp of {favoured}'s share — "
+            f"measured on simulator {OVERTIME_IMPACT_VERSION} against the "
+            "v1.3 share above, so it sizes the toss rather than correcting it."
+        )
+
+    if toss.season >= OVERTIME_NEW_RULES_SEASON:
+        lines.append(
+            f"Played under the {OVERTIME_NEW_RULES_SEASON} overtime rules, which the "
+            "swing above pools with the earlier ones. Sixteen games cannot separate "
+            f"them — the design has power {OVERTIME_NEW_RULES_POWER} to detect that "
+            "the new rules removed the effect entirely — so the era is revisited at "
+            f"{OVERTIME_NEW_RULES_TRIGGER} new-rule games and read as nothing before "
+            "then."
+        )
+    return lines
+
+
+def attach_overtime_sidebar(
+    fig,
+    ax,
+    verdict: GameVerdict,
+    toss: OvertimeToss | None,
+    *,
+    width_in: float = SIDEBAR_WIDTH_IN,
+    gap_in: float = SIDEBAR_GAP_IN,
+):
+    """Put document 16's overtime note beside a figure, or nothing at all.
+
+    ``toss=None`` draws nothing and returns ``None``. Silence is the honest
+    annotation for a mechanism that did not occur: a panel explaining that this
+    game had no overtime toss would put a caveat where there is no event.
+
+    The figure **grows to the right** rather than the plot shrinking. A sidebar
+    that squeezed the axes would re-scale a distribution in order to say
+    something beside it, and two games annotated differently would then be drawn
+    at two different scales.
+
+    The panel spans the figure's full height rather than the host axes' box,
+    because the waterfall's height changes with its row count and a note pinned
+    to that box would start lower on a game with more luck events.
+
+    Returns the sidebar's axes.
+    """
+    if toss is None:
+        return None
+
+    with mpl.rc_context(STYLE):
+        width, height = fig.get_size_inches()
+        box = ax.get_position()
+        grown = width + gap_in + width_in
+        fig.set_size_inches(grown, height)
+        # `set_size_inches` holds axes at their figure *fractions*, which would
+        # stretch the plot across the new width. Rescaling by the growth factor
+        # holds it at the inches it was drawn at.
+        shrink = width / grown
+        ax.set_position([box.x0 * shrink, box.y0, box.width * shrink, box.height])
+
+        panel = fig.add_axes([(width + gap_in) / grown, 0.0, width_in / grown, 1.0])
+        panel.axis("off")
+        # A rule, not a box: the panel is an aside to the figure rather than a
+        # second figure, and a full border would read as the latter.
+        panel.plot(
+            [0.0, 0.0],
+            [0.02, 0.98],
+            transform=panel.transAxes,
+            color=GRID,
+            linewidth=1.0,
+            clip_on=False,
+        )
+        panel.text(
+            0.07,
+            0.98,
+            OVERTIME_TITLE,
+            transform=panel.transAxes,
+            fontsize=9,
+            fontweight="bold",
+            color=INK,
+            va="top",
+        )
+        panel.text(
+            0.07,
+            0.94,
+            "\n\n".join(
+                textwrap.fill(line, SIDEBAR_WRAP) for line in overtime_lines(verdict, toss)
+            ),
+            transform=panel.transAxes,
+            fontsize=7.5,
+            color=INK_MUTED,
+            va="top",
+            linespacing=1.45,
+        )
+        return panel

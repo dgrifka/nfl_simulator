@@ -24,12 +24,19 @@ from nfl_simulator.plots import (  # noqa: E402
     BAND_HIGH,
     BAND_LOW,
     CLEAR_FLIP,
+    INK,
+    INK_MUTED,
+    OVERTIME_TITLE,
+    REPORTED_NOT_NEUTRALIZED,
     SCOREBOARD_HOLDS,
     TOO_CLOSE,
     GameVerdict,
+    OvertimeToss,
+    attach_overtime_sidebar,
     band_sweep,
     bucket_label,
     luck_bars,
+    overtime_lines,
     plot_band_sweep,
     plot_bootstrap_distribution,
     plot_luck_ledger,
@@ -642,3 +649,126 @@ def test_the_figure_says_what_is_being_swept():
     assert "band" in labels
     caption = " ".join(text.get_text() for text in fig.texts).lower()
     assert "presentation" in caption
+
+
+# --------------------------------------------------------------------------
+# the overtime toss — reported, not neutralized (document 16)
+# --------------------------------------------------------------------------
+
+
+def toss(**kwargs) -> OvertimeToss:
+    defaults = {"received": "MIN", "season": 2019}
+    return OvertimeToss(**(defaults | kwargs))
+
+
+def _joined(verdict_, toss_) -> str:
+    return " ".join(overtime_lines(verdict_, toss_))
+
+
+def test_the_sidebar_is_labelled_reported_not_neutralized():
+    """The label is the whole point: this is a luck event the ledger declines."""
+    assert REPORTED_NOT_NEUTRALIZED in OVERTIME_TITLE
+
+
+def test_the_sidebar_names_the_team_that_took_the_first_possession():
+    assert "MIN" in _joined(verdict(), toss(received="MIN"))
+
+
+def test_the_sidebar_says_first_possession_rather_than_won_the_toss():
+    """Document 16 §6's most serious open defect: nflverse has no coin-toss
+    field, so first possession is a proxy and has to be labelled as one."""
+    text = _joined(verdict(), toss())
+    assert "first overtime possession" in text
+    assert "no coin-toss field" in text
+
+
+def test_the_swing_is_never_quoted_without_its_interval():
+    text = _joined(verdict(), toss())
+    assert "2.05" in text
+    assert "1.04" in text and "3.07" in text
+
+
+def test_the_sidebar_says_why_the_component_was_left_out():
+    """A caveat that does not say it was measured and refused reads as an
+    oversight rather than as document 16's decision."""
+    text = _joined(verdict(), toss())
+    assert "3.93" in text and "4.06" in text
+    assert "14 of 155" in text
+
+
+def test_the_sidebar_states_that_the_swing_is_a_league_average():
+    """Document 16 §6 registers this defect as `stated wherever the component is
+    reported`, which makes it a requirement on this panel and not a nicety."""
+    assert "league average" in _joined(verdict(), toss())
+
+
+def test_a_per_game_move_is_quoted_on_the_share_the_headline_names():
+    text = _joined(verdict(dtw_home=0.63), toss(delta_dtw_home=-0.214))
+    assert "MIN" in text
+    assert "-21 pp" in text
+
+
+def test_a_per_game_move_is_mirrored_when_the_headline_names_the_away_team():
+    """The stored delta is on the home share. Printing it beside a headline that
+    names the away team would hand one team's movement to the other."""
+    text = _joined(verdict(dtw_home=0.30), toss(delta_dtw_home=0.12))
+    assert "-12 pp" in text
+    assert "+12 pp" not in text
+
+
+def test_a_per_game_move_carries_the_simulator_version_it_was_measured_on():
+    """Document 16's impact run was simulator v1.1; the printed share is v1.3.
+    Without the version the two numbers look subtractable, and they are not."""
+    assert "v1.1" in _joined(verdict(), toss(delta_dtw_home=-0.214))
+
+
+def test_no_per_game_move_is_invented_when_none_was_supplied():
+    assert "v1.1" not in _joined(verdict(), toss())
+
+
+def test_a_new_rules_game_says_the_rulebook_cannot_be_separated():
+    """Document 16 §4d pre-registered that no era split may be read as a finding."""
+    text = _joined(verdict(), toss(season=2025))
+    assert "0.243" in text
+    assert "60" in text
+
+
+def test_a_game_under_the_old_rules_does_not_raise_the_rulebook_question():
+    assert "0.243" not in _joined(verdict(), toss(season=2019))
+
+
+def test_a_game_that_did_not_go_to_overtime_gets_no_sidebar():
+    """Silence is the honest annotation for a mechanism that never happened."""
+    fig, ax = plot_bootstrap_distribution(verdict())
+    assert attach_overtime_sidebar(fig, ax, verdict(), None) is None
+
+
+def test_attaching_a_sidebar_does_not_shrink_the_figure_it_annotates():
+    """The figure grows to the right. A panel that squeezed the plot would
+    re-scale a distribution in order to say something beside it."""
+    fig, ax = plot_bootstrap_distribution(verdict())
+    before = ax.get_position().width * fig.get_size_inches()[0]
+    attach_overtime_sidebar(fig, ax, verdict(), toss())
+    after = ax.get_position().width * fig.get_size_inches()[0]
+    assert after == pytest.approx(before, abs=1e-6)
+
+
+def test_the_sidebar_panel_draws_no_axes_of_its_own():
+    fig, ax = plot_bootstrap_distribution(verdict())
+    panel = attach_overtime_sidebar(fig, ax, verdict(), toss())
+    assert not panel.axison
+
+
+def test_the_sidebar_wears_no_team_colour():
+    """A caveat is not an entity. Colour here would read as a third side."""
+    fig, ax = plot_bootstrap_distribution(verdict())
+    panel = attach_overtime_sidebar(fig, ax, verdict(), toss())
+    assert {text.get_color() for text in panel.texts} <= {INK, INK_MUTED}
+
+
+def test_the_sidebar_attaches_to_the_waterfall_as_well_as_the_distribution():
+    rows = [ledger_row(3.0, play_id=1.0)]
+    game = verdict(actual_margin=7.0, deserved_margin=7.0 - 3.0 * PPE)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    panel = attach_overtime_sidebar(fig, ax, game, toss())
+    assert any(REPORTED_NOT_NEUTRALIZED in text.get_text() for text in panel.texts)
