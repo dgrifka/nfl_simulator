@@ -83,6 +83,32 @@ STYLE = {
 # --------------------------------------------------------------------------
 
 
+def bucket_label(
+    dtw_home: float,
+    actual_margin: float,
+    *,
+    low: float = BAND_LOW,
+    high: float = BAND_HIGH,
+) -> str:
+    """Document 33 §2a's three-way label, for any band.
+
+    The band is a parameter rather than a constant so the robustness sweep and
+    the headline are the *same* label — a sweep with its own copy of this rule
+    could report bucket counts the product would not agree with.
+
+    A realized tie falls out as a clear flip whenever it is outside the band,
+    which is the honest reading: the scoreboard declined to name a winner and the
+    bootstrap does not. Document 33 excluded the 10 ties from its flip *counts*;
+    a product that has to render one still has to say something.
+    """
+    if low <= dtw_home <= high:
+        return TOO_CLOSE
+    if actual_margin == 0:
+        return CLEAR_FLIP
+    deserved_home = dtw_home > 0.5
+    return SCOREBOARD_HOLDS if deserved_home == (actual_margin > 0) else CLEAR_FLIP
+
+
 @dataclass(frozen=True)
 class GameVerdict:
     """One game's adjudication, as the product states it.
@@ -126,16 +152,8 @@ class GameVerdict:
 
     @property
     def bucket(self) -> str:
-        """Document 33 §2a's three-way label.
-
-        A realized tie falls out as a clear flip whenever it is outside the band,
-        which is the honest reading: the scoreboard declined to name a winner and
-        the bootstrap does not. Document 33 excluded the 10 ties from its flip
-        *counts*; a product that has to render one still has to say something.
-        """
-        if BAND_LOW <= self.dtw_home <= BAND_HIGH:
-            return TOO_CLOSE
-        return SCOREBOARD_HOLDS if self.deserved_winner == self.scoreboard_winner else CLEAR_FLIP
+        """Document 33 §2a's three-way label, at the shipped band."""
+        return bucket_label(self.dtw_home, self.actual_margin)
 
     def headline(self) -> str:
         """`"MIN 55% / DET 45%"` — the favoured side first, shares summing to 100."""
@@ -614,3 +632,180 @@ def plot_luck_ledger(
             color=INK_MUTED,
         )
         return fig, ax
+
+
+# --------------------------------------------------------------------------
+# the flip-band sweep
+# --------------------------------------------------------------------------
+
+# 0.00 to 0.15 in hundredths: the band runs from empty (a binary flip label) to
+# 0.35–0.65, the widest the round asked for. The shipped 0.10 is on the grid, so
+# the display can place the choice rather than interpolate to it.
+SWEEP_HALF_WIDTHS = tuple(round(0.01 * step, 4) for step in range(16))
+
+
+@dataclass(frozen=True)
+class BandRow:
+    """The three bucket counts at one candidate band.
+
+    ``ties_outside_band`` is carried because document 33 excluded realized ties
+    from its flip counts and this module labels them. Without it the sweep's
+    ``clear_flip`` and document 33's number differ by an unexplained handful.
+    """
+
+    half_width: float
+    low: float
+    high: float
+    clear_flip: int
+    too_close: int
+    scoreboard_holds: int
+    ties_outside_band: int
+
+
+def band_sweep(
+    dtw_home,
+    actual_margin,
+    *,
+    half_widths: Sequence[float] = SWEEP_HALF_WIDTHS,
+) -> list[BandRow]:
+    """Bucket counts as the "too close to call" band opens from nothing to 0.35–0.65.
+
+    The band at 0.40–0.60 is a presentation choice made before document 33's
+    reconciliation, not a threshold fitted to anything, and the only way to show
+    that is to show what the neighbouring choices would have said.
+
+    Every count comes from :func:`bucket_label`, so the row at the shipped band is
+    the product's own label by construction rather than by agreement.
+    """
+    dtw_home = np.asarray(dtw_home, dtype=float)
+    actual_margin = np.asarray(actual_margin, dtype=float)
+    if dtw_home.shape != actual_margin.shape:
+        raise ValueError(
+            "dtw_home and actual_margin must be the same length — they are one row "
+            f"per game ({dtw_home.shape} vs {actual_margin.shape})."
+        )
+
+    rows = []
+    for half_width in half_widths:
+        low, high = round(0.5 - half_width, 4), round(0.5 + half_width, 4)
+        labels = [
+            bucket_label(dtw, margin, low=low, high=high)
+            for dtw, margin in zip(dtw_home, actual_margin, strict=True)
+        ]
+        ties_outside = sum(
+            1
+            for margin, label in zip(actual_margin, labels, strict=True)
+            if margin == 0 and label != TOO_CLOSE
+        )
+        rows.append(
+            BandRow(
+                half_width=half_width,
+                low=low,
+                high=high,
+                clear_flip=labels.count(CLEAR_FLIP),
+                too_close=labels.count(TOO_CLOSE),
+                scoreboard_holds=labels.count(SCOREBOARD_HOLDS),
+                ties_outside_band=ties_outside,
+            )
+        )
+    return rows
+
+
+def plot_band_sweep(rows: Sequence[BandRow], *, shipped_half_width: float = 0.10):
+    """The three bucket counts against the width of the band, one panel each.
+
+    **One panel each, and each on its own scale.** "Scoreboard holds" is an order
+    of magnitude larger than the two buckets the band trades between; on one
+    shared axis the movement this figure exists to show — a hundred games sliding
+    between buckets — is a flat line at the bottom of the frame. Three panels on
+    a shared x axis keep every series legible without a second y scale.
+
+    No series wears a colour. A bucket is not an entity the way a team is, and
+    with one line to a panel the title already names it — so the ink stays ink and
+    nothing here needs a legend.
+
+    Returns ``(figure, axes)``.
+    """
+    widths = [row.half_width for row in rows]
+    panels = (
+        (CLEAR_FLIP, [row.clear_flip for row in rows]),
+        (TOO_CLOSE, [row.too_close for row in rows]),
+        (SCOREBOARD_HOLDS, [row.scoreboard_holds for row in rows]),
+    )
+    shipped = min(rows, key=lambda row: abs(row.half_width - shipped_half_width))
+
+    with mpl.rc_context(STYLE):
+        fig, axes = plt.subplots(1, 3, figsize=(7.6, 3.2), sharex=True)
+
+        for ax, (bucket, counts) in zip(axes, panels, strict=True):
+            ax.plot(widths, counts, color=INK, linewidth=1.8, zorder=3)
+            ax.plot(widths, counts, "o", color=INK, markersize=2.6, zorder=4)
+            ax.axvline(shipped.half_width, color=INK_MUTED, linewidth=1.0, dashes=(2, 3), zorder=1)
+
+            at_shipped = counts[rows.index(shipped)]
+            ax.plot(shipped.half_width, at_shipped, "o", color=INK, markersize=5.5, zorder=5)
+            # The label sits beside the marker rather than above it: the shipped
+            # band's own rule runs vertically through "above", and a number with a
+            # dashed line through it reads as struck out. It then goes to whichever
+            # side of the point the series is *leaving*, so a rising line does not
+            # climb through its own label.
+            rising = counts[-1] > counts[0]
+            ax.annotate(
+                f"{at_shipped:,}",
+                xy=(shipped.half_width, at_shipped),
+                xytext=(8, -6 if rising else 6),
+                textcoords="offset points",
+                ha="left",
+                va="top" if rising else "bottom",
+                fontsize=9,
+                color=INK,
+                zorder=6,
+            )
+
+            ax.set_title(bucket, fontsize=10, color=INK, pad=8, loc="left")
+            ax.grid(axis="y", color=GRID, linewidth=0.8)
+            ax.set_axisbelow(True)
+            ax.margins(y=0.22)
+            # Counts of games have no negative side, and a "-50 games" tick is a
+            # margin artifact rather than a reading. The top is left free.
+            ax.set_ylim(bottom=max(0.0, ax.get_ylim()[0]))
+            ax.set_xticks([0.0, 0.05, 0.10, 0.15])
+            ax.set_xticklabels(["0.50\nonly", "0.45\nto 0.55", "0.40\nto 0.60", "0.35\nto 0.65"])
+            ax.tick_params(labelsize=8)
+
+        axes[0].set_ylabel("games", fontsize=9, color=INK_MUTED)
+        axes[1].set_xlabel("width of the “too close to call” band", fontsize=9, color=INK_MUTED)
+
+        fig.text(
+            0.0,
+            1.34,
+            "The band is a presentation choice, not a fitted threshold",
+            fontsize=13,
+            fontweight="bold",
+            color=INK,
+            va="bottom",
+            transform=axes[0].transAxes,
+        )
+        fig.text(
+            0.0,
+            1.24,
+            f"{len(rows)} candidate bands, "
+            f"{panels[0][1][0] + panels[1][1][0] + panels[2][1][0]:,} games — "
+            "the shipped 0.40–0.60 is marked",
+            fontsize=9,
+            color=INK_MUTED,
+            va="bottom",
+            transform=axes[0].transAxes,
+        )
+        fig.text(
+            0.5,
+            -0.30,
+            "Every game lands in exactly one bucket at every width, so the three panels "
+            "always sum to the same total.",
+            fontsize=8,
+            color=INK_MUTED,
+            ha="center",
+            va="top",
+            transform=axes[1].transAxes,
+        )
+        return fig, axes

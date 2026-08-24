@@ -27,7 +27,10 @@ from nfl_simulator.plots import (  # noqa: E402
     SCOREBOARD_HOLDS,
     TOO_CLOSE,
     GameVerdict,
+    band_sweep,
+    bucket_label,
     luck_bars,
+    plot_band_sweep,
     plot_bootstrap_distribution,
     plot_luck_ledger,
     running_totals,
@@ -483,3 +486,159 @@ def test_the_legend_names_only_the_directions_the_game_actually_has():
     )
     labels = [t.get_text() for t in ax.get_legend().get_texts()]
     assert labels == ["moves the margin toward DET"]
+
+
+# --------------------------------------------------------------------------
+# the flip-band sweep — is 0.40–0.60 load-bearing?
+# --------------------------------------------------------------------------
+
+# A miniature league, chosen so each band width moves a known game between
+# buckets: dtw_home, actual_margin.
+SWEEP_GAMES = [
+    (0.054, 8.0),  # clear flip at every band — the bootstrap is nowhere near 0.5
+    (0.38, 6.0),  # a flip at the shipped band, too close once the band reaches 0.12
+    (0.548, 13.0),  # too close at the shipped band, holds once the band is under 0.048
+    (0.88, 10.0),  # holds at every band
+    (0.85, 0.0),  # a realized tie the scoreboard never named a winner for
+]
+
+
+def sweep_inputs():
+    return (
+        np.array([dtw for dtw, _ in SWEEP_GAMES]),
+        np.array([margin for _, margin in SWEEP_GAMES]),
+    )
+
+
+def test_the_sweep_labels_a_game_the_same_way_the_product_does():
+    """The sweep and the headline must not be able to disagree at the shipped band."""
+    for dtw, margin in SWEEP_GAMES:
+        assert bucket_label(dtw, margin) == verdict(dtw_home=dtw, actual_margin=margin).bucket
+
+
+def test_a_wider_band_swallows_a_game_the_shipped_band_calls_a_flip():
+    assert bucket_label(0.38, 6.0) == CLEAR_FLIP
+    assert bucket_label(0.38, 6.0, low=0.35, high=0.65) == TOO_CLOSE
+
+
+def test_a_narrower_band_lets_a_too_close_game_back_out():
+    assert bucket_label(0.548, 13.0) == TOO_CLOSE
+    assert bucket_label(0.548, 13.0, low=0.47, high=0.53) == SCOREBOARD_HOLDS
+
+
+def test_every_game_lands_in_exactly_one_bucket_at_every_width():
+    dtw, margin = sweep_inputs()
+    for row in band_sweep(dtw, margin):
+        assert row.clear_flip + row.too_close + row.scoreboard_holds == len(SWEEP_GAMES)
+
+
+def test_widening_the_band_can_only_add_to_too_close_to_call():
+    dtw, margin = sweep_inputs()
+    counts = [row.too_close for row in band_sweep(dtw, margin)]
+    assert counts == sorted(counts)
+
+
+def test_widening_the_band_can_only_take_away_from_the_two_decided_buckets():
+    dtw, margin = sweep_inputs()
+    rows = band_sweep(dtw, margin)
+    assert [r.clear_flip for r in rows] == sorted((r.clear_flip for r in rows), reverse=True)
+    assert [r.scoreboard_holds for r in rows] == sorted(
+        (r.scoreboard_holds for r in rows), reverse=True
+    )
+
+
+def test_a_zero_width_band_calls_nothing_too_close():
+    """The band's own null: with no band, the label is the binary DTW% flip."""
+    dtw, margin = sweep_inputs()
+    row = band_sweep(dtw, margin, half_widths=[0.0])[0]
+    assert (row.low, row.high) == (0.5, 0.5)
+    assert row.too_close == 0
+
+
+def test_the_default_sweep_lands_exactly_on_the_shipped_band():
+    """A robustness display whose grid misses the shipped choice cannot place it."""
+    dtw, margin = sweep_inputs()
+    shipped = [r for r in band_sweep(dtw, margin) if r.half_width == pytest.approx(0.10)]
+    assert len(shipped) == 1
+    assert (shipped[0].low, shipped[0].high) == (BAND_LOW, BAND_HIGH)
+
+
+def test_the_sweep_spans_the_range_the_round_asked_for():
+    dtw, margin = sweep_inputs()
+    rows = band_sweep(dtw, margin)
+    assert (rows[0].low, rows[0].high) == (0.5, 0.5)
+    assert (rows[-1].low, rows[-1].high) == pytest.approx((0.35, 0.65))
+
+
+def test_the_sweep_counts_the_ties_so_document_33s_count_can_be_recovered():
+    """Document 33 excluded realized ties from its flip counts; the product labels
+    them. Both readings have to be available from one row or they will diverge."""
+    dtw, margin = sweep_inputs()
+    row = band_sweep(dtw, margin, half_widths=[0.10])[0]
+    assert row.ties_outside_band == 1
+    assert row.clear_flip - row.ties_outside_band == 2
+
+
+def test_the_sweep_refuses_inputs_that_are_not_the_same_games():
+    with pytest.raises(ValueError, match="same length"):
+        band_sweep(np.array([0.5, 0.6]), np.array([3.0]))
+
+
+def test_the_sweep_figure_gives_each_bucket_its_own_panel():
+    dtw, margin = sweep_inputs()
+    fig, axes = plot_band_sweep(band_sweep(dtw, margin))
+    assert len(axes) == 3
+    titles = [ax.get_title(loc="left") for ax in axes]
+    assert titles == [CLEAR_FLIP, TOO_CLOSE, SCOREBOARD_HOLDS]
+
+
+def test_each_panel_scales_to_its_own_bucket_rather_than_to_the_largest():
+    """`scoreboard holds` is an order of magnitude bigger than the other two; one
+    shared axis would flatten the movement the figure exists to show."""
+    dtw, margin = sweep_inputs()
+    _fig, axes = plot_band_sweep(band_sweep(dtw, margin))
+    assert axes[1].get_ylim() != axes[2].get_ylim()
+
+
+def test_every_panel_marks_the_shipped_band():
+    dtw, margin = sweep_inputs()
+    _fig, axes = plot_band_sweep(band_sweep(dtw, margin))
+    for ax in axes:
+        rules = [line for line in ax.lines if len(set(line.get_xdata())) == 1]
+        assert any(x == pytest.approx(0.10) for line in rules for x in line.get_xdata())
+
+
+def test_the_shipped_counts_are_written_on_the_figure():
+    """A reader comparing this to the headline needs the number, not a pixel."""
+    dtw, margin = sweep_inputs()
+    rows = band_sweep(dtw, margin)
+    shipped = next(r for r in rows if r.half_width == pytest.approx(0.10))
+    _fig, axes = plot_band_sweep(rows)
+    written = [text.get_text() for ax in axes for text in ax.texts]
+    for count in (shipped.clear_flip, shipped.too_close, shipped.scoreboard_holds):
+        assert any(str(count) in text for text in written)
+
+
+def test_the_shipped_label_sits_clear_of_the_line_it_annotates():
+    """`too close to call` rises across the sweep, so a label above its point is a
+    label the line climbs through."""
+    dtw, margin = sweep_inputs()
+    _fig, axes = plot_band_sweep(band_sweep(dtw, margin))
+    falling, rising = axes[0].texts[0], axes[1].texts[0]
+    assert falling.get_va() == "bottom"
+    assert rising.get_va() == "top"
+
+
+def test_a_single_series_panel_carries_no_legend_box():
+    dtw, margin = sweep_inputs()
+    _fig, axes = plot_band_sweep(band_sweep(dtw, margin))
+    assert all(ax.get_legend() is None for ax in axes)
+
+
+def test_the_figure_says_what_is_being_swept():
+    dtw, margin = sweep_inputs()
+    fig, axes = plot_band_sweep(band_sweep(dtw, margin))
+    labels = " ".join(ax.get_xlabel() for ax in axes).lower()
+    assert "band" in labels
+    caption = " ".join(text.get_text() for text in fig.texts).lower()
+    assert "presentation" in caption
