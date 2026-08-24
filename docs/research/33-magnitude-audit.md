@@ -185,8 +185,8 @@ exactly 1.0, zero-width interval, 15 luck events. This is the case the product
 must handle without looking broken: a real ledger, a big shift, and a verdict
 that does not move.
 
-A useful third, if a mid-case is wanted: **`2025_17_DET_MIN`** — Detroit won by
-13, deserved margin 0.696, DTW% 0.548. The scoreboard says comfortable, the
+A useful third, if a mid-case is wanted: **`2025_17_DET_MIN`** — Minnesota won
+by 13, deserved margin 0.696, DTW% 0.548. The scoreboard says comfortable, the
 adjudication says coin flip, and the realized winner still holds a bare
 majority of draws.
 
@@ -212,6 +212,7 @@ which is being quoted (§2a).
 
 | Defect | Evidence | Status |
 |---|---|---|
+| §6 named Detroit as the winner of `2025_17_DET_MIN`, which Minnesota won by 13 | `dtw_games_v13.parquet` carries `actual_margin` +13.0 to the **home** team, and the home team in `2025_17_DET_MIN` is MIN | **Corrected 2026-08-24.** The game-id convention is away_home, and the away side was read as the winner of a positive margin. Only the team name was wrong — the margin, the deserved margin and DTW% 0.548 all stand, and DTW% 0.548 is the *home* share, so "the realized winner still holds a bare majority" was already right. The error never left this document: documents 34, 36, 37 and 38 all name MIN |
 | The first draft of §2 said the two flip definitions "disagree by 24 games" | §2a | **Corrected 2026-08-19.** 24 is the net difference; the disagreement count is 56. The erroneous figure was never quoted outside this document |
 | Two flip definitions disagree on 56 games | §2a | **Closed by the three-bucket presentation.** All 56 sit at DTW% 0.363–0.626; a "too close to call" band at 0.40–0.60 leaves 7 residual disagreements |
 | The 0.40–0.60 band is a presentation choice, not a fitted threshold | §2a | **Accepted and disclosed.** It is doc 33's own coin-flip band, chosen before this reconciliation and not tuned to minimise the residual |
