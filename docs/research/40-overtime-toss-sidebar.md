@@ -110,9 +110,11 @@ number.
   is **v1.1**; the share above it is **v1.3**. Without the version the two
   numbers look subtractable, and they are not — the panel says the figure
   *sizes* the toss rather than correcting the share.
-- **The interval caveat runs the full width of the widened figure.** It is a
-  footnote to the whole figure rather than to the plot alone, so it is left to
-  span both columns.
+- **The interval caveat is kept to the plot's own column.** *(Revised
+  2026-08-24 — §7a. It originally ran the full width of the widened figure, as a
+  footnote to the figure rather than to the plot, and on a six-paragraph panel
+  the two overprinted.)* It is a footnote to the plot, wrapped to the host axes'
+  width, so widening the figure for a sidebar cannot widen the caveat with it.
 
 ## 6. What this does and does not license
 
@@ -135,6 +137,30 @@ document 16 left it.
 | **`received` is first possession, not the toss** | Inherited from document 16 §6 | **Open.** Named in the panel rather than silently carried |
 | **The panel can overflow a short waterfall** | Six paragraphs need about 2.7 in; a two-event waterfall is 2.6 in tall | **Accepted.** `bbox_inches="tight"` includes the overflow rather than clipping it; the figure is merely bottom-heavy |
 | **The example games are chosen for what they exercise** | §4 | **Disclosed.** Neither is a typical overtime game and neither is offered as one |
+| **The interval caveat ran under the panel on a six-paragraph sidebar** | `57_overtime_2025_13_DEN_WAS_bootstrap.png` | **Fixed 2026-08-24** (addendum below) |
+
+### 7a. Addendum, 2026-08-24 — the caveat and the panel
+
+The caveat used matplotlib's `wrap=True`, which wraps to the **figure's** edge.
+`attach_overtime_sidebar` widens the figure, so the caveat widened with it and
+ran the full width of the widened figure — under the panel's last two
+paragraphs on `2025_13_DEN_WAS`, whose 2025-season era paragraph makes six.
+`2016_14_NYJ_SF`, one paragraph shorter, cleared it by luck rather than by
+design.
+
+The figure's width is not a boundary this module controls, so the caveat no
+longer wraps to it. `_wrap_to_width` measures each candidate line against the
+renderer and breaks it to the **host axes'** width, which `attach_overtime_sidebar`
+already holds at the inches it was drawn at. The footnote is therefore laid out
+before the figure ever grows, and cannot follow it. This reverses §5's original
+bullet, which is marked as revised rather than quietly rewritten.
+
+Two tests measure it: the six-paragraph panel and the five-paragraph one, each
+asserting the caveat's bounding box does not intersect the union of the panel's
+axes and its own text — the text is measured too, because a long panel overflows
+the axes it sits in (the third row of §7's register). Both examples regenerate
+with their replays still at 0.00e+00, and the caveat now sets in two lines
+inside the plot's column on every figure in documents 37 and 40.
 
 ## 8. Verification
 
@@ -143,3 +169,7 @@ uv run pytest -q                      309 passed
 uv run ruff check . && ruff format --check .   clean
 uv run python research/57_overtime_sidebar.py  reproduction ok, both replays 0.00e+00
 ```
+
+After the 2026-08-24 layout fix (§7a, and document 37 §7a): **318 passed** (nine
+new, written first), ruff clean, all four drivers re-run — `54`/`57` replays
+0.00e+00, `55` reconciliation 7.11e-15 across 2,761 games.

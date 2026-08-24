@@ -271,6 +271,61 @@ def test_the_interval_is_mirrored_when_the_away_side_is_favoured():
 
 
 # --------------------------------------------------------------------------
+# the figure's layout — measured, because a collision is invisible to an
+# assertion on the text itself
+# --------------------------------------------------------------------------
+
+
+def _rule_label_boxes(fig, ax) -> list:
+    """The two named rule labels' bounding boxes, in display pixels."""
+    fig.canvas.draw()
+    return [
+        text.get_window_extent()
+        for text in ax.texts
+        if text.get_text().startswith(("deserved", "realized"))
+    ]
+
+
+@pytest.mark.parametrize("gap", [0.0, 0.4, 1.0, 2.3])
+def test_the_two_rule_labels_never_overprint_when_the_margins_are_close(gap):
+    """`2025_13_DEN_WAS` printed "deserved -3.3" straight through "realized -1".
+
+    Both labels hang off the top of their own rule, so a game whose two margins
+    are within a label's width of each other stacks one on the other and neither
+    can be read."""
+    fig, ax = plot_bootstrap_distribution(
+        verdict(actual_margin=-1.0, deserved_margin=-1.0 - gap, draws=np.linspace(-12, 6, 512))
+    )
+    boxes = _rule_label_boxes(fig, ax)
+    assert len(boxes) == 2
+    assert not boxes[0].overlaps(boxes[1])
+    # A label moved out of the plot has somewhere else to be wrong: the subtitle
+    # sits just above the top spine.
+    subtitle = next(text for text in ax.texts if "deserve-to-win across" in text.get_text())
+    assert not any(box.overlaps(subtitle.get_window_extent()) for box in boxes)
+
+
+@pytest.mark.parametrize(
+    "deserved, realized",
+    [(-8.28, 8.0), (27.93, 39.0), (0.70, 13.0)],
+    ids=["2018_05_GB_DET", "2021_14_LV_KC", "2025_17_DET_MIN"],
+)
+def test_document_37_example_games_keep_their_rule_labels_clear(deserved, realized):
+    """The three shipped examples are far apart and were never the defect. They
+    are here so a fix for the close case cannot regress the common one."""
+    span = max(abs(deserved), abs(realized)) + 8
+    fig, ax = plot_bootstrap_distribution(
+        verdict(
+            actual_margin=realized,
+            deserved_margin=deserved,
+            draws=np.linspace(deserved - span / 2, deserved + span / 2, 512),
+        )
+    )
+    boxes = _rule_label_boxes(fig, ax)
+    assert not boxes[0].overlaps(boxes[1])
+
+
+# --------------------------------------------------------------------------
 # the luck ledger — arithmetic
 # --------------------------------------------------------------------------
 
@@ -772,3 +827,36 @@ def test_the_sidebar_attaches_to_the_waterfall_as_well_as_the_distribution():
     fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
     panel = attach_overtime_sidebar(fig, ax, game, toss())
     assert any(REPORTED_NOT_NEUTRALIZED in text.get_text() for text in panel.texts)
+
+
+def test_the_interval_caveat_stays_clear_of_the_sidebar_panel():
+    """`2025_13_DEN_WAS`: six paragraphs of panel, and the footnote ran under them.
+
+    The caveat wrapped to the figure's width, so widening the figure for a
+    sidebar widened the caveat with it and the two overprinted. The panel's own
+    text overflows the panel axes on a long note, so the test measures both."""
+    game = verdict()
+    fig, ax = plot_bootstrap_distribution(game)
+    panel = attach_overtime_sidebar(fig, ax, game, toss(season=2025, delta_dtw_home=0.136))
+    fig.canvas.draw()
+
+    caveats = [text for text in ax.texts if "89% interval" in text.get_text()]
+    assert len(caveats) == 1
+    occupied = matplotlib.transforms.Bbox.union(
+        [panel.get_window_extent()] + [text.get_window_extent() for text in panel.texts]
+    )
+    assert not caveats[0].get_window_extent().overlaps(occupied)
+
+
+def test_a_five_paragraph_sidebar_also_clears_the_interval_caveat():
+    """`2016_14_NYJ_SF`: an old-rules game, one paragraph shorter, already clear."""
+    game = verdict(dtw_home=0.36)
+    fig, ax = plot_bootstrap_distribution(game)
+    panel = attach_overtime_sidebar(fig, ax, game, toss(season=2016, delta_dtw_home=-0.214))
+    fig.canvas.draw()
+
+    caveat = next(text for text in ax.texts if "89% interval" in text.get_text())
+    occupied = matplotlib.transforms.Bbox.union(
+        [panel.get_window_extent()] + [text.get_window_extent() for text in panel.texts]
+    )
+    assert not caveat.get_window_extent().overlaps(occupied)

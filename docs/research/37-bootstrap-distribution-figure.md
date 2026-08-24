@@ -132,6 +132,32 @@ free; the module uses inclusive.
 | A realized tie gets no bucket from document 33, which excluded all 10 from its flip counts | **Decided, disclosed.** The module labels a tie outside the band a *clear flip* — the scoreboard named nobody and the bootstrap does. No example game is a tie |
 | The one-point bin width is a presentation choice, not derived | **Accepted and disclosed.** It is not fitted to any game; §4 gives the reason |
 | Degeneracy uses document 10 Gate V-3's ε = 0.001 unchanged | **Carried forward**, not re-argued |
+| The two rule labels overprint when the deserved and realized margins are close | **Fixed 2026-08-24** (addendum below) |
+
+### 7a. Addendum, 2026-08-24 — the rule labels
+
+Both rule labels hung inside the top of the plot, each to the right of its own
+rule, so a game whose two margins are within a label's width of each other
+printed one straight through the other. `2025_13_DEN_WAS` — deserved −3.3
+against a realized −1 — was the case that exposed it; none of this document's
+three examples is close enough to have shown it.
+
+The labels are now **measured** rather than assumed apart: after both are
+placed, `_lift_colliding_label` asks the renderer for their bounding boxes and,
+only if they intersect, moves the **left-hand** one above the top spine, into
+the empty band between the plot and its subtitle. Two choices are load-bearing.
+Left-hand, because a label runs to the right of its own rule — lifting that one
+also takes it off the other rule, which was otherwise striking it through.
+Above the spine rather than a second row inside the plot, because the rules stop
+at the spine while a second row lands the text on whatever bar is tallest at
+that margin, which on a realized-margin rule is often the tallest bar in the
+figure.
+
+Four tests over margin gaps 0.0, 0.4, 1.0 and 2.3 assert the two boxes do not
+intersect, and that neither lands on the subtitle; three more assert the boxes
+stay clear on this document's three examples, which were never the defect and
+are there so the fix cannot regress the common case. All three figures
+regenerate unchanged, with the replay still at 0.00e+00.
 
 ## 8. Verification
 

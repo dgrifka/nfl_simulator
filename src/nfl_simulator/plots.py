@@ -33,6 +33,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Patch
+from matplotlib.text import Annotation, Text
 
 # Document 10 Gate V-3's convention: a game whose verdict never changes across
 # the bootstrap. Its interval is a point, and reporting one is misleading.
@@ -204,7 +205,70 @@ def verdict_from_row(row: dict, margin_draws: np.ndarray) -> GameVerdict:
 # --------------------------------------------------------------------------
 
 
-def _rule(ax, x: float, label: str, *, color: str, dashes, weight: float) -> None:
+def _renderer(fig):
+    """A renderer to measure text with.
+
+    Layout rules that guess how wide a string is are wrong on the first game
+    that proves them wrong, so this module measures instead. The figures are
+    drawn to PNG, so the canvas can always supply one.
+    """
+    fig.canvas.draw()
+    return fig.canvas.get_renderer()
+
+
+def _wrap_to_width(fig, text: Text, width_px: float) -> None:
+    """Re-wrap ``text`` to ``width_px``, in place, by measuring each candidate line.
+
+    Matplotlib's own ``wrap=True`` wraps to the *figure* edge, which is not a
+    boundary this module controls: ``attach_overtime_sidebar`` widens the figure,
+    and a caveat wrapped to it widens with it and runs under the sidebar.
+    """
+    renderer = _renderer(fig)
+    font = text.get_fontproperties()
+
+    def too_wide(line: str) -> bool:
+        return renderer.get_text_width_height_descent(line, font, False)[0] > width_px
+
+    lines: list[str] = []
+    current = ""
+    for word in text.get_text().split():
+        candidate = f"{current} {word}" if current else word
+        if current and too_wide(candidate):
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+
+    text.set_wrap(False)
+    text.set_text("\n".join(lines))
+
+
+def _lift_colliding_label(fig, first: Annotation, second: Annotation) -> None:
+    """Separate two rule labels that print on top of each other.
+
+    Both labels hang inside the top of the plot off their own rule, so a game
+    whose deserved and realized margins are close prints one through the other —
+    `2025_13_DEN_WAS` at −3.3 and −1 was unreadable. The **left-hand** label moves
+    *above* the top spine, into the empty band between the plot and its subtitle.
+
+    Two choices are load-bearing. It is the left-hand label because a label runs
+    to the right of its own rule: lifting that one also takes it off the other
+    rule, which it was otherwise struck through by. And it goes above the spine
+    rather than onto a second row inside the plot, because the rules stop at the
+    spine and the band above it is empty, whereas a second row lands the text on
+    whatever bar is tallest at that margin.
+    """
+    renderer = _renderer(fig)
+    if not first.get_window_extent(renderer).overlaps(second.get_window_extent(renderer)):
+        return
+    lifted = min((first, second), key=lambda label: label.xy[0])
+    lifted.set_verticalalignment("bottom")
+    lifted.xyann = (4, 3)
+
+
+def _rule(ax, x: float, label: str, *, color: str, dashes, weight: float) -> Annotation:
     """A vertical reference rule with its label attached, never colour alone."""
     ax.plot(
         [x, x],
@@ -216,7 +280,7 @@ def _rule(ax, x: float, label: str, *, color: str, dashes, weight: float) -> Non
         zorder=4,
         clip_on=False,
     )
-    ax.annotate(
+    return ax.annotate(
         label,
         xy=(x, 1.0),
         xycoords=ax.get_xaxis_transform(),
@@ -304,7 +368,7 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             )
 
         _rule(ax, 0.0, "", color=INK_MUTED, dashes=(2, 3), weight=1.0)
-        _rule(
+        deserved_label = _rule(
             ax,
             verdict.deserved_margin,
             f"deserved {verdict.deserved_margin:+.1f}",
@@ -312,7 +376,7 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             dashes=(5, 3),
             weight=1.6,
         )
-        _rule(
+        realized_label = _rule(
             ax,
             verdict.actual_margin,
             f"realized {verdict.actual_margin:+.0f}",
@@ -344,7 +408,7 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             color=INK_MUTED,
             va="bottom",
         )
-        ax.text(
+        caveat = ax.text(
             0,
             -0.42,
             verdict.interval_note(),
@@ -352,8 +416,13 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             fontsize=8,
             color=INK_MUTED,
             va="top",
-            wrap=True,
         )
+        # The caveat is a footnote to the plot and is wrapped to the plot's own
+        # width. It used to wrap to the figure's, which `attach_overtime_sidebar`
+        # widens — the footnote then ran the full width of the widened figure and
+        # under the sidebar's paragraphs.
+        _wrap_to_width(fig, caveat, ax.get_window_extent().width)
+        _lift_colliding_label(fig, deserved_label, realized_label)
         return fig, ax
 
 
