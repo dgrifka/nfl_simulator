@@ -246,6 +246,13 @@ uv run python -m nfl_simulator.ingest          # cached; re-running is a no-op
 uv run python -m nfl_simulator.ingest --force  # re-download
 ```
 
+**Credit.** The play-by-play, schedules, team colours and club marks all come
+from the [nflverse](https://github.com/nflverse) project — `nflreadpy` on top of
+the `nflfastR` play-by-play data — whose licence asks that its data be credited
+wherever it is used. Every figure this repo renders carries `Data: nflverse` in
+its watermark for that reason. Club logos are the clubs' own marks, cached under
+the gitignored `data/` directory for rendering and never redistributed here.
+
 ## Setup
 
 ```bash

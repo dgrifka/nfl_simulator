@@ -19,6 +19,7 @@ from matplotlib.colors import to_rgb
 from PIL import Image
 
 from nfl_simulator import teams as teams_module
+from nfl_simulator.style import PALETTE
 from nfl_simulator.teams import (
     CLASH_DISTANCE,
     FALLBACK_COLORS,
@@ -128,17 +129,71 @@ def test_a_cached_logo_is_read_without_touching_the_network(table, tmp_path):
     synthetic_logo(tmp_path / "OAK.png")
     logo = team_logo("OAK", cache_dir=tmp_path)
     assert logo is not None
-    assert logo.shape == (4, 4, 4)
+    assert logo.ndim == 3 and logo.shape[2] == 4, "RGBA, ready for OffsetImage"
 
 
 def test_the_near_white_surround_is_knocked_out_so_a_logo_sits_on_cream(table, tmp_path):
-    """An un-knocked logo prints as a white postage stamp on the cream surface."""
+    """An un-knocked logo prints as a white postage stamp on the cream surface.
+
+    The fixture is one ink row in three near-white ones, so a knocked-out and
+    cropped logo is exactly that row: nothing opaque is lost, nothing white is
+    kept."""
     synthetic_logo(tmp_path / "OAK.png")
     logo = team_logo("OAK", cache_dir=tmp_path)
-    alpha = logo[:, :, 3]
-    assert (alpha[[0, 1, 3], :] == 0).all(), "near-white surround should be transparent"
-    assert (alpha[2, :] == 255).all(), "the mark itself should be opaque"
+    assert logo.shape[:2] == (1, 4)
+    assert (logo[:, :, 3] == 255).all(), "what survives the crop is the mark, fully opaque"
 
 
 def test_an_unknown_team_has_no_logo_and_says_so_quietly(table, tmp_path):
     assert team_logo("XYZ", cache_dir=tmp_path) is None
+
+
+def transparent_bordered_logo(path) -> None:
+    """A 8x8 PNG whose mark is a 6x2 band with near-white padding all round.
+
+    ESPN's Jets file is this shape at 4096 px: a square canvas holding a wide,
+    short wordmark. Fitted by its canvas the mark comes out unreadably small.
+    """
+    pixels = np.full((8, 8, 3), 250, dtype=np.uint8)
+    pixels[3:5, 1:7] = (20, 40, 200)
+    Image.fromarray(pixels, mode="RGB").save(path)
+
+
+def test_a_logo_is_cropped_to_the_mark_rather_than_to_its_canvas(table, tmp_path):
+    transparent_bordered_logo(tmp_path / "OAK.png")
+    logo = team_logo("OAK", cache_dir=tmp_path)
+    assert logo.shape[:2] == (2, 6), "the padding should be gone, the mark kept whole"
+    assert (logo[:, :, 3] == 255).all()
+
+
+def test_cropping_leaves_a_mark_that_fills_its_canvas_alone(table, tmp_path):
+    """A logo with no padding is returned at its own size, not shrunk."""
+    synthetic_logo(tmp_path / "OAK.png", near_white=(10, 10, 10))
+    assert team_logo("OAK", cache_dir=tmp_path).shape[:2] == (4, 4)
+
+
+def test_a_logo_that_is_entirely_padding_is_returned_rather_than_cropped_away(table, tmp_path):
+    """Never return a zero-sized image: an empty crop is worse than the original."""
+    Image.fromarray(np.full((4, 4, 3), 255, dtype=np.uint8), mode="RGB").save(tmp_path / "OAK.png")
+    logo = team_logo("OAK", cache_dir=tmp_path)
+    assert logo.shape[:2] == (4, 4)
+
+
+# --------------------------------------------------------------------------
+# staying clear of the figures' own marks
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "primary, team",
+    [("#0B162A", "CHI"), ("#000000", "LV"), ("#203731", "GB"), ("#03202F", "HOU")],
+    ids=["CHI", "LV", "GB", "HOU"],
+)
+def test_the_anchor_neutral_is_clear_of_every_club_a_total_could_be_confused_with(primary, team):
+    """The waterfall's two totals must never be a colour a club also wears.
+
+    These four are the league's darkest primaries, and against #1A1A1A ink they
+    sit at 0.087, 0.177, 0.147 and 0.124 — no threshold separates the ones that
+    would need moving from the ones that would not. The anchor neutral is chosen
+    so the question never arises."""
+    assert colour_distance(primary, PALETTE["anchor"]) >= CLASH_DISTANCE

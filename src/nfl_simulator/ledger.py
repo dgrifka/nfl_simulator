@@ -95,3 +95,27 @@ class Ledger:
 
     def __iter__(self) -> Iterator[LedgerEntry]:
         return iter(self.entries)
+
+
+def with_actual(frame: pl.DataFrame) -> pl.DataFrame:
+    """Add the ``actual`` branch column to a ledger frame that does not carry it.
+
+    The v1.3 artifacts were written before the column was named ``actual``, and
+    they are the committed record of published numbers — re-simulating 2,761
+    games to rename a column would replace an artifact rather than read it. It
+    does not need replacing: the identity this module is built on,
+
+        luck_epa = (actual - expected) * swing
+
+    determines ``actual`` exactly from the three terms every ledger row carries,
+    and ``swing`` is an EPA branch value that is never zero. Recovering the
+    branch rather than storing it also means the label a figure prints beside a
+    bar cannot disagree with the bar.
+
+    A frame that already names the column is returned unchanged.
+    """
+    if "actual" in frame.columns:
+        return frame
+    return frame.with_columns(
+        (pl.col("luck_epa") / pl.col("swing") + pl.col("expected")).round().alias("actual")
+    )

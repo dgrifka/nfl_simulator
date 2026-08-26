@@ -26,6 +26,7 @@ would be pointing readers at somebody else.
 from __future__ import annotations
 
 import contextlib
+from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -43,10 +44,21 @@ PALETTE = {
     # team: a team is an identity, and identity never borrows a status colour.
     "good": "#2E7D32",
     "bad": "#C03A2B",
-    # Totals and other not-a-team ink.
-    "anchor": "#8A8985",
+    # Totals and other not-a-team marks. Chosen by measurement, not by taste:
+    # it is at least 0.281 in RGB from every one of the 32 club primaries (the
+    # nearest is Minnesota's #4F2683), well past the 0.20 the clash rule calls a
+    # collision. Ink would be simpler and is wrong — #1A1A1A is 0.087 from
+    # Chicago's navy, 0.124 from Houston's and 0.177 from the Raiders' black, so
+    # a total drawn in ink is a colour four clubs also wear.
+    "anchor": "#5E5B55",
     "row_alt": "#F4EFE6",
 }
+
+# Bar alphas. The home team's fill is the solid one and the away team's the
+# lighter, which is a second, non-colour cue for which side is which — and the
+# same cue the baseball run-distribution chart uses.
+HOME_ALPHA = 0.78
+AWAY_ALPHA = 0.55
 
 # Brand. `WATERMARK` is the one string stamped on every PNG.
 BRAND_HANDLE = "@[TBD]"
@@ -56,10 +68,29 @@ WATERMARK = f"{DATA_CREDIT} | {BRAND_HANDLE}"
 # Font preference order. Matplotlib walks the list and uses the first family
 # present on the system; DejaVu Sans ships with matplotlib, so the last entry
 # always resolves and a machine without Inter still gets a readable figure.
-_BODY_FONTS = ["Inter", "IBM Plex Sans", "Helvetica Neue", "DejaVu Sans"]
-_HEADING_FONTS = ["Oswald", "Barlow Condensed", "DejaVu Sans"]
+_BODY_PREFERENCE = ["Inter", "IBM Plex Sans", "Helvetica Neue", "DejaVu Sans"]
+_HEADING_PREFERENCE = ["Oswald", "Barlow Condensed", "DejaVu Sans"]
 
 _BASE_STYLE_APPLIED = False
+
+
+@cache
+def _installed(preference: tuple[str, ...]) -> tuple[str, ...]:
+    """The families from ``preference`` this machine actually has, plus DejaVu.
+
+    Matplotlib is happy to be handed families it cannot find — it walks the list
+    — but it logs a warning for *every text object* drawn, which buries a
+    driver's real output under a thousand `findfont` lines. Resolving the list
+    once here means the rcParam only ever names fonts that exist.
+    """
+    installed = {font.name for font in font_manager.fontManager.ttflist}
+    found = tuple(family for family in preference if family in installed)
+    return found or ("DejaVu Sans",)
+
+
+def body_font() -> list[str]:
+    """The body family list, resolved against what is installed."""
+    return list(_installed(tuple(_BODY_PREFERENCE)))
 
 
 def apply_base_style() -> None:
@@ -72,17 +103,17 @@ def apply_base_style() -> None:
     global _BASE_STYLE_APPLIED
 
     if not _BASE_STYLE_APPLIED:
-        # A machine without Inter is not an error — matplotlib falls through the
-        # family list to DejaVu — so a failed probe is suppressed rather than raised.
+        # A machine without Inter is not an error — the preference list falls
+        # through to DejaVu — so a failed probe is suppressed rather than raised.
         with contextlib.suppress(Exception):
-            font_manager.fontManager.findfont(_BODY_FONTS[0], fallback_to_default=True)
+            font_manager.fontManager.findfont(_BODY_PREFERENCE[0], fallback_to_default=True)
         _BASE_STYLE_APPLIED = True
 
     rcParams["figure.facecolor"] = PALETTE["bg"]
     rcParams["axes.facecolor"] = PALETTE["bg"]
     rcParams["savefig.facecolor"] = PALETTE["bg"]
 
-    rcParams["font.family"] = _BODY_FONTS
+    rcParams["font.family"] = body_font()
     rcParams["font.size"] = 11
     rcParams["text.color"] = PALETTE["text"]
 
@@ -111,7 +142,7 @@ def apply_base_style() -> None:
 
 def heading_font() -> list[str]:
     """The heading family list, for use as ``fontfamily=...``."""
-    return list(_HEADING_FONTS)
+    return list(_installed(tuple(_HEADING_PREFERENCE)))
 
 
 def rc_style() -> dict:
@@ -125,7 +156,7 @@ def rc_style() -> dict:
         "figure.facecolor": PALETTE["bg"],
         "axes.facecolor": PALETTE["bg"],
         "savefig.facecolor": PALETTE["bg"],
-        "font.family": _BODY_FONTS,
+        "font.family": body_font(),
         "font.size": 10,
         "text.color": PALETTE["text"],
         "axes.labelcolor": PALETTE["text_muted"],
@@ -137,6 +168,19 @@ def rc_style() -> dict:
         "axes.spines.left": False,
         "figure.dpi": 160,
     }
+
+
+# Euclidean distance in RGB, and the blend applied when a pair falls under it.
+# Both are the baseball run-distribution chart's numbers
+# (`Simulator/visualizations.py:453-457`).
+CLASH_DISTANCE = 0.20
+CLASH_LIGHTEN = 0.45
+
+
+def colour_distance(first: str, second: str) -> float:
+    """Euclidean distance between two colours in RGB, each channel on 0-1."""
+    a, b = to_rgb(first), to_rgb(second)
+    return sum((x - y) ** 2 for x, y in zip(a, b, strict=True)) ** 0.5
 
 
 def lighten(color: str, amount: float = 0.5) -> str:
@@ -201,7 +245,7 @@ def draw_title_block(
         color=PALETTE["text"],
         ha="left",
         va="top",
-        fontfamily=_HEADING_FONTS,
+        fontfamily=heading_font(),
         transform=ax.transAxes,
     )
 

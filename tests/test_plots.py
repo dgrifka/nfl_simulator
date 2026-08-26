@@ -14,11 +14,15 @@ presents it.
 
 from __future__ import annotations
 
+import re
+
 import matplotlib
 import numpy as np
 import pytest
 
 matplotlib.use("Agg")
+
+from PIL import Image  # noqa: E402
 
 from nfl_simulator.plots import (  # noqa: E402
     BAND_HIGH,
@@ -35,12 +39,20 @@ from nfl_simulator.plots import (  # noqa: E402
     bucket_label,
     luck_bars,
     overtime_lines,
+    pill_colour,
+    plain_label,
     plot_band_sweep,
     plot_bootstrap_distribution,
+    plot_game_card,
     plot_luck_ledger,
     running_totals,
 )
-from nfl_simulator.style import PALETTE  # noqa: E402
+from nfl_simulator.style import (  # noqa: E402
+    CLASH_DISTANCE,
+    PALETTE,
+    colour_distance,
+    finalize,
+)
 
 
 def verdict(
@@ -207,7 +219,7 @@ def test_the_figure_marks_the_zero_line_that_separates_the_two_winners():
 def test_the_figure_titles_carry_the_headline():
     fig, ax = plot_bootstrap_distribution(verdict(dtw_home=0.78))
     text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
-    assert "MIN 78% / DET 22%" in text
+    assert "DTW: MIN 78% • DET 22%" in text
 
 
 def test_the_figure_carries_the_interval_caveat():
@@ -275,14 +287,21 @@ def test_the_interval_is_mirrored_when_the_away_side_is_favoured():
 # --------------------------------------------------------------------------
 
 
+CALLOUT = re.compile(r"^(Actual|Deserved) [+-]")
+
+
+def _callouts(ax) -> list:
+    """The two boxed rule labels.
+
+    Matched on the signed number, not on the word: the header's subtitle also
+    opens with "Actual", and a looser match picked it up as a third rule."""
+    return [text for text in ax.texts if CALLOUT.match(text.get_text())]
+
+
 def _rule_label_boxes(fig, ax) -> list:
     """The two named rule labels' bounding boxes, in display pixels."""
     fig.canvas.draw()
-    return [
-        text.get_window_extent()
-        for text in ax.texts
-        if text.get_text().startswith(("deserved", "actual"))
-    ]
+    return [text.get_window_extent() for text in _callouts(ax)]
 
 
 @pytest.mark.parametrize("gap", [0.0, 0.4, 1.0, 2.3])
@@ -300,7 +319,7 @@ def test_the_two_rule_labels_never_overprint_when_the_margins_are_close(gap):
     assert not boxes[0].overlaps(boxes[1])
     # A label moved out of the plot has somewhere else to be wrong: the subtitle
     # sits just above the top spine.
-    subtitle = next(text for text in ax.texts if "deserve-to-win across" in text.get_text())
+    subtitle = next(text for text in ax.texts if text.get_text().startswith("Actual: "))
     assert not any(box.overlaps(subtitle.get_window_extent()) for box in boxes)
 
 
@@ -420,12 +439,12 @@ def test_a_floor_of_zero_shows_every_event():
     assert len(luck_bars(rows, points_per_epa=PPE, floor=0.0)) == 5
 
 
-def test_a_bar_is_labelled_by_its_class_component_and_the_team_charged():
+def test_a_bar_is_labelled_in_the_plain_words_the_figure_prints():
     (bar,) = luck_bars(
         [ledger_row(2.0, component="field_goal", event_class="45-49 yd", charged_team="MIN")],
         points_per_epa=PPE,
     )
-    assert bar.label == "45-49 yd field goal — MIN"
+    assert bar.label == "MIN 45-49 yd field goal"
 
 
 def test_an_extra_point_does_not_repeat_itself_in_its_label():
@@ -433,7 +452,7 @@ def test_an_extra_point_does_not_repeat_itself_in_its_label():
         [ledger_row(2.0, component="extra_point", event_class="extra point", charged_team="GB")],
         points_per_epa=PPE,
     )
-    assert bar.label == "extra point — GB"
+    assert bar.label == "GB extra point"
 
 
 def test_running_totals_start_at_the_actual_margin_and_land_on_the_deserved_one():
@@ -480,8 +499,8 @@ def test_the_waterfall_names_both_ends_with_their_margins():
         verdict(actual_margin=8.0, deserved_margin=8.0 - 3.42 * PPE), rows, points_per_epa=PPE
     )
     labels = [label.get_text() for label in ax.get_yticklabels()]
-    assert any("actual" in label for label in labels)
-    assert any("deserved" in label for label in labels)
+    assert any("Actual" in label for label in labels)
+    assert any("Deserved" in label for label in labels)
 
 
 def test_the_waterfall_legends_both_directions_so_colour_is_never_alone():
@@ -505,13 +524,11 @@ def test_a_game_with_no_luck_events_is_drawn_as_a_note_rather_than_a_waterfall()
 
 def test_the_waterfall_carries_the_headline_and_the_bucket():
     rows = [ledger_row(3.42, play_id=1.0)]
-    fig, ax = plot_luck_ledger(
-        verdict(dtw_home=0.78, actual_margin=8.0, deserved_margin=8.0 - 3.42 * PPE),
-        rows,
-        points_per_epa=PPE,
-    )
+    game = verdict(dtw_home=0.78, actual_margin=8.0, deserved_margin=8.0 - 3.42 * PPE)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
     text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
-    assert "MIN 78% / DET 22%" in text
+    assert "DTW: MIN 78% • DET 22%" in text
+    assert game.bucket in text
 
 
 def test_the_waterfall_says_the_order_of_the_bars_does_not_change_the_total():
@@ -533,7 +550,11 @@ def test_the_value_labels_stay_inside_the_frame():
     )
     fig.canvas.draw()
     frame = ax.get_window_extent()
-    for text in ax.texts:
+    # The bars' own value labels. The header and footers are anchored to the
+    # frame and are meant to run its full width; they are not what ran off it.
+    values = [text for text in ax.texts if re.fullmatch(r"[+-]\d+\.\d+", text.get_text())]
+    assert values
+    for text in values:
         box = text.get_window_extent()
         assert frame.x0 <= box.x0 and box.x1 <= frame.x1, f"{text.get_text()!r} runs off the frame"
 
@@ -859,3 +880,277 @@ def test_a_five_paragraph_sidebar_also_clears_the_interval_caveat():
         [panel.get_window_extent()] + [text.get_window_extent() for text in panel.texts]
     )
     assert not caveat.get_window_extent().overlaps(occupied)
+
+
+# --------------------------------------------------------------------------
+# the shared header grammar — the brand round, 2026-08-26
+# --------------------------------------------------------------------------
+
+
+def branded(**kwargs) -> GameVerdict:
+    """A verdict carrying the scoreboard facts a header needs."""
+    defaults = {
+        "game_id": "2018_05_GB_DET",
+        "home_team": "DET",
+        "away_team": "GB",
+        "home_score": 31,
+        "away_score": 23,
+        "game_date": "2018-10-07",
+        "dtw_home": 0.05,
+        "actual_margin": 8.0,
+        "deserved_margin": -8.28,
+    }
+    return verdict(**(defaults | kwargs))
+
+
+def figure_text(fig) -> str:
+    return " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
+
+
+def test_the_subtitle_states_the_scoreboard_the_date_and_both_shares():
+    line = branded().subtitle_line()
+    assert "Actual: GB 23 - DET 31" in line
+    assert "(10/07/2018)" in line
+    assert "DTW: DET 5% • GB 95%" in line or "DTW: GB 95% • DET 5%" in line
+
+
+def test_the_subtitle_falls_back_to_the_margin_when_no_score_is_known():
+    """A verdict built from the summary alone still has a header to fill."""
+    line = verdict(home_team="MIN", away_team="DET", actual_margin=13.0).subtitle_line()
+    assert "MIN" in line and "13" in line
+    assert "None" not in line
+
+
+def test_the_verdict_pill_is_red_on_a_flip_and_green_when_the_scoreboard_holds():
+    assert pill_colour(CLEAR_FLIP) == PALETTE["bad"]
+    assert pill_colour(SCOREBOARD_HOLDS) == PALETTE["good"]
+    assert pill_colour(TOO_CLOSE) == PALETTE["text_muted"]
+
+
+def test_the_verdict_pill_is_drawn_as_a_filled_shape_not_bare_text():
+    fig, ax = plot_bootstrap_distribution(branded())
+    pill = next(t for t in ax.texts if t.get_text() == CLEAR_FLIP)
+    assert pill.get_bbox_patch() is not None
+
+
+@pytest.mark.parametrize("bucket_dtw", [0.05, 0.55, 0.86], ids=["flip", "too-close", "holds"])
+def test_the_pill_clears_the_heading_and_the_subtitle_it_shares_a_row_with(bucket_dtw):
+    """`LV_KC_9-48--0-100_dtw.png`: "scoreboard holds" printed through the heading.
+
+    Drawn at the real draw count, so the heading is the full-width
+    "Deserve-to-Win - 160,000 luck re-flips" the shipped settings produce rather
+    than a short one a fixture happened to make."""
+    game = branded(dtw_home=bucket_dtw, draws=np.linspace(-20, 6, 160_000))
+    fig, ax = plot_bootstrap_distribution(game)
+    fig.canvas.draw()
+    pill = next(t for t in ax.texts if t.get_text() == game.bucket)
+    heading = next(t for t in ax.texts if t.get_text().startswith("Deserve-to-Win"))
+    subtitle = next(t for t in ax.texts if t.get_text().startswith("Actual: "))
+    box = pill.get_window_extent()
+    assert not box.overlaps(heading.get_window_extent()), "the pill runs into the heading"
+    assert not box.overlaps(subtitle.get_window_extent()), "the pill runs into the subtitle"
+
+
+def test_the_pill_stays_clear_of_the_corner_the_watermark_is_stamped_into(tmp_path):
+    """The credit is stamped on the saved pixels, so the pill has to leave it room."""
+    game = branded(draws=np.linspace(-20, 6, 160_000))
+    fig, ax = plot_bootstrap_distribution(game)
+    path = finalize(fig, tmp_path / "corner.png")
+    pixels = np.asarray(Image.open(path).convert("RGB"), dtype=float)
+    height, width = pixels.shape[:2]
+    corner = pixels[: int(height * 0.055), int(width * 0.86) :]
+    # The pill is a saturated fill; the credit is mid-grey on cream. Nothing in
+    # the corner may be as dark or as coloured as a pill.
+    spread = corner.max(axis=2) - corner.min(axis=2)
+    assert spread.max() < 40, "something coloured is in the watermark's corner"
+
+
+def test_a_degenerate_game_legends_only_the_side_that_has_bars():
+    """`LV_KC`: KC wins every re-flip, and a key for an absent colour sends a
+    reader hunting the figure for it."""
+    fig, ax = plot_bootstrap_distribution(branded(dtw_home=1.0, draws=np.linspace(15, 40, 512)))
+    labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert labels == ["DET wins"]
+
+
+def test_the_distribution_heading_counts_the_re_flips_it_actually_drew():
+    fig, ax = plot_bootstrap_distribution(branded(draws=np.linspace(-12, 6, 1000)))
+    assert "1,000 luck re-flips" in figure_text(fig)
+
+
+# --------------------------------------------------------------------------
+# the rule callouts
+# --------------------------------------------------------------------------
+
+
+def test_the_rule_callouts_are_boxed_so_they_read_over_the_bars():
+    fig, ax = plot_bootstrap_distribution(branded())
+    callouts = _callouts(ax)
+    assert len(callouts) == 2
+    assert all(t.get_bbox_patch() is not None for t in callouts)
+
+
+def test_the_callouts_name_the_two_margins_in_derek_s_wording():
+    fig, ax = plot_bootstrap_distribution(branded())
+    text = figure_text(fig)
+    assert "Actual +8" in text
+    assert "Deserved -8.3" in text
+
+
+def test_the_bars_wear_the_team_colours_they_are_handed():
+    fig, ax = plot_bootstrap_distribution(branded(), colors=("#0076B6", "#203731"))
+    faces = {p.get_facecolor()[:3] for p in ax.patches}
+    assert matplotlib.colors.to_rgb("#0076B6") in faces
+    assert matplotlib.colors.to_rgb("#203731") in faces
+
+
+# --------------------------------------------------------------------------
+# plain-word event labels
+# --------------------------------------------------------------------------
+
+
+def test_a_made_field_goal_reads_as_a_sentence_with_its_distance():
+    row = ledger_row(-1.0, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    label = plain_label(row | {"actual": 1.0, "kick_distance": 42.0})
+    assert label == "GB 42-yd field goal, made"
+
+
+def test_a_field_goal_without_a_distance_falls_back_to_its_class():
+    row = ledger_row(3.7, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    assert plain_label(row | {"actual": 0.0}) == "GB 40-44 yd field goal, missed"
+
+
+def test_a_missed_extra_point_does_not_repeat_the_word_extra_point():
+    row = ledger_row(0.95, component="extra_point", event_class="extra point", charged_team="GB")
+    assert plain_label(row | {"actual": 0.0}) == "GB extra point, missed"
+
+
+def test_a_lost_fumble_names_who_recovered_it():
+    row = ledger_row(2.17, component="fumble", event_class="pass/live", charged_team="DET")
+    label = plain_label(row | {"actual": 0.0, "opponent": "GB"})
+    assert label == "DET fumble on a pass, recovered by GB"
+
+
+def test_a_fumble_the_fumbling_team_recovered_reads_as_retained():
+    """ "DET fumble, recovered by DET" says the same thing twice."""
+    row = ledger_row(-1.0, component="fumble", event_class="run/live", charged_team="DET")
+    assert plain_label(row | {"actual": 1.0, "opponent": "GB"}) == "DET fumble on a run, retained"
+
+
+def test_an_aborted_snap_says_so_rather_than_calling_itself_a_run():
+    row = ledger_row(2.7, component="fumble", event_class="run/aborted", charged_team="DET")
+    label = plain_label(row | {"actual": 0.0, "opponent": "GB"})
+    assert label == "DET fumble on an aborted run, recovered by GB"
+
+
+def test_a_label_with_no_branch_recorded_still_names_the_event():
+    """Never invent an outcome: a row without its branch gets no outcome clause."""
+    row = ledger_row(2.17, component="fumble", event_class="punt/live", charged_team="DET")
+    assert plain_label(row) == "DET fumble on a punt"
+
+
+# --------------------------------------------------------------------------
+# the waterfall, restyled
+# --------------------------------------------------------------------------
+
+
+HOW_TO_READ = (
+    "Start at the actual margin. Each bar is one luck event re-priced at its "
+    "expectation. The last bar is the margin the game deserved."
+)
+
+
+def waterfall(game=None, rows=None, **kwargs):
+    """A waterfall whose single bar reconciles with whatever game it is handed."""
+    game = game or branded()
+    if rows is None:
+        luck_epa = (game.actual_margin - game.deserved_margin) / PPE
+        rows = [ledger_row(luck_epa, play_id=1.0)]
+    return plot_luck_ledger(game, rows, points_per_epa=PPE, **kwargs)
+
+
+def test_the_waterfall_says_how_to_read_itself():
+    fig, ax = waterfall()
+    assert HOW_TO_READ in figure_text(fig).replace("\n", " ")
+
+
+def test_the_verdict_pill_never_comes_down_onto_the_how_to_read_caption():
+    """`DET_MIN_10-23--45-55_luck_ledger.png`: the pill's box sat on the caption's
+    last words, so the caption is wrapped to the room the pill leaves."""
+    fig, ax = waterfall(branded(dtw_home=0.55))
+    fig.canvas.draw()
+    pill = next(t for t in ax.texts if t.get_text() == TOO_CLOSE)
+    caption = next(t for t in ax.texts if t.get_text().startswith("Start at the actual"))
+    assert not pill.get_window_extent().overlaps(caption.get_window_extent())
+
+
+def test_the_waterfall_end_bars_are_a_neutral_rather_than_a_team_colour():
+    """The two ends are totals, not luck, so they never wear a side's colour."""
+    fig, ax = waterfall(colors=("#0076B6", "#203731"))
+    ends = [p.get_facecolor()[:3] for p in ax.patches[:1]] + [
+        p.get_facecolor()[:3] for p in ax.patches[-1:]
+    ]
+    assert set(ends) == {matplotlib.colors.to_rgb(PALETTE["anchor"])}
+
+
+def test_a_team_whose_primary_is_black_is_still_told_apart_from_the_totals():
+    """`LV_KC_9-48--0-100_luck_ledger.png`: the Raiders' #000000 event bars and
+    the waterfall's totals were the same colour, and the figure could not say
+    which bar was a total."""
+    fig, ax = waterfall(colors=("#E31837", "#000000"))
+    faces = {matplotlib.colors.to_hex(p.get_facecolor()) for p in ax.patches}
+    anchor = matplotlib.colors.to_hex(PALETTE["anchor"])
+    assert anchor in faces
+    assert all(colour_distance(colour, anchor) >= CLASH_DISTANCE for colour in faces - {anchor})
+
+
+def test_the_waterfall_names_its_ends_in_derek_s_wording():
+    fig, ax = waterfall()
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    assert labels[0].startswith("Actual")
+    assert labels[-1].startswith("Deserved")
+
+
+def test_an_overtime_game_says_the_toss_is_reported_not_neutralized():
+    fig, ax = waterfall(branded(went_to_overtime=True))
+    assert "Went to overtime; the coin toss is reported, not neutralized." in figure_text(fig)
+
+
+def test_a_regulation_game_carries_no_overtime_footer():
+    fig, ax = waterfall(branded(went_to_overtime=False))
+    assert "Went to overtime" not in figure_text(fig)
+
+
+# --------------------------------------------------------------------------
+# the share card
+# --------------------------------------------------------------------------
+
+
+def test_the_card_is_square():
+    fig = plot_game_card(branded())[0]
+    width, height = fig.get_size_inches()
+    assert width == pytest.approx(height)
+
+
+def test_the_card_carries_the_score_the_verdict_and_the_deserved_margin():
+    fig, _ax = plot_game_card(branded())
+    text = figure_text(fig)
+    assert "23" in text and "31" in text
+    assert CLEAR_FLIP in text
+    assert "Deserved margin: GB by 8.3" in text
+
+
+def test_the_card_prints_both_shares_at_the_ends_of_one_bar():
+    fig, _ax = plot_game_card(branded())
+    text = figure_text(fig)
+    assert "95%" in text and "5%" in text
+
+
+def test_a_degenerate_card_says_the_bootstrap_never_changed_its_mind():
+    fig, _ax = plot_game_card(branded(dtw_home=1.0, interval=(1.0, 1.0)))
+    assert "every re-flip" in figure_text(fig).lower()
+
+
+def test_the_card_draws_no_axes_because_it_is_not_a_plot():
+    fig, ax = plot_game_card(branded())
+    assert not ax.axison

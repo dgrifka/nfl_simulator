@@ -33,24 +33,28 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
-from matplotlib.colors import to_rgb
 
 from nfl_simulator import paths
-from nfl_simulator.style import lighten
+from nfl_simulator.style import CLASH_DISTANCE, CLASH_LIGHTEN, colour_distance, lighten
 
 # The baseball style's grey pair, for an abbreviation the table does not carry.
 # A figure that cannot colour a team is still worth drawing; a crash is not.
 FALLBACK_COLORS = ("#333333", "#666666")
 
-# Euclidean distance in RGB, and the blend applied when a pair falls under it.
-# Both are the baseball chart's numbers (visualizations.py:453-457).
-CLASH_DISTANCE = 0.20
-CLASH_LIGHTEN = 0.45
-
-# Bar alphas: the home team reads as the solid one, the away team as the
-# lighter. A second, non-colour cue for which side is which.
-HOME_ALPHA = 0.78
-AWAY_ALPHA = 0.55
+# `CLASH_DISTANCE`, `CLASH_LIGHTEN` and `colour_distance` are re-exported from
+# `style`: the same rule separates a team from the waterfall's ink anchors, and
+# a figure module must not import this one to get at it.
+__all__ = [
+    "CLASH_DISTANCE",
+    "CLASH_LIGHTEN",
+    "FALLBACK_COLORS",
+    "colour_distance",
+    "load_team_table",
+    "pair_colors",
+    "team_colors",
+    "team_logo",
+    "team_name",
+]
 
 # A logo pixel this close to white is the surround the club's PNG ships with,
 # not part of the mark. Left in, it prints as a white postage stamp on cream.
@@ -104,18 +108,18 @@ def team_name(team_abbr: str) -> str:
     return (row or {}).get("team_name") or team_abbr
 
 
-def colour_distance(first: str, second: str) -> float:
-    """Euclidean distance between two colours in RGB, each channel on 0–1."""
-    a, b = to_rgb(first), to_rgb(second)
-    return sum((x - y) ** 2 for x, y in zip(a, b, strict=True)) ** 0.5
-
-
 def pair_colors(home_team: str, away_team: str) -> tuple[str, str]:
     """The two primaries to draw a game in, separated if they clash.
 
     Only the **away** colour ever moves. Repainting whichever of the two happened
     to be darker would mean a club's colour changed depending on who it played,
     and a reader who knows the team would read the figure wrong.
+
+    Nothing here has to dodge the figures' own marks. That was tried, and the
+    threshold it needed sat between Green Bay at 0.147 and the Raiders at 0.177
+    — too fine to be a rule. `style.PALETTE["anchor"]` is instead chosen to be
+    0.281 from the nearest primary in the league, so no club ever collides with
+    it and no team's colour has to move for a figure's convenience.
     """
     home = team_colors(home_team)[0]
     away = team_colors(away_team)[0]
@@ -125,7 +129,7 @@ def pair_colors(home_team: str, away_team: str) -> tuple[str, str]:
 
 
 def _knock_out_near_white(image) -> np.ndarray:
-    """Make the logo's white surround transparent, in place, and return the array."""
+    """Make the logo's white surround transparent and return the array."""
     pixels = np.array(image.convert("RGBA"))
     surround = (
         (pixels[:, :, 0] > NEAR_WHITE)
@@ -134,6 +138,25 @@ def _knock_out_near_white(image) -> np.ndarray:
     )
     pixels[surround, 3] = 0
     return pixels
+
+
+def _crop_to_mark(pixels: np.ndarray) -> np.ndarray:
+    """Trim the transparent border so the array is the mark and nothing else.
+
+    Clubs' files are not all drawn to the same margins. ESPN's Jets logo is a
+    4,096 px **square** holding a wide, short wordmark with most of the canvas
+    empty; scaled to fit a box by its canvas, the visible mark comes out four
+    times smaller than a shield drawn edge to edge in the same box. Cropping
+    first means every club's mark is fitted on what a reader can actually see.
+
+    A fully transparent image is returned untouched — a zero-sized crop is worse
+    than the original.
+    """
+    visible = pixels[:, :, 3] > 0
+    if not visible.any():
+        return pixels
+    rows, columns = np.where(visible.any(axis=1))[0], np.where(visible.any(axis=0))[0]
+    return pixels[rows[0] : rows[-1] + 1, columns[0] : columns[-1] + 1]
 
 
 def team_logo(team_abbr: str, *, cache_dir: Path | None = None) -> np.ndarray | None:
@@ -165,7 +188,7 @@ def team_logo(team_abbr: str, *, cache_dir: Path | None = None) -> np.ndarray | 
 
     try:
         with Image.open(cached) as image:
-            return _knock_out_near_white(image)
+            return _crop_to_mark(_knock_out_near_white(image))
     except Exception as error:  # pragma: no cover - a corrupt cache entry
         print(f"Warning: could not read the cached {team_abbr} logo: {error}")
         return None

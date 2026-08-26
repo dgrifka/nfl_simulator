@@ -36,7 +36,7 @@ import numpy as np
 from matplotlib.patches import Patch
 from matplotlib.text import Annotation, Text
 
-from nfl_simulator.style import PALETTE, rc_style
+from nfl_simulator.style import PALETTE, heading_font, rc_style
 
 # Document 10 Gate V-3's convention: a game whose verdict never changes across
 # the bootstrap. Its interval is a point, and reporting one is misleading.
@@ -117,6 +117,13 @@ class GameVerdict:
     dtw_home: float
     dtw_interval: tuple[float, float]
     margin_draws: np.ndarray
+    # The scoreboard facts, for the header. Optional because the simulator's
+    # summary does not carry them — a verdict built from `dtw_games_v13.parquet`
+    # alone still has to draw, it just states the margin instead of the score.
+    home_score: int | None = None
+    away_score: int | None = None
+    game_date: str | None = None
+    went_to_overtime: bool = False
 
     @property
     def is_degenerate(self) -> bool:
@@ -174,9 +181,58 @@ class GameVerdict:
             "adjudicate, so it runs about two points wide."
         )
 
+    def score_line(self) -> str:
+        """`"Actual: GB 23 - DET 31"`, away first, the way a scoreboard reads.
 
-def verdict_from_row(row: dict, margin_draws: np.ndarray) -> GameVerdict:
-    """Build a verdict from a `dtw_games_v13.parquet` row plus its bootstrap draws."""
+        A verdict built from the summary alone has no score, so it states the
+        margin instead. Printing `None - None` would be worse than either.
+        """
+        if self.home_score is None or self.away_score is None:
+            leader = self.scoreboard_winner
+            if leader is None:
+                return "Actual: tied"
+            return f"Actual: {leader} by {abs(self.actual_margin):.0f}"
+        return (
+            f"Actual: {self.away_team} {self.away_score:.0f} - "
+            f"{self.home_team} {self.home_score:.0f}"
+        )
+
+    def dtw_line(self) -> str:
+        """`"DTW: GB 95% • DET 5%"` — the favoured side first, as in `headline`."""
+        return f"DTW: {self.headline().replace(' / ', ' • ')}"
+
+    def date_line(self) -> str:
+        """`"(10/07/2018)"`, or nothing at all when the date is not known."""
+        if not self.game_date:
+            return ""
+        year, month, day = str(self.game_date)[:10].split("-")
+        return f"({month}/{day}/{year})"
+
+    def subtitle_line(self) -> str:
+        """The one muted line under every figure's heading."""
+        return "   ".join(part for part in (self.score_line(), self.date_line()) if part) + (
+            f"    {self.dtw_line()}"
+        )
+
+    def deserved_line(self) -> str:
+        """`"Deserved margin: DET -8.3"` — the side it favours, then the size."""
+        if self.deserved_margin == 0:
+            return "Deserved margin: dead level"
+        side = self.home_team if self.deserved_margin > 0 else self.away_team
+        return f"Deserved margin: {side} by {abs(self.deserved_margin):.1f}"
+
+
+def verdict_from_row(
+    row: dict, margin_draws: np.ndarray, schedule: dict | None = None
+) -> GameVerdict:
+    """Build a verdict from a `dtw_games_v13.parquet` row plus its bootstrap draws.
+
+    ``schedule`` is the game's nflverse schedule row, and it supplies only
+    presentation facts — the two scores, the date, whether the game went to
+    overtime. Nothing in it can change the adjudication; the summary row is
+    still the sole source of every number the figure states.
+    """
+    schedule = schedule or {}
     return GameVerdict(
         game_id=row["game_id"],
         home_team=row["home_team"],
@@ -186,7 +242,131 @@ def verdict_from_row(row: dict, margin_draws: np.ndarray) -> GameVerdict:
         dtw_home=float(row["dtw_home"]),
         dtw_interval=(float(row["dtw_low"]), float(row["dtw_high"])),
         margin_draws=margin_draws,
+        home_score=schedule.get("home_score"),
+        away_score=schedule.get("away_score"),
+        game_date=schedule.get("gameday"),
+        went_to_overtime=bool(schedule.get("overtime") or False),
     )
+
+
+# --------------------------------------------------------------------------
+# the shared header
+# --------------------------------------------------------------------------
+
+# The verdict pill's fill. A flip is the alarming reading and wears the status
+# red; the scoreboard holding is the reassuring one and wears the green. "Too
+# close to call" is neither, so it wears ink — a third status colour would
+# imply a third kind of finding.
+PILL_COLOURS = {
+    CLEAR_FLIP: "bad",
+    SCOREBOARD_HOLDS: "good",
+    TOO_CLOSE: "text_muted",
+}
+
+# Offsets in points above the axes, measured from the top spine. Points rather
+# than axes fractions because the waterfall's height grows with its row count,
+# and a fixed fraction of a changing height is not a fixed gap.
+HEADING_OFFSET = 62
+RULE_OFFSET = 52
+SUBTITLE_OFFSET = 36
+# Two lines' room: the caption is wrapped clear of the verdict pill, which puts
+# it on two lines on a narrow figure.
+CAPTION_OFFSET = 12
+CAPTION_PILL_GAP = 14
+
+
+def pill_colour(bucket: str) -> str:
+    """The fill for a verdict pill, from the palette rather than from taste."""
+    return PALETTE[PILL_COLOURS.get(bucket, "text_muted")]
+
+
+def draw_header(ax, verdict: GameVerdict, heading: str, *, caption: str | None = None):
+    """The title block every per-game figure wears: heading, rule, subtitle, pill.
+
+    Drawn in the band above ``ax`` rather than in a separate strip axes. A strip
+    is what the baseball style does, and it is the better shape when a figure is
+    a figure — but ``attach_overtime_sidebar`` widens the figure and rescales the
+    host axes to hold the plot at the inches it was drawn at, and a second axes
+    would stretch across the growth. Everything here is anchored to ``ax``, so
+    the sidebar moves the header with the plot it belongs to.
+
+    Returns ``(heading_text, pill_text)`` so a caller can measure them.
+    """
+
+    def at(y_points, text, **kwargs):
+        return ax.annotate(
+            text,
+            xy=(0, 1),
+            xycoords="axes fraction",
+            xytext=(0, y_points),
+            textcoords="offset points",
+            va="bottom",
+            **kwargs,
+        )
+
+    heading_text = at(
+        HEADING_OFFSET,
+        heading,
+        fontsize=16,
+        fontweight="bold",
+        color=PALETTE["text"],
+        fontfamily=heading_font(),
+    )
+
+    # The divider rule, drawn the width of the plot so the header reads as one
+    # block with the figure under it rather than as a caption floating above.
+    # Offset in points off the top spine, like everything else here.
+    lifted = ax.transAxes + mpl.transforms.ScaledTranslation(
+        0, RULE_OFFSET / 72, ax.figure.dpi_scale_trans
+    )
+    ax.plot(
+        [0, 1],
+        [1, 1],
+        transform=lifted,
+        color=PALETTE["grid"],
+        linewidth=0.8,
+        clip_on=False,
+        zorder=1,
+    )
+
+    at(SUBTITLE_OFFSET, verdict.subtitle_line(), fontsize=9.5, color=PALETTE["text_muted"])
+
+    # The pill sits on the **subtitle** row, not beside the heading. `finalize`
+    # stamps the data credit into the top-right corner of the saved pixels, and
+    # a pill on the heading row lands under it — measured on
+    # `LV_KC_9-48--0-100_dtw.png`, where "scoreboard holds" printed through both
+    # the watermark and the last word of the heading.
+    pill_text = ax.annotate(
+        verdict.bucket,
+        xy=(1, 1),
+        xycoords="axes fraction",
+        xytext=(0, SUBTITLE_OFFSET - 4),
+        textcoords="offset points",
+        ha="right",
+        va="bottom",
+        fontsize=9.5,
+        fontweight="bold",
+        color=PALETTE["bg"],
+        bbox={
+            "boxstyle": "round,pad=0.45",
+            "facecolor": pill_colour(verdict.bucket),
+            "edgecolor": "none",
+        },
+        zorder=6,
+    )
+
+    if caption:
+        caption_text = at(CAPTION_OFFSET, caption, fontsize=8, color=PALETTE["text_muted"])
+        # Wrapped to the room the pill leaves rather than to the plot's width.
+        # On `DET_MIN_10-23--45-55_luck_ledger.png` the pill's rounded box came
+        # down onto the end of the caption's single long line; measuring the
+        # pill is the only way to know how much room is actually left, since
+        # both the pill's text and the figure's width vary per game.
+        pill_width = pill_text.get_window_extent(_renderer(ax.figure)).width
+        room = ax.get_window_extent().width - pill_width - CAPTION_PILL_GAP
+        _wrap_to_width(ax.figure, caption_text, room)
+
+    return heading_text, pill_text
 
 
 # --------------------------------------------------------------------------
@@ -257,8 +437,16 @@ def _lift_colliding_label(fig, first: Annotation, second: Annotation) -> None:
     lifted.xyann = (4, 3)
 
 
-def _rule(ax, x: float, label: str, *, color: str, dashes, weight: float) -> Annotation:
-    """A vertical reference rule with its label attached, never colour alone."""
+def _rule(
+    ax, x: float, label: str, *, color: str, dashes, weight: float, boxed: bool = False
+) -> Annotation:
+    """A vertical reference rule with its label attached, never colour alone.
+
+    ``boxed`` puts the label in a cream-filled rounded box edged in the rule's
+    own colour — the baseball chart's `(Actual)` callout. The fill matters: a
+    bare label printed over the tallest part of a histogram is unreadable, and
+    the box gives it a surface without hiding the bar it sits on.
+    """
     ax.plot(
         [x, x],
         [0, 1],
@@ -280,10 +468,22 @@ def _rule(ax, x: float, label: str, *, color: str, dashes, weight: float) -> Ann
         fontsize=9,
         color=color,
         zorder=5,
+        bbox=(
+            {
+                "boxstyle": "round,pad=0.3",
+                "facecolor": PALETTE["bg"],
+                "edgecolor": color,
+                "linewidth": 0.8,
+            }
+            if boxed
+            else None
+        ),
     )
 
 
-def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0):
+def plot_bootstrap_distribution(
+    verdict: GameVerdict, *, bin_width: float = 1.0, colors: tuple[str, str] | None = None
+):
     """Deserved margin across the bootstrap, with the actual margin marked.
 
     The x axis is the home team's margin, so everything right of zero is a home
@@ -299,8 +499,13 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
     a reader already thinks in margins, and zero lands on an edge, so no bar
     straddles the line that decides the winner.
 
+    ``colors`` is the game's ``(home, away)`` pair from :mod:`teams`. It is a
+    parameter rather than a lookup so this module stays a presentation layer
+    with no data dependency of its own — and so a test never reaches a network.
+
     Returns ``(figure, axes)`` so a caller can add a panel beside it.
     """
+    home_colour, away_colour = colors or (HOME_HUE, AWAY_HUE)
     with mpl.rc_context(STYLE):
         fig, ax = plt.subplots(figsize=(7.6, 4.0))
 
@@ -328,7 +533,13 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             # A bar is the home team's when its whole span is a home win. The
             # bin starting at exactly zero is the first one, since a margin of
             # zero is a tie rather than a home win.
-            colours = [HOME_HUE if edge >= 0 else AWAY_HUE for edge in left]
+            # Full-strength team colour on both sides, no alpha. The baseball
+            # chart dilutes its away fill because its two histograms overlap and
+            # one would hide the other; these two never overlap — every bar is
+            # wholly one side's — so alpha buys nothing and costs the identity
+            # the colour is there to carry. Drawn at 0.55, Green Bay's #203731
+            # reads as grey.
+            colours = [home_colour if edge >= 0 else away_colour for edge in left]
             ax.bar(
                 left,
                 counts,
@@ -341,11 +552,16 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             )
             ax.set_yticks([])
             ax.set_ylabel("share of re-flips", fontsize=9, color=PALETTE["text_muted"])
+            # Only the sides that have bars, for the reason the waterfall's
+            # legend gives: a key for a colour that appears nowhere sends a
+            # reader hunting the figure for it. A degenerate game has one.
+            handles = []
+            if any(edge < 0 for edge in left):
+                handles.append(Patch(facecolor=away_colour, label=f"{verdict.away_team} wins"))
+            if any(edge >= 0 for edge in left):
+                handles.append(Patch(facecolor=home_colour, label=f"{verdict.home_team} wins"))
             ax.legend(
-                handles=[
-                    Patch(facecolor=AWAY_HUE, label=f"{verdict.away_team} wins"),
-                    Patch(facecolor=HOME_HUE, label=f"{verdict.home_team} wins"),
-                ],
+                handles=handles,
                 loc="upper center",
                 bbox_to_anchor=(0.5, -0.20),
                 ncol=2,
@@ -359,18 +575,20 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
         deserved_label = _rule(
             ax,
             verdict.deserved_margin,
-            f"deserved {verdict.deserved_margin:+.1f}",
+            f"Deserved {verdict.deserved_margin:+.1f}",
             color=PALETTE["text_muted"],
             dashes=(5, 3),
             weight=1.6,
+            boxed=True,
         )
         actual_label = _rule(
             ax,
             verdict.actual_margin,
-            f"actual {verdict.actual_margin:+.0f}",
+            f"Actual {verdict.actual_margin:+.0f}",
             color=PALETTE["text"],
             dashes=(1, 0),
             weight=2.0,
+            boxed=True,
         )
 
         ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
@@ -379,25 +597,15 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             f"margin, {verdict.home_team} perspective", fontsize=9, color=PALETTE["text_muted"]
         )
 
-        ax.text(
-            0,
-            1.30,
-            f"{verdict.headline()}    ·    {verdict.bucket}",
-            transform=ax.transAxes,
-            fontsize=14,
-            fontweight="bold",
-            color=PALETTE["text"],
-            va="bottom",
-        )
-        ax.text(
-            0,
-            1.20,
-            f"{verdict.game_id} — deserve-to-win across the luck-neutralised bootstrap",
-            transform=ax.transAxes,
-            fontsize=9,
-            color=PALETTE["text_muted"],
-            va="bottom",
-        )
+        # The count is the number of re-adjudications actually drawn — 200
+        # posterior draws x 800 coin draws on the shipped settings — not the
+        # coin constant alone. A heading that said "800" over a histogram of
+        # 160,000 values would be describing a different figure.
+        heading = "Deserve-to-Win"
+        if not verdict.is_point_mass:
+            heading = f"{heading} — {len(verdict.margin_draws):,} luck re-flips"
+        draw_header(ax, verdict, heading)
+
         caveat = ax.text(
             0,
             -0.42,
@@ -432,6 +640,22 @@ COMPONENT_NAMES = {
     "extra_point": "extra point",
 }
 
+# The ledger's fumble classes are `{play type}/{live|aborted}`, which is the
+# simulator's vocabulary rather than a reader's. "aborted" is nflverse's word
+# for a snap that never got away cleanly, and it is kept because "fumble on a
+# run" would describe a botched exchange as a play that was actually run.
+PLAY_WORDS = {
+    "pass": "a pass",
+    "run": "a run",
+    "punt": "a punt",
+    "kickoff": "a kickoff",
+    "field_goal": "a field goal",
+    "aborted pass": "an aborted pass",
+    "aborted run": "an aborted run",
+    "aborted punt": "an aborted punt",
+    "aborted field_goal": "an aborted field goal",
+}
+
 
 @dataclass(frozen=True)
 class LuckBar:
@@ -443,13 +667,63 @@ class LuckBar:
     n_events: int = 1
 
 
-def _bar_label(row: dict) -> str:
-    """`"45-49 yd field goal — MIN"`, or `"extra point — GB"` when the class is
-    the component said twice."""
-    component = COMPONENT_NAMES.get(row["component"], str(row["component"]).replace("_", " "))
+def _fumble_phrase(event_class: str) -> str:
+    """`"run/aborted"` -> `"an aborted run"`, falling back to the class as written."""
+    play, _, liveness = str(event_class).partition("/")
+    key = f"aborted {play}" if liveness == "aborted" else play
+    return PLAY_WORDS.get(key, f"a {key.replace('_', ' ')}")
+
+
+def plain_label(row: dict) -> str:
+    """One luck event in plain words: `"GB 42-yd field goal, made"`.
+
+    The ledger's own vocabulary is the simulator's — `"40-44 yd field goal — GB"`,
+    `"run/aborted fumble — DET"` — and it is exactly right for auditing a ledger
+    and exactly wrong on a figure somebody reads once. This is the same row said
+    the way it would be said out loud.
+
+    Three keys are optional and none of them is invented when absent. ``actual``
+    is the branch that happened (:func:`ledger.with_actual` recovers it from the
+    identity), ``opponent`` is the other team in the game, and ``kick_distance``
+    is the kick's real yardage — the ledger stores a five-yard class, and a
+    label that printed the class midpoint as if it were the distance would be
+    making up a number. Without ``actual`` the label simply stops before the
+    outcome clause rather than guessing at it.
+    """
+    team = row["charged_team"]
+    component = str(row["component"])
+    branch = row.get("actual")
+    made = None if branch is None else bool(round(float(branch)))
+
+    if component == "field_goal":
+        distance = row.get("kick_distance")
+        where = f"{float(distance):.0f}-yd" if distance is not None else str(row["event_class"])
+        outcome = "" if made is None else f", {'made' if made else 'missed'}"
+        return f"{team} {where} field goal{outcome}"
+
+    if component == "extra_point":
+        outcome = "" if made is None else f", {'made' if made else 'missed'}"
+        return f"{team} extra point{outcome}"
+
+    if component == "fumble":
+        head = f"{team} fumble on {_fumble_phrase(row['event_class'])}"
+        if made is None:
+            return head
+        # Asymmetric on purpose. A fumble the fumbling team recovered is
+        # "retained" — "DET fumble, recovered by DET" says the same thing twice
+        # and reads as a mistake. A fumble it lost names who got it, because
+        # that is the fact a reader wants and the ledger does not record it.
+        if made:
+            return f"{head}, retained"
+        opponent = row.get("opponent")
+        return f"{head}, recovered by {opponent}" if opponent else f"{head}, lost"
+
+    # An unfamiliar component still gets a row rather than a crash: the ledger
+    # is allowed to grow a fourth kind of event before this function knows it.
+    name = COMPONENT_NAMES.get(component, component.replace("_", " "))
     event_class = str(row["event_class"])
-    head = component if event_class == component else f"{event_class} {component}"
-    return f"{head} — {row['charged_team']}"
+    head = name if event_class == name else f"{event_class} {name}"
+    return f"{team} {head}"
 
 
 def luck_bars(
@@ -472,7 +746,7 @@ def luck_bars(
     """
     bars = [
         LuckBar(
-            label=_bar_label(row),
+            label=plain_label(row),
             points=-float(row["luck_epa"]) * points_per_epa,
             play_id=float(row["play_id"]),
         )
@@ -511,6 +785,60 @@ def running_totals(bars: Sequence[LuckBar], start: float) -> list[tuple[float, f
     return spans
 
 
+def _favoured(margin: float, verdict: GameVerdict) -> str:
+    """Which side a signed home-perspective margin favours."""
+    return verdict.home_team if margin > 0 else verdict.away_team
+
+
+def logo_zoom(logo, fig, *, max_width_in: float, max_height_in: float) -> float:
+    """The ``OffsetImage`` zoom that fits ``logo`` inside a box, in inches.
+
+    Both dimensions are bounded, and that is the point. nflverse's marks are not
+    one shape: most clubs ship a squarish shield, but the Jets' is a wide, short
+    wordmark. Scaled to a target *width* the wordmark comes out the right width
+    and far too tall; scaled to a fixed zoom it came out four inches wide and
+    printed straight through the waterfall's first bar. Fitting to a box makes
+    every club's mark the same visual weight whatever its aspect ratio.
+
+    ``OffsetImage`` sizes in points, so the zoom for a given pixel size depends
+    on the figure's dpi; that is solved for here rather than tuned by eye.
+    """
+    height, width = logo.shape[:2]
+    scale = min(max_width_in * fig.dpi / width, max_height_in * fig.dpi / height)
+    return scale * 72.0 / fig.dpi
+
+
+def _stamp_logo(ax, logo, x: float, y: float) -> None:
+    """Put a club's mark on a bar end, or nothing when there is no mark to put."""
+    if logo is None:
+        return
+    from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+    zoom = logo_zoom(logo, ax.figure, max_width_in=0.46, max_height_in=0.22)
+    box = AnnotationBbox(
+        OffsetImage(logo, zoom=zoom),
+        (x, y),
+        xybox=(20 if x >= 0 else -20, 0),
+        xycoords="data",
+        boxcoords="offset points",
+        frameon=False,
+        annotation_clip=False,
+        zorder=6,
+    )
+    ax.add_artist(box)
+
+
+# Verbatim, and the first thing a reader of the waterfall needs. A waterfall
+# is a chart type most people have not been taught; three sentences is cheaper
+# than losing them.
+HOW_TO_READ = (
+    "Start at the actual margin. Each bar is one luck event re-priced at its "
+    "expectation. The last bar is the margin the game deserved."
+)
+
+OVERTIME_FOOTER = "Went to overtime; the coin toss is reported, not neutralized."
+
+
 def plot_luck_ledger(
     verdict: GameVerdict,
     rows,
@@ -518,6 +846,8 @@ def plot_luck_ledger(
     points_per_epa: float,
     floor: float = POINTS_FLOOR,
     chronological: bool = False,
+    colors: tuple[str, str] | None = None,
+    logos: dict | None = None,
 ):
     """The luck ledger as a waterfall: actual margin at one end, deserved at the other.
 
@@ -526,8 +856,13 @@ def plot_luck_ledger(
     does not reconcile belongs to another game or another slope, and drawing it
     would put a decomposition under a headline it does not explain.
 
+    ``colors`` and ``logos`` are the game's, supplied by the caller rather than
+    looked up here — see :func:`plot_bootstrap_distribution`.
+
     Returns ``(figure, axes)``.
     """
+    home_colour, away_colour = colors or (HOME_HUE, AWAY_HUE)
+    logos = logos or {}
     bars = luck_bars(rows, points_per_epa=points_per_epa, floor=floor, chronological=chronological)
     gap = verdict.deserved_margin - verdict.actual_margin
     drift = abs(sum(bar.points for bar in bars) - gap)
@@ -573,7 +908,7 @@ def plot_luck_ledger(
                     abs(bar.points),
                     left=min(begin, end),
                     height=0.62,
-                    color=HOME_HUE if bar.points > 0 else AWAY_HUE,
+                    color=home_colour if bar.points > 0 else away_colour,
                     zorder=2,
                 )
                 ax.annotate(
@@ -598,6 +933,23 @@ def plot_luck_ledger(
                 zorder=2,
             )
 
+            # A club's mark at each end, so the two totals are read as "this
+            # team's game" without having to parse a sign. The actual end wears
+            # the side the scoreboard gave it, the deserved end the side the
+            # adjudication gives it — on a flip they are visibly different marks.
+            _stamp_logo(
+                ax,
+                logos.get(_favoured(verdict.actual_margin, verdict)),
+                verdict.actual_margin,
+                rows_y[0],
+            )
+            _stamp_logo(
+                ax,
+                logos.get(_favoured(verdict.deserved_margin, verdict)),
+                verdict.deserved_margin,
+                rows_y[-1],
+            )
+
             # Connectors, so a step is visibly picked up where the last one left off.
             for y, (_begin, end) in zip(rows_y[1:-1], spans, strict=True):
                 ax.plot(
@@ -610,9 +962,9 @@ def plot_luck_ledger(
 
             ax.set_yticks(rows_y)
             ax.set_yticklabels(
-                [f"actual {verdict.actual_margin:+.0f}"]
+                [f"Actual {verdict.actual_margin:+.0f}"]
                 + [bar.label for bar in bars]
-                + [f"deserved {verdict.deserved_margin:+.1f}"],
+                + [f"Deserved {verdict.deserved_margin:+.1f}"],
                 fontsize=9,
             )
             ax.invert_yaxis()
@@ -622,11 +974,17 @@ def plot_luck_ledger(
             handles = []
             if any(bar.points < 0 for bar in bars):
                 handles.append(
-                    Patch(facecolor=AWAY_HUE, label=f"moves the margin toward {verdict.away_team}")
+                    Patch(
+                        facecolor=away_colour,
+                        label=f"moves the margin toward {verdict.away_team}",
+                    )
                 )
             if any(bar.points > 0 for bar in bars):
                 handles.append(
-                    Patch(facecolor=HOME_HUE, label=f"moves the margin toward {verdict.home_team}")
+                    Patch(
+                        facecolor=home_colour,
+                        label=f"moves the margin toward {verdict.home_team}",
+                    )
                 )
             ax.legend(
                 handles=handles,
@@ -646,7 +1004,9 @@ def plot_luck_ledger(
             xs = [0.0, verdict.actual_margin, verdict.deserved_margin]
             xs += [x for span in spans for x in span]
             low, high = min(xs), max(xs)
-            pad = max(0.12 * (high - low), 0.5)
+            # The end bars' club marks hang outside their own ends, so a game
+            # with logos needs more room at both edges than one without.
+            pad = max((0.20 if logos else 0.12) * (high - low), 0.5)
             ax.set_xlim(low - pad, high + pad)
 
             ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
@@ -658,30 +1018,19 @@ def plot_luck_ledger(
         # A waterfall's height grows with its row count, so anything placed in
         # axes fractions drifts further from the plot the more events a game had.
         # These are offsets in points, which hold still.
-        ax.annotate(
-            f"{verdict.headline()}    ·    {verdict.bucket}",
-            xy=(0, 1),
-            xycoords="axes fraction",
-            xytext=(0, 28),
-            textcoords="offset points",
-            va="bottom",
-            fontsize=14,
-            fontweight="bold",
-            color=PALETTE["text"],
-        )
-        ax.annotate(
-            f"{verdict.game_id} — every luck event, and what neutralising it was worth",
-            xy=(0, 1),
-            xycoords="axes fraction",
-            xytext=(0, 14),
-            textcoords="offset points",
-            va="bottom",
-            fontsize=9,
-            color=PALETTE["text_muted"],
-        )
-        ax.annotate(
+        draw_header(ax, verdict, "Luck Ledger", caption=HOW_TO_READ)
+
+        footer = [
             "The bars are a sum, not a sequence: their order does not change where the "
-            "waterfall lands.",
+            "waterfall lands."
+        ]
+        # Document 16 measured the overtime toss and refused it, so a game that
+        # went to overtime has to say the ledger is one event short on purpose.
+        # Silence would let a reader take the waterfall for the whole story.
+        if verdict.went_to_overtime:
+            footer.append(OVERTIME_FOOTER)
+        ax.annotate(
+            "\n".join(footer),
             xy=(0, 0),
             xycoords="axes fraction",
             xytext=(0, -58),
@@ -690,6 +1039,173 @@ def plot_luck_ledger(
             fontsize=8,
             color=PALETTE["text_muted"],
         )
+        return fig, ax
+
+
+# --------------------------------------------------------------------------
+# the share card
+# --------------------------------------------------------------------------
+
+# Square, because the card exists to be posted and every timeline crops a
+# rectangle. 8 in at dpi 200 is 1,600 px, which downsamples cleanly to the
+# 400 px the smallest preview gives it.
+CARD_SIZE_IN = 8.0
+CARD_DPI = 200
+
+
+def plot_game_card(verdict: GameVerdict, *, colors: tuple[str, str] | None = None, logos=None):
+    """The whole adjudication on one square: who won, who deserved to, by how much.
+
+    This is the figure for somebody who will not open the other two. It carries
+    no distribution and no ledger — five facts, each large enough to survive a
+    400 px preview: the score, the two shares, the verdict, the deserved margin,
+    and the one line that stops the share being read as a plain 89%.
+
+    Away on the left and home on the right throughout, which is the order the
+    score line already reads in. Returns ``(figure, axes)``.
+    """
+    home_colour, away_colour = colors or (HOME_HUE, AWAY_HUE)
+    logos = logos or {}
+
+    with mpl.rc_context(STYLE | {"figure.dpi": CARD_DPI}):
+        fig = plt.figure(figsize=(CARD_SIZE_IN, CARD_SIZE_IN))
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+
+        def centred(y, text, **kwargs):
+            return ax.text(0.5, y, text, ha="center", va="center", **kwargs)
+
+        centred(
+            0.945,
+            "Deserve-to-Win",
+            fontsize=26,
+            fontweight="bold",
+            color=PALETTE["text"],
+            fontfamily=heading_font(),
+        )
+        ax.plot([0.08, 0.92], [0.905, 0.905], color=PALETTE["grid"], linewidth=1.0, clip_on=False)
+
+        # The scoreboard: mark, then abbreviation, then the two numbers between.
+        for x, team in ((0.16, verdict.away_team), (0.84, verdict.home_team)):
+            logo = logos.get(team)
+            if logo is not None:
+                from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+                ax.add_artist(
+                    AnnotationBbox(
+                        OffsetImage(
+                            logo,
+                            zoom=logo_zoom(
+                                logo,
+                                fig,
+                                max_width_in=CARD_SIZE_IN * 0.20,
+                                max_height_in=CARD_SIZE_IN * 0.155,
+                            ),
+                        ),
+                        (x, 0.780),
+                        frameon=False,
+                        annotation_clip=False,
+                    )
+                )
+            ax.text(
+                x,
+                0.660,
+                team,
+                ha="center",
+                va="center",
+                fontsize=22,
+                fontweight="bold",
+                color=PALETTE["text"],
+                fontfamily=heading_font(),
+            )
+
+        if verdict.home_score is not None and verdict.away_score is not None:
+            score_text = f"{verdict.away_score:.0f} – {verdict.home_score:.0f}"
+        else:
+            score_text = f"{verdict.actual_margin:+.0f}"
+        centred(
+            0.780,
+            score_text,
+            fontsize=46,
+            fontweight="bold",
+            color=PALETTE["text"],
+            fontfamily=heading_font(),
+        )
+        if verdict.date_line():
+            centred(0.660, verdict.date_line(), fontsize=13, color=PALETTE["text_muted"])
+
+        # One bar, split where the bootstrap splits it. The split *is* the
+        # headline, so there is nothing else on this row to read instead.
+        away_share = 1.0 - verdict.dtw_home
+        left, width, height, base = 0.08, 0.84, 0.055, 0.500
+        ax.barh(base, away_share * width, left=left, height=height, color=away_colour, zorder=2)
+        ax.barh(
+            base,
+            verdict.dtw_home * width,
+            left=left + away_share * width,
+            height=height,
+            color=home_colour,
+            zorder=2,
+        )
+        centred(0.573, "deserve-to-win share", fontsize=11, color=PALETTE["text_muted"])
+        home_share = round(verdict.dtw_home * 100)
+        ax.text(
+            left,
+            0.425,
+            f"{verdict.away_team} {100 - home_share}%",
+            ha="left",
+            va="center",
+            fontsize=17,
+            fontweight="bold",
+            color=PALETTE["text"],
+        )
+        ax.text(
+            left + width,
+            0.425,
+            f"{verdict.home_team} {home_share}%",
+            ha="right",
+            va="center",
+            fontsize=17,
+            fontweight="bold",
+            color=PALETTE["text"],
+        )
+
+        centred(
+            0.290,
+            verdict.bucket,
+            fontsize=20,
+            fontweight="bold",
+            color=PALETTE["bg"],
+            bbox={
+                "boxstyle": "round,pad=0.55",
+                "facecolor": pill_colour(verdict.bucket),
+                "edgecolor": "none",
+            },
+        )
+        centred(0.180, verdict.deserved_line(), fontsize=19, color=PALETTE["text"])
+
+        if verdict.is_degenerate:
+            note = (
+                "Every re-flip lands the same way, so the interval collapses to a point — "
+                f"true of {DEGENERATE_SHARE} of games."
+            )
+        else:
+            low, high = verdict.dtw_interval
+            favoured = verdict.deserved_winner
+            share_low, share_high = (
+                (low, high) if favoured == verdict.home_team else (1 - high, 1 - low)
+            )
+            note = (
+                f"{NOMINAL_COVERAGE} interval on {favoured}'s share: "
+                f"{share_low * 100:.0f}–{share_high * 100:.0f}% "
+                f"(measured coverage {MEASURED_COVERAGE})."
+            )
+        centred(0.098, note, fontsize=11, color=PALETTE["text_muted"])
+
+        if verdict.went_to_overtime:
+            centred(0.048, OVERTIME_FOOTER, fontsize=11, color=PALETTE["text_muted"])
         return fig, ax
 
 
