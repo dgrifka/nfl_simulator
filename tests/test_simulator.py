@@ -254,7 +254,7 @@ def test_an_out_of_bounds_fumble_books_luck_at_the_class_retention_rate(baseline
     assert len(result.ledger) == 1
     entry = result.ledger.entries[0]
     assert entry.component == "fumble"
-    assert entry.realized == 1.0
+    assert entry.actual == 1.0
     assert entry.expected == pytest.approx(0.4, abs=0.05)
     assert entry.luck_epa > 0  # HOME kept a ball it was odds-on to lose
 
@@ -274,7 +274,7 @@ def test_a_fumble_flagged_out_of_bounds_and_recovered_books_exactly_one_row(base
     result = run([conflicted], baselines, fg_model)
 
     assert len(result.ledger) == 1
-    assert result.ledger.entries[0].realized == 0.0  # the recovery is the specific fact
+    assert result.ledger.entries[0].actual == 0.0  # the recovery is the specific fact
 
 
 def test_the_ledger_still_sums_with_an_out_of_bounds_fumble_in_it(baselines, fg_model):
@@ -631,13 +631,13 @@ def test_weather_columns_may_be_absent_entirely(baselines, fg_model):
 from nfl_simulator.simulator import LuckEvent, bootstrap_margins  # noqa: E402
 
 
-def coin(p: float, *, realized: float, swing: float = 1.0, draws: int = 200) -> LuckEvent:
+def coin(p: float, *, actual: float, swing: float = 1.0, draws: int = 200) -> LuckEvent:
     return LuckEvent(
         play_id=1.0,
         component="test",
         event_class="test",
         charged_team=HOME,
-        realized=realized,
+        actual=actual,
         expected_draws=np.full(draws, p),
         swing=swing,
     )
@@ -645,7 +645,7 @@ def coin(p: float, *, realized: float, swing: float = 1.0, draws: int = 200) -> 
 
 def test_bootstrap_returns_one_dtw_per_posterior_draw():
     margins, dtw = bootstrap_margins(
-        [coin(0.5, realized=1.0, draws=37)],
+        [coin(0.5, actual=1.0, draws=37)],
         actual_margin=3.0,
         points_per_epa=1.0,
         n_coin_draws=11,
@@ -656,9 +656,9 @@ def test_bootstrap_returns_one_dtw_per_posterior_draw():
 
 
 def test_bootstrap_leaves_the_margin_alone_when_the_coin_lands_where_it_did():
-    """A certain event that happened cannot move the margin: p = 1, realized = 1."""
+    """A certain event that happened cannot move the margin: p = 1, actual = 1."""
     margins, _ = bootstrap_margins(
-        [coin(1.0, realized=1.0, swing=5.0)],
+        [coin(1.0, actual=1.0, swing=5.0)],
         actual_margin=3.0,
         points_per_epa=2.0,
         n_coin_draws=20,
@@ -670,7 +670,7 @@ def test_bootstrap_leaves_the_margin_alone_when_the_coin_lands_where_it_did():
 def test_bootstrap_removes_the_full_swing_when_a_certain_event_did_not_happen():
     """p = 0 but it happened: every replay takes it back, at swing x points_per_epa."""
     margins, _ = bootstrap_margins(
-        [coin(0.0, realized=1.0, swing=5.0)],
+        [coin(0.0, actual=1.0, swing=5.0)],
         actual_margin=3.0,
         points_per_epa=2.0,
         n_coin_draws=20,
@@ -681,7 +681,7 @@ def test_bootstrap_removes_the_full_swing_when_a_certain_event_did_not_happen():
 
 def test_bootstrap_dtw_is_a_probability_per_draw():
     _, dtw = bootstrap_margins(
-        [coin(0.5, realized=1.0, swing=8.0)],
+        [coin(0.5, actual=1.0, swing=8.0)],
         actual_margin=1.0,
         points_per_epa=1.0,
         n_coin_draws=500,
@@ -706,7 +706,7 @@ def test_the_default_coin_draw_count_is_the_calibrated_one():
 
 def test_more_coin_draws_produce_a_narrower_dtw_interval():
     """The mechanism behind that constant: excess width is Monte Carlo noise."""
-    events = [coin(0.5, realized=1.0, swing=6.0, draws=400)]
+    events = [coin(0.5, actual=1.0, swing=6.0, draws=400)]
 
     def width(n_coin_draws: int) -> float:
         _, dtw = bootstrap_margins(

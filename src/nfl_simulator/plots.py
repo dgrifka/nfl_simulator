@@ -87,7 +87,7 @@ def bucket_label(
     the headline are the *same* label — a sweep with its own copy of this rule
     could report bucket counts the product would not agree with.
 
-    A realized tie falls out as a clear flip whenever it is outside the band,
+    An actual tie falls out as a clear flip whenever it is outside the band,
     which is the honest reading: the scoreboard declined to name a winner and the
     bootstrap does not. Document 33 excluded the 10 ties from its flip *counts*;
     a product that has to render one still has to say something.
@@ -130,7 +130,7 @@ class GameVerdict:
 
     @property
     def scoreboard_winner(self) -> str | None:
-        """None on a realized tie: the scoreboard named nobody."""
+        """None on an actual tie: the scoreboard named nobody."""
         if self.actual_margin > 0:
             return self.home_team
         if self.actual_margin < 0:
@@ -238,7 +238,7 @@ def _lift_colliding_label(fig, first: Annotation, second: Annotation) -> None:
     """Separate two rule labels that print on top of each other.
 
     Both labels hang inside the top of the plot off their own rule, so a game
-    whose deserved and realized margins are close prints one through the other —
+    whose deserved and actual margins are close prints one through the other —
     `2025_13_DEN_WAS` at −3.3 and −1 was unreadable. The **left-hand** label moves
     *above* the top spine, into the empty band between the plot and its subtitle.
 
@@ -284,7 +284,7 @@ def _rule(ax, x: float, label: str, *, color: str, dashes, weight: float) -> Ann
 
 
 def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0):
-    """Deserved margin across the bootstrap, with the realized margin marked.
+    """Deserved margin across the bootstrap, with the actual margin marked.
 
     The x axis is the home team's margin, so everything right of zero is a home
     win and everything left of it is an away win. The two fills are the two
@@ -308,8 +308,7 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             ax.text(
                 0.5,
                 0.5,
-                "This game had no luck events to re-flip.\n"
-                "The deserved margin is the realized one.",
+                "This game had no luck events to re-flip.\nThe deserved margin is the actual one.",
                 transform=ax.transAxes,
                 ha="center",
                 va="center",
@@ -365,10 +364,10 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             dashes=(5, 3),
             weight=1.6,
         )
-        realized_label = _rule(
+        actual_label = _rule(
             ax,
             verdict.actual_margin,
-            f"realized {verdict.actual_margin:+.0f}",
+            f"actual {verdict.actual_margin:+.0f}",
             color=PALETTE["text"],
             dashes=(1, 0),
             weight=2.0,
@@ -413,7 +412,7 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
         # widens — the footnote then ran the full width of the widened figure and
         # under the sidebar's paragraphs.
         _wrap_to_width(fig, caveat, ax.get_window_extent().width)
-        _lift_colliding_label(fig, deserved_label, realized_label)
+        _lift_colliding_label(fig, deserved_label, actual_label)
         return fig, ax
 
 
@@ -436,7 +435,7 @@ COMPONENT_NAMES = {
 
 @dataclass(frozen=True)
 class LuckBar:
-    """One signed step from the realized margin toward the deserved one."""
+    """One signed step from the actual margin toward the deserved one."""
 
     label: str
     points: float
@@ -504,7 +503,7 @@ def luck_bars(
 
 
 def running_totals(bars: Sequence[LuckBar], start: float) -> list[tuple[float, float]]:
-    """Where each step begins and ends, walking from the realized margin."""
+    """Where each step begins and ends, walking from the actual margin."""
     spans, running = [], start
     for bar in bars:
         spans.append((running, running + bar.points))
@@ -520,7 +519,7 @@ def plot_luck_ledger(
     floor: float = POINTS_FLOOR,
     chronological: bool = False,
 ):
-    """The luck ledger as a waterfall: realized margin at one end, deserved at the other.
+    """The luck ledger as a waterfall: actual margin at one end, deserved at the other.
 
     Every bar is one neutralized event, signed to the home team's margin, and the
     bars are checked against the verdict before anything is drawn — a ledger that
@@ -547,7 +546,7 @@ def plot_luck_ledger(
                 0.5,
                 0.5,
                 "This game had no luck events to neutralise.\n"
-                "The deserved margin is the realized one.",
+                "The deserved margin is the actual one.",
                 transform=ax.transAxes,
                 ha="center",
                 va="center",
@@ -611,7 +610,7 @@ def plot_luck_ledger(
 
             ax.set_yticks(rows_y)
             ax.set_yticklabels(
-                [f"realized {verdict.actual_margin:+.0f}"]
+                [f"actual {verdict.actual_margin:+.0f}"]
                 + [bar.label for bar in bars]
                 + [f"deserved {verdict.deserved_margin:+.1f}"],
                 fontsize=9,
@@ -708,7 +707,7 @@ SWEEP_HALF_WIDTHS = tuple(round(0.01 * step, 4) for step in range(16))
 class BandRow:
     """The three bucket counts at one candidate band.
 
-    ``ties_outside_band`` is carried because document 33 excluded realized ties
+    ``ties_outside_band`` is carried because document 33 excluded actual ties
     from its flip counts and this module labels them. Without it the sweep's
     ``clear_flip`` and document 33's number differ by an unexplained handful.
     """

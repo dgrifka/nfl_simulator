@@ -13,31 +13,31 @@ import pytest
 from nfl_simulator.ledger import Ledger, LedgerEntry
 
 
-def entry(realized: float = 1.0, expected: float = 0.45, swing: float = 4.0, **kwargs):
+def entry(actual: float = 1.0, expected: float = 0.45, swing: float = 4.0, **kwargs):
     defaults = {
         "play_id": 101.0,
         "component": "fumble",
         "event_class": "run/live",
         "charged_team": "BUF",
     }
-    return LedgerEntry(realized=realized, expected=expected, swing=swing, **(defaults | kwargs))
+    return LedgerEntry(actual=actual, expected=expected, swing=swing, **(defaults | kwargs))
 
 
 def test_luck_epa_is_deviation_from_expectation_times_swing():
-    assert entry(realized=1.0, expected=0.40, swing=5.0).luck_epa == pytest.approx(3.0)
+    assert entry(actual=1.0, expected=0.40, swing=5.0).luck_epa == pytest.approx(3.0)
 
 
 def test_an_outcome_exactly_at_its_expectation_books_no_luck():
-    assert entry(realized=0.45, expected=0.45, swing=9.9).luck_epa == pytest.approx(0.0)
+    assert entry(actual=0.45, expected=0.45, swing=9.9).luck_epa == pytest.approx(0.0)
 
 
 def test_an_unfavourable_outcome_books_negative_luck():
-    assert entry(realized=0.0, expected=0.60, swing=5.0).luck_epa == pytest.approx(-3.0)
+    assert entry(actual=0.0, expected=0.60, swing=5.0).luck_epa == pytest.approx(-3.0)
 
 
 def test_swing_sign_carries_the_home_perspective():
     """The away team's good fortune is negative in home perspective."""
-    away_luck = entry(realized=1.0, expected=0.40, swing=-5.0)
+    away_luck = entry(actual=1.0, expected=0.40, swing=-5.0)
     assert away_luck.luck_epa == pytest.approx(-3.0)
 
 
@@ -48,8 +48,8 @@ def test_empty_ledger_totals_zero():
 def test_total_is_the_sum_of_its_entries():
     ledger = Ledger(
         [
-            entry(realized=1.0, expected=0.40, swing=5.0),  # +3.0
-            entry(realized=0.0, expected=0.25, swing=8.0),  # -2.0
+            entry(actual=1.0, expected=0.40, swing=5.0),  # +3.0
+            entry(actual=0.0, expected=0.25, swing=8.0),  # -2.0
         ]
     )
     assert ledger.total_luck_epa() == pytest.approx(1.0)

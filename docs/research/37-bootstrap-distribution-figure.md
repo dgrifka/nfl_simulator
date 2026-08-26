@@ -159,6 +159,9 @@ stay clear on this document's three examples, which were never the defect and
 are there so the fix cannot regress the common case. All three figures
 regenerate unchanged, with the replay still at 0.00e+00.
 
+2026-08-26: "realized" renamed "actual" in code and figures (the maintainer's wording).
+Prose in this document is left as written.
+
 ## 8. Verification
 
 `uv run pytest -q` — 252 passed (37 new). `uv run ruff check .` and

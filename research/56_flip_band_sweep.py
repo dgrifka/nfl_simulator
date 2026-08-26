@@ -32,7 +32,7 @@ GAMES_ARTIFACT = "dtw_games_v13.parquet"
 RESULTS = "56_flip_band_sweep.json"
 FIGURE = "56_flip_band_sweep.png"
 
-# Document 33 §2a and §2, at the shipped band. The audit excluded the realized
+# Document 33 §2a and §2, at the shipped band. The audit excluded the actual
 # ties from its flip counts; this module labels them, so the tie-excluded count
 # is the one that has to reproduce.
 DOC_33 = {
@@ -104,7 +104,7 @@ def main() -> None:
             "the sweep does not reproduce document 33's published counts. "
             "Stop and report rather than draw a robustness display over a disagreement."
         )
-    print(f"\n  {n_ties} realized ties; {shipped.ties_outside_band} sit outside the shipped band")
+    print(f"\n  {n_ties} actual ties; {shipped.ties_outside_band} sit outside the shipped band")
 
     print(f"\n{'=' * 72}\nTHE SWEEP\n{'=' * 72}")
     print(
@@ -131,7 +131,7 @@ def main() -> None:
             {
                 "artifact": GAMES_ARTIFACT,
                 "n_games": len(games),
-                "n_realized_ties": n_ties,
+                "n_actual_ties": n_ties,
                 "shipped_band": [BAND_LOW, BAND_HIGH],
                 "doc_33_checks": {
                     name: {"here": here, "published": published}

@@ -162,6 +162,9 @@ the axes it sits in (the third row of §7's register). Both examples regenerate
 with their replays still at 0.00e+00, and the caveat now sets in two lines
 inside the plot's column on every figure in documents 37 and 40.
 
+2026-08-26: "realized" renamed "actual" in code and figures (the maintainer's wording).
+Prose in this document is left as written.
+
 ## 8. Verification
 
 ```

@@ -143,6 +143,9 @@ whether ties are in it (§4) and which definition it uses (document 33 §7).
 | The residual-disagreement column is computed in the driver, not in the package | `research/56_flip_band_sweep.py` | **Accepted and disclosed.** The product displays bucket counts; the disagreement is a record-keeping check, and putting it in the package would ship code nothing renders |
 | Everything here is a within-window re-description of one committed artifact | Whole document | **Accepted.** No out-of-sample claim is made and none should be read in |
 
+2026-08-26: "realized" renamed "actual" in code and figures (the maintainer's wording).
+Prose in this document is left as written.
+
 ## 8. Verification
 
 `uv run pytest -q` — 292 passed (18 new, written before the code and watched to

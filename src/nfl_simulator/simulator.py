@@ -2,7 +2,7 @@
 
 Implements `docs/research/05-neutralization-principle.md`:
 
-* **§1, the one rule.** Luck is the realized outcome minus its expectation at
+* **§1, the one rule.** Luck is the actual outcome minus its expectation at
   the responsible entity's shrunk rate. Every component uses the same identity;
   only where `p` comes from differs.
 * **§3, the treatment table.** Fumble retention is neutralized in full at the
@@ -66,7 +66,7 @@ class LuckEvent:
     component: str
     event_class: str
     charged_team: str
-    realized: float
+    actual: float
     expected_draws: np.ndarray
     swing: float  # already signed to home perspective
 
@@ -77,7 +77,7 @@ class LuckEvent:
             component=self.component,
             event_class=self.event_class,
             charged_team=self.charged_team,
-            realized=self.realized,
+            actual=self.actual,
             expected=float(self.expected_draws.mean()),
             swing=self.swing,
         )
@@ -165,7 +165,7 @@ def fumble_events(
                 component="fumble",
                 event_class=row["fumble_class"],
                 charged_team=row["fumbled_1_team"],
-                realized=float(row["retained"]),
+                actual=float(row["retained"]),
                 expected_draws=_class_rate_draws(
                     float(row["n"]), float(row["p_own"]), n_draws, rng
                 ),
@@ -219,7 +219,7 @@ def field_goal_events(
                 component="field_goal",
                 event_class=f"{int(row['fg_bin'])}-{int(row['fg_bin']) + 4} yd",
                 charged_team=row["posteam"],
-                realized=float(row["made"]),
+                actual=float(row["made"]),
                 expected_draws=_resample(draws, n_draws, rng),
                 swing=float(row["swing_value"]) * home_sign,
             )
@@ -295,7 +295,7 @@ def extra_point_events(
                 component="extra_point",
                 event_class="extra point",
                 charged_team=row["posteam"],
-                realized=1.0 if row["extra_point_result"] == "good" else 0.0,
+                actual=1.0 if row["extra_point_result"] == "good" else 0.0,
                 expected_draws=expected,
                 swing=baseline.swing_value * home_sign,
             )
@@ -343,17 +343,17 @@ def bootstrap_margins(
     # (posterior draws, events)
     p = np.column_stack([event.expected_draws for event in events])
     swing = np.array([event.swing for event in events])
-    realized = np.array([event.realized for event in events])
+    actual = np.array([event.actual for event in events])
 
     uniforms = rng.random((p.shape[0], n_coin_draws, len(events)))
     replayed = (uniforms < p[:, None, :]).astype(float)
 
-    # The adjustment is `realized - replayed`, NOT `replayed - p`. We are
+    # The adjustment is `actual - replayed`, NOT `replayed - p`. We are
     # replacing the branch that happened with one drawn fairly, so the margin
     # moves by the difference between the two branches. Using the deviation
     # from expectation instead would have mean zero, which would recentre the
     # whole distribution on the actual result and quietly neutralize nothing.
-    adjustment = ((realized[None, None, :] - replayed) * swing[None, None, :]).sum(axis=2)
+    adjustment = ((actual[None, None, :] - replayed) * swing[None, None, :]).sum(axis=2)
     margins = actual_margin - adjustment * points_per_epa
 
     # DTW per posterior draw, so the interval is a genuine credible interval on
@@ -377,7 +377,7 @@ def simulate_game(
     """Deserve-to-win for one game.
 
     `plays` must be the plays of a single game, carrying a `result` column with
-    the realized home margin.
+    the actual home margin.
     """
     if plays.is_empty():
         raise ValueError("cannot simulate a game with no plays")

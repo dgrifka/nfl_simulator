@@ -1,11 +1,11 @@
 """The luck ledger — one row per neutralizable event, and it adds up.
 
 Every entry records a single branch that document 05 §2's gates admitted: what
-happened (``realized``), what was expected at the responsible entity's shrunk
+happened (``actual``), what was expected at the responsible entity's shrunk
 rate (``expected``), and what the two branches were worth in EPA (``swing``).
 The luck it books is the identity from document 05 §1:
 
-    luck_epa = (realized - expected) * swing
+    luck_epa = (actual - expected) * swing
 
 ``swing`` arrives already signed to home perspective, so a positive
 ``luck_epa`` always means "good fortune for the home team" no matter which side
@@ -30,7 +30,7 @@ LEDGER_SCHEMA: dict[str, pl.DataType] = {
     "component": pl.String,
     "event_class": pl.String,
     "charged_team": pl.String,
-    "realized": pl.Float64,
+    "actual": pl.Float64,
     "expected": pl.Float64,
     "swing": pl.Float64,
     "luck_epa": pl.Float64,
@@ -45,7 +45,7 @@ class LedgerEntry:
     component: str
     event_class: str
     charged_team: str
-    realized: float
+    actual: float
     expected: float
     swing: float
 
@@ -58,7 +58,7 @@ class LedgerEntry:
 
     @property
     def luck_epa(self) -> float:
-        return (self.realized - self.expected) * self.swing
+        return (self.actual - self.expected) * self.swing
 
     def to_dict(self) -> dict:
         return {
@@ -66,7 +66,7 @@ class LedgerEntry:
             "component": self.component,
             "event_class": self.event_class,
             "charged_team": self.charged_team,
-            "realized": self.realized,
+            "actual": self.actual,
             "expected": self.expected,
             "swing": self.swing,
             "luck_epa": self.luck_epa,

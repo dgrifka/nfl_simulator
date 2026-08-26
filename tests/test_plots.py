@@ -4,7 +4,7 @@ Two things are under test and they are different in kind. The **verdict** is
 arithmetic on committed numbers — which bucket a game lands in, which team the
 headline names, whether the interval means anything — and it is tested the way
 any arithmetic is. The **figure** is tested only for the marks a reader would
-notice missing: the realized margin, the deserved margin, the zero line that
+notice missing: the actual margin, the deserved margin, the zero line that
 separates a home win from an away one, and the caveat that stops the interval
 from being read as a plain 89%.
 
@@ -130,7 +130,7 @@ def test_an_away_win_the_bootstrap_agrees_with_holds():
     assert verdict(dtw_home=0.12, actual_margin=-10.0).bucket == SCOREBOARD_HOLDS
 
 
-def test_a_realized_tie_outside_the_band_is_a_flip_because_the_scoreboard_named_nobody():
+def test_a_actual_tie_outside_the_band_is_a_flip_because_the_scoreboard_named_nobody():
     tie = verdict(dtw_home=0.85, actual_margin=0.0)
     assert tie.scoreboard_winner is None
     assert tie.bucket == CLEAR_FLIP
@@ -189,7 +189,7 @@ def _vline_positions(ax) -> list[float]:
     return positions
 
 
-def test_the_figure_marks_the_realized_margin():
+def test_the_figure_marks_the_actual_margin():
     fig, ax = plot_bootstrap_distribution(verdict(actual_margin=8.0, deserved_margin=-8.28))
     assert 8.0 in _vline_positions(ax)
 
@@ -281,13 +281,13 @@ def _rule_label_boxes(fig, ax) -> list:
     return [
         text.get_window_extent()
         for text in ax.texts
-        if text.get_text().startswith(("deserved", "realized"))
+        if text.get_text().startswith(("deserved", "actual"))
     ]
 
 
 @pytest.mark.parametrize("gap", [0.0, 0.4, 1.0, 2.3])
 def test_the_two_rule_labels_never_overprint_when_the_margins_are_close(gap):
-    """`2025_13_DEN_WAS` printed "deserved -3.3" straight through "realized -1".
+    """`2025_13_DEN_WAS` printed "deserved -3.3" straight through "actual -1".
 
     Both labels hang off the top of their own rule, so a game whose two margins
     are within a label's width of each other stacks one on the other and neither
@@ -305,17 +305,17 @@ def test_the_two_rule_labels_never_overprint_when_the_margins_are_close(gap):
 
 
 @pytest.mark.parametrize(
-    "deserved, realized",
+    "deserved, actual",
     [(-8.28, 8.0), (27.93, 39.0), (0.70, 13.0)],
     ids=["2018_05_GB_DET", "2021_14_LV_KC", "2025_17_DET_MIN"],
 )
-def test_document_37_example_games_keep_their_rule_labels_clear(deserved, realized):
+def test_document_37_example_games_keep_their_rule_labels_clear(deserved, actual):
     """The three shipped examples are far apart and were never the defect. They
     are here so a fix for the close case cannot regress the common one."""
-    span = max(abs(deserved), abs(realized)) + 8
+    span = max(abs(deserved), abs(actual)) + 8
     fig, ax = plot_bootstrap_distribution(
         verdict(
-            actual_margin=realized,
+            actual_margin=actual,
             deserved_margin=deserved,
             draws=np.linspace(deserved - span / 2, deserved + span / 2, 512),
         )
@@ -359,7 +359,7 @@ def test_luck_against_the_home_team_moves_the_margin_the_other_way():
     assert bar.points == pytest.approx(2.0 * PPE)
 
 
-def test_the_bars_sum_to_the_gap_between_the_realized_and_deserved_margins():
+def test_the_bars_sum_to_the_gap_between_the_actual_and_deserved_margins():
     """The waterfall has to reconcile, or it is not the ledger it claims to be."""
     rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
     bars = luck_bars(rows, points_per_epa=PPE)
@@ -436,7 +436,7 @@ def test_an_extra_point_does_not_repeat_itself_in_its_label():
     assert bar.label == "extra point — GB"
 
 
-def test_running_totals_start_at_the_realized_margin_and_land_on_the_deserved_one():
+def test_running_totals_start_at_the_actual_margin_and_land_on_the_deserved_one():
     rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
     bars = luck_bars(rows, points_per_epa=PPE)
     spans = running_totals(bars, start=8.0)
@@ -480,7 +480,7 @@ def test_the_waterfall_names_both_ends_with_their_margins():
         verdict(actual_margin=8.0, deserved_margin=8.0 - 3.42 * PPE), rows, points_per_epa=PPE
     )
     labels = [label.get_text() for label in ax.get_yticklabels()]
-    assert any("realized" in label for label in labels)
+    assert any("actual" in label for label in labels)
     assert any("deserved" in label for label in labels)
 
 
@@ -560,7 +560,7 @@ SWEEP_GAMES = [
     (0.38, 6.0),  # a flip at the shipped band, too close once the band reaches 0.12
     (0.548, 13.0),  # too close at the shipped band, holds once the band is under 0.048
     (0.88, 10.0),  # holds at every band
-    (0.85, 0.0),  # a realized tie the scoreboard never named a winner for
+    (0.85, 0.0),  # an actual tie the scoreboard never named a winner for
 ]
 
 
@@ -632,7 +632,7 @@ def test_the_sweep_spans_the_range_the_round_asked_for():
 
 
 def test_the_sweep_counts_the_ties_so_document_33s_count_can_be_recovered():
-    """Document 33 excluded realized ties from its flip counts; the product labels
+    """Document 33 excluded actual ties from its flip counts; the product labels
     them. Both readings have to be available from one row or they will diverge."""
     dtw, margin = sweep_inputs()
     row = band_sweep(dtw, margin, half_widths=[0.10])[0]

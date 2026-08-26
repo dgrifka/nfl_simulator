@@ -51,8 +51,7 @@ def main() -> None:
     print(f"points_per_epa = {slope:.10f}  (read from {METADATA}, not refitted)")
 
     print(
-        f"\n{'=' * 72}\nRECONCILIATION — every game's bars must span realized to deserved"
-        f"\n{'=' * 72}"
+        f"\n{'=' * 72}\nRECONCILIATION — every game's bars must span actual to deserved\n{'=' * 72}"
     )
     summed = (
         ledger.group_by("game_id")
@@ -97,7 +96,7 @@ def main() -> None:
         print(
             f"    {len(rows)} events -> {len(bars)} bars "
             f"({folded[0].n_events if folded else 0} folded under {POINTS_FLOOR:g} pt), "
-            f"realized {verdict.actual_margin:+.0f} -> deserved {verdict.deserved_margin:+.2f}"
+            f"actual {verdict.actual_margin:+.0f} -> deserved {verdict.deserved_margin:+.2f}"
         )
         for bar in bars[:3]:
             print(f"      {bar.points:+6.2f}  {bar.label}")

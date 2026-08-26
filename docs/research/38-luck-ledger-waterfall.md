@@ -118,6 +118,9 @@ extents against the axes, not by eye.
 | Two rows can be identical (`"40-44 yd field goal — GB"` twice) | **Left as is.** They are two different kicks; the ledger carries `play_id`, the label does not, and a reader counting rows is reading it correctly |
 | The waterfall shows the point estimate of each event's luck, not its posterior | **Carried forward.** Each bar uses the ledger's `expected` at the posterior mean, which is what `ledger.py` publishes. Per-event uncertainty is document 37's distribution, taken jointly |
 
+2026-08-26: "realized" renamed "actual" in code and figures (the maintainer's wording).
+Prose in this document is left as written.
+
 ## 6. Verification
 
 `uv run pytest -q` — 274 passed (22 new, written before the code, watched to
