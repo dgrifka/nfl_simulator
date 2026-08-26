@@ -16,10 +16,11 @@ showing has its own rules:
 * **A single value has no density.** A game with no luck events returns one
   margin draw. Histogramming it would invent a shape, so it is drawn as a note.
 
-Palette is the validated light-mode categorical pair on surface ``#fcfcfb``
-(``#2a78d6`` / ``#eb6834``: lightness, chroma, CVD separation, normal-vision and
-contrast all PASS). Only the two teams wear colour; every rule and label is ink,
-so identity is never carried by colour alone. Output is PNG for print — no hover
+Surface, ink and grid come from ``style.PALETTE`` — the house style shared with
+the baseball simulator. Only the two teams wear colour; every rule and label is
+ink, so identity is never carried by colour alone. The default pair
+(``#2a78d6`` / ``#eb6834``) is the validated light-mode categorical pair, used
+when a caller supplies no team colours. Output is PNG for print — no hover
 layer, no dark mode.
 """
 
@@ -34,6 +35,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Patch
 from matplotlib.text import Annotation, Text
+
+from nfl_simulator.style import PALETTE, rc_style
 
 # Document 10 Gate V-3's convention: a game whose verdict never changes across
 # the bootstrap. Its interval is a point, and reporting one is misleading.
@@ -57,27 +60,13 @@ DEGENERATE_SHARE = "44.4%"
 # style
 # --------------------------------------------------------------------------
 
+# The palette is the house style's, shared with the baseball simulator, so the
+# two projects' figures read as one hand. Everything that is not a team is ink
+# from `PALETTE`; the two team hues below are the fallback a caller gets when it
+# does not pass a pair from `teams.py`.
 HOME_HUE, AWAY_HUE = "#2a78d6", "#eb6834"
-SURFACE = "#fcfcfb"
-INK = "#0b0b0b"
-INK_MUTED = "#52514e"
-GRID = "#e3e2df"
 
-STYLE = {
-    "figure.facecolor": SURFACE,
-    "axes.facecolor": SURFACE,
-    "savefig.facecolor": SURFACE,
-    "font.size": 10,
-    "text.color": INK,
-    "axes.labelcolor": INK_MUTED,
-    "axes.edgecolor": GRID,
-    "xtick.color": INK_MUTED,
-    "ytick.color": INK_MUTED,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.spines.left": False,
-    "figure.dpi": 160,
-}
+STYLE = rc_style()
 
 
 # --------------------------------------------------------------------------
@@ -325,7 +314,7 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
                 ha="center",
                 va="center",
                 fontsize=11,
-                color=INK_MUTED,
+                color=PALETTE["text_muted"],
             )
             ax.set_yticks([])
             span = max(abs(verdict.actual_margin), 1.0) * 1.6
@@ -347,12 +336,12 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
                 width=bin_width,
                 align="edge",
                 color=colours,
-                edgecolor=SURFACE,
+                edgecolor=PALETTE["bg"],
                 linewidth=0.5,
                 zorder=2,
             )
             ax.set_yticks([])
-            ax.set_ylabel("share of re-flips", fontsize=9, color=INK_MUTED)
+            ax.set_ylabel("share of re-flips", fontsize=9, color=PALETTE["text_muted"])
             ax.legend(
                 handles=[
                     Patch(facecolor=AWAY_HUE, label=f"{verdict.away_team} wins"),
@@ -367,12 +356,12 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
                 handleheight=0.9,
             )
 
-        _rule(ax, 0.0, "", color=INK_MUTED, dashes=(2, 3), weight=1.0)
+        _rule(ax, 0.0, "", color=PALETTE["text_muted"], dashes=(2, 3), weight=1.0)
         deserved_label = _rule(
             ax,
             verdict.deserved_margin,
             f"deserved {verdict.deserved_margin:+.1f}",
-            color=INK_MUTED,
+            color=PALETTE["text_muted"],
             dashes=(5, 3),
             weight=1.6,
         )
@@ -380,14 +369,16 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             ax,
             verdict.actual_margin,
             f"realized {verdict.actual_margin:+.0f}",
-            color=INK,
+            color=PALETTE["text"],
             dashes=(1, 0),
             weight=2.0,
         )
 
-        ax.grid(axis="x", color=GRID, linewidth=0.8)
+        ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
         ax.set_axisbelow(True)
-        ax.set_xlabel(f"margin, {verdict.home_team} perspective", fontsize=9, color=INK_MUTED)
+        ax.set_xlabel(
+            f"margin, {verdict.home_team} perspective", fontsize=9, color=PALETTE["text_muted"]
+        )
 
         ax.text(
             0,
@@ -396,7 +387,7 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             transform=ax.transAxes,
             fontsize=14,
             fontweight="bold",
-            color=INK,
+            color=PALETTE["text"],
             va="bottom",
         )
         ax.text(
@@ -405,7 +396,7 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             f"{verdict.game_id} — deserve-to-win across the luck-neutralised bootstrap",
             transform=ax.transAxes,
             fontsize=9,
-            color=INK_MUTED,
+            color=PALETTE["text_muted"],
             va="bottom",
         )
         caveat = ax.text(
@@ -414,7 +405,7 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
             verdict.interval_note(),
             transform=ax.transAxes,
             fontsize=8,
-            color=INK_MUTED,
+            color=PALETTE["text_muted"],
             va="top",
         )
         # The caveat is a footnote to the plot and is wrapped to the plot's own
@@ -435,9 +426,6 @@ def plot_bootstrap_distribution(verdict: GameVerdict, *, bin_width: float = 1.0)
 # dropping: the folded row carries their exact sum, so the waterfall still
 # reconciles. Presentation only — the ledger itself keeps every event.
 POINTS_FLOOR = 0.1
-
-# Totals are not luck, so they do not wear a team's colour.
-ANCHOR = "#8a8985"
 
 COMPONENT_NAMES = {
     "fumble": "fumble",
@@ -564,7 +552,7 @@ def plot_luck_ledger(
                 ha="center",
                 va="center",
                 fontsize=11,
-                color=INK_MUTED,
+                color=PALETTE["text_muted"],
             )
             ax.set_xticks([])
             ax.set_yticks([])
@@ -577,7 +565,7 @@ def plot_luck_ledger(
                 abs(verdict.actual_margin),
                 left=min(0.0, verdict.actual_margin),
                 height=0.62,
-                color=ANCHOR,
+                color=PALETTE["anchor"],
                 zorder=2,
             )
             for y, bar, (begin, end) in zip(rows_y[1:-1], bars, spans, strict=True):
@@ -599,7 +587,7 @@ def plot_luck_ledger(
                     ha="left" if bar.points > 0 else "right",
                     va="center",
                     fontsize=8,
-                    color=INK_MUTED,
+                    color=PALETTE["text_muted"],
                     zorder=5,
                 )
             ax.barh(
@@ -607,7 +595,7 @@ def plot_luck_ledger(
                 abs(verdict.deserved_margin),
                 left=min(0.0, verdict.deserved_margin),
                 height=0.62,
-                color=ANCHOR,
+                color=PALETTE["anchor"],
                 zorder=2,
             )
 
@@ -616,7 +604,7 @@ def plot_luck_ledger(
                 ax.plot(
                     [end, end],
                     [y - 0.31, y + 0.69],
-                    color=GRID,
+                    color=PALETTE["grid"],
                     linewidth=1.0,
                     zorder=1,
                 )
@@ -629,7 +617,7 @@ def plot_luck_ledger(
                 fontsize=9,
             )
             ax.invert_yaxis()
-            ax.axvline(0.0, color=INK_MUTED, linewidth=1.0, dashes=(2, 3), zorder=1)
+            ax.axvline(0.0, color=PALETTE["text_muted"], linewidth=1.0, dashes=(2, 3), zorder=1)
             # Only the directions the game actually has. A key for a colour that
             # appears nowhere sends a reader hunting the figure for it.
             handles = []
@@ -662,9 +650,11 @@ def plot_luck_ledger(
             pad = max(0.12 * (high - low), 0.5)
             ax.set_xlim(low - pad, high + pad)
 
-            ax.grid(axis="x", color=GRID, linewidth=0.8)
+            ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
             ax.set_axisbelow(True)
-            ax.set_xlabel(f"margin, {verdict.home_team} perspective", fontsize=9, color=INK_MUTED)
+            ax.set_xlabel(
+                f"margin, {verdict.home_team} perspective", fontsize=9, color=PALETTE["text_muted"]
+            )
 
         # A waterfall's height grows with its row count, so anything placed in
         # axes fractions drifts further from the plot the more events a game had.
@@ -678,7 +668,7 @@ def plot_luck_ledger(
             va="bottom",
             fontsize=14,
             fontweight="bold",
-            color=INK,
+            color=PALETTE["text"],
         )
         ax.annotate(
             f"{verdict.game_id} — every luck event, and what neutralising it was worth",
@@ -688,7 +678,7 @@ def plot_luck_ledger(
             textcoords="offset points",
             va="bottom",
             fontsize=9,
-            color=INK_MUTED,
+            color=PALETTE["text_muted"],
         )
         ax.annotate(
             "The bars are a sum, not a sequence: their order does not change where the "
@@ -699,7 +689,7 @@ def plot_luck_ledger(
             textcoords="offset points",
             va="top",
             fontsize=8,
-            color=INK_MUTED,
+            color=PALETTE["text_muted"],
         )
         return fig, ax
 
@@ -808,12 +798,20 @@ def plot_band_sweep(rows: Sequence[BandRow], *, shipped_half_width: float = 0.10
         fig, axes = plt.subplots(1, 3, figsize=(7.6, 3.2), sharex=True)
 
         for ax, (bucket, counts) in zip(axes, panels, strict=True):
-            ax.plot(widths, counts, color=INK, linewidth=1.8, zorder=3)
-            ax.plot(widths, counts, "o", color=INK, markersize=2.6, zorder=4)
-            ax.axvline(shipped.half_width, color=INK_MUTED, linewidth=1.0, dashes=(2, 3), zorder=1)
+            ax.plot(widths, counts, color=PALETTE["text"], linewidth=1.8, zorder=3)
+            ax.plot(widths, counts, "o", color=PALETTE["text"], markersize=2.6, zorder=4)
+            ax.axvline(
+                shipped.half_width,
+                color=PALETTE["text_muted"],
+                linewidth=1.0,
+                dashes=(2, 3),
+                zorder=1,
+            )
 
             at_shipped = counts[rows.index(shipped)]
-            ax.plot(shipped.half_width, at_shipped, "o", color=INK, markersize=5.5, zorder=5)
+            ax.plot(
+                shipped.half_width, at_shipped, "o", color=PALETTE["text"], markersize=5.5, zorder=5
+            )
             # The label sits beside the marker rather than above it: the shipped
             # band's own rule runs vertically through "above", and a number with a
             # dashed line through it reads as struck out. It then goes to whichever
@@ -828,12 +826,12 @@ def plot_band_sweep(rows: Sequence[BandRow], *, shipped_half_width: float = 0.10
                 ha="left",
                 va="top" if rising else "bottom",
                 fontsize=9,
-                color=INK,
+                color=PALETTE["text"],
                 zorder=6,
             )
 
-            ax.set_title(bucket, fontsize=10, color=INK, pad=8, loc="left")
-            ax.grid(axis="y", color=GRID, linewidth=0.8)
+            ax.set_title(bucket, fontsize=10, color=PALETTE["text"], pad=8, loc="left")
+            ax.grid(axis="y", color=PALETTE["grid"], linewidth=0.8)
             ax.set_axisbelow(True)
             ax.margins(y=0.22)
             # Counts of games have no negative side, and a "-50 games" tick is a
@@ -843,8 +841,10 @@ def plot_band_sweep(rows: Sequence[BandRow], *, shipped_half_width: float = 0.10
             ax.set_xticklabels(["0.50\nonly", "0.45\nto 0.55", "0.40\nto 0.60", "0.35\nto 0.65"])
             ax.tick_params(labelsize=8)
 
-        axes[0].set_ylabel("games", fontsize=9, color=INK_MUTED)
-        axes[1].set_xlabel("width of the “too close to call” band", fontsize=9, color=INK_MUTED)
+        axes[0].set_ylabel("games", fontsize=9, color=PALETTE["text_muted"])
+        axes[1].set_xlabel(
+            "width of the “too close to call” band", fontsize=9, color=PALETTE["text_muted"]
+        )
 
         fig.text(
             0.0,
@@ -852,7 +852,7 @@ def plot_band_sweep(rows: Sequence[BandRow], *, shipped_half_width: float = 0.10
             "The band is a presentation choice, not a fitted threshold",
             fontsize=13,
             fontweight="bold",
-            color=INK,
+            color=PALETTE["text"],
             va="bottom",
             transform=axes[0].transAxes,
         )
@@ -863,7 +863,7 @@ def plot_band_sweep(rows: Sequence[BandRow], *, shipped_half_width: float = 0.10
             f"{panels[0][1][0] + panels[1][1][0] + panels[2][1][0]:,} games — "
             "the shipped 0.40–0.60 is marked",
             fontsize=9,
-            color=INK_MUTED,
+            color=PALETTE["text_muted"],
             va="bottom",
             transform=axes[0].transAxes,
         )
@@ -873,7 +873,7 @@ def plot_band_sweep(rows: Sequence[BandRow], *, shipped_half_width: float = 0.10
             "Every game lands in exactly one bucket at every width, so the three panels "
             "always sum to the same total.",
             fontsize=8,
-            color=INK_MUTED,
+            color=PALETTE["text_muted"],
             ha="center",
             va="top",
             transform=axes[1].transAxes,
@@ -1024,7 +1024,7 @@ def attach_overtime_sidebar(
             [0.0, 0.0],
             [0.02, 0.98],
             transform=panel.transAxes,
-            color=GRID,
+            color=PALETTE["grid"],
             linewidth=1.0,
             clip_on=False,
         )
@@ -1035,7 +1035,7 @@ def attach_overtime_sidebar(
             transform=panel.transAxes,
             fontsize=9,
             fontweight="bold",
-            color=INK,
+            color=PALETTE["text"],
             va="top",
         )
         panel.text(
@@ -1046,7 +1046,7 @@ def attach_overtime_sidebar(
             ),
             transform=panel.transAxes,
             fontsize=7.5,
-            color=INK_MUTED,
+            color=PALETTE["text_muted"],
             va="top",
             linespacing=1.45,
         )

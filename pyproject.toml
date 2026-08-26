@@ -22,6 +22,9 @@ dependencies = [
     "h5netcdf>=1.3",
     "h5py>=3.11",
     "matplotlib>=3.9",
+    # PIL post-processing: the watermark is stamped onto the saved PNG, which is
+    # immune to figure-size / dpi / bbox_inches="tight" differences.
+    "pillow>=10",
     "plotly>=5.22",
 ]
 

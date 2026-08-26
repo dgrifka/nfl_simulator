@@ -24,8 +24,6 @@ from nfl_simulator.plots import (  # noqa: E402
     BAND_HIGH,
     BAND_LOW,
     CLEAR_FLIP,
-    INK,
-    INK_MUTED,
     OVERTIME_TITLE,
     REPORTED_NOT_NEUTRALIZED,
     SCOREBOARD_HOLDS,
@@ -42,6 +40,7 @@ from nfl_simulator.plots import (  # noqa: E402
     plot_luck_ledger,
     running_totals,
 )
+from nfl_simulator.style import PALETTE  # noqa: E402
 
 
 def verdict(
@@ -818,7 +817,7 @@ def test_the_sidebar_wears_no_team_colour():
     """A caveat is not an entity. Colour here would read as a third side."""
     fig, ax = plot_bootstrap_distribution(verdict())
     panel = attach_overtime_sidebar(fig, ax, verdict(), toss())
-    assert {text.get_color() for text in panel.texts} <= {INK, INK_MUTED}
+    assert {text.get_color() for text in panel.texts} <= {PALETTE["text"], PALETTE["text_muted"]}
 
 
 def test_the_sidebar_attaches_to_the_waterfall_as_well_as_the_distribution():
