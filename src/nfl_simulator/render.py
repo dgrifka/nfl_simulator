@@ -119,8 +119,24 @@ def figure_filename(verdict: GameVerdict, suffix: str) -> str:
 # --------------------------------------------------------------------------
 
 
+def kicker_surname(name: str | None) -> str | None:
+    """`"M.Crosby"` -> `"Crosby"`, and nothing at all when there is no name.
+
+    nflverse writes a kicker as an initial and a surname. A ledger row has room
+    for one word, and the surname is the one a reader recognises — so the
+    initial is dropped rather than the row being widened for it. A play without
+    a name on file gets no name invented for it.
+    """
+    if not name:
+        return None
+    return str(name).split(".")[-1].strip() or None
+
+
 def prepare_rows(
-    frame: pl.DataFrame, verdict: GameVerdict, distances: dict | None = None
+    frame: pl.DataFrame,
+    verdict: GameVerdict,
+    distances: dict | None = None,
+    kickers: dict | None = None,
 ) -> list[dict]:
     """Ledger rows with the three extra keys :func:`plots.plain_label` can use.
 
@@ -131,14 +147,17 @@ def prepare_rows(
     ``kick_distance`` is the kick's real yardage from the play-by-play, left
     absent rather than guessed when the play is not found: the ledger stores a
     five-yard class, and printing its midpoint as the distance would be making
-    a number up.
+    a number up. ``kicker`` is the surname on the same play, and is absent the
+    same way.
     """
     distances = distances or {}
+    kickers = kickers or {}
     rows = with_actual(frame).to_dicts()
     for row in rows:
         charged = row.get("charged_team")
         row["opponent"] = verdict.away_team if charged == verdict.home_team else verdict.home_team
         row["kick_distance"] = distances.get(row.get("play_id"))
+        row["kicker"] = kickers.get(row.get("play_id"))
     return rows
 
 
@@ -298,6 +317,23 @@ def kick_distances(game_id: str) -> dict:
         return {}
 
 
+def kicker_names(game_id: str) -> dict:
+    """`play_id -> surname` for the game's kicks, from the cached play-by-play.
+
+    Degrades exactly as :func:`kick_distances` does: no name is a label without
+    a name on it, never a render that stops.
+    """
+    try:
+        plays = _simulation_context()["pbp"].filter(pl.col("game_id") == game_id)
+        if "kicker_player_name" not in plays.columns:
+            return {}
+        kicks = plays.select("play_id", "kicker_player_name").drop_nulls("kicker_player_name")
+        return {float(p): kicker_surname(name) for p, name in kicks.iter_rows()}
+    except Exception as error:  # pragma: no cover - the labels degrade, not the render
+        print(f"Warning: no kicker names for {game_id}: {error}")
+        return {}
+
+
 # --------------------------------------------------------------------------
 # the render
 # --------------------------------------------------------------------------
@@ -325,7 +361,7 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
     verdict = verdict_from_row(row, result.margin_draws, schedule)
 
     ledger = sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
-    rows = prepare_rows(ledger, verdict, kick_distances(game_id))
+    rows = prepare_rows(ledger, verdict, kick_distances(game_id), kicker_names(game_id))
     colours = pair_colors(verdict.home_team, verdict.away_team)
     sides = (verdict.home_team, verdict.away_team)
     logos = {team: team_logo(team) for team in sides}

@@ -43,9 +43,11 @@ from nfl_simulator.plots import (  # noqa: E402
     attach_overtime_sidebar,
     band_sweep,
     bucket_label,
+    event_phrase,
     luck_bars,
     margin_sentence,
     net_luck,
+    outcome_phrase,
     overtime_lines,
     pill_colour,
     plain_label,
@@ -1480,8 +1482,10 @@ def card_row(
     actual: float = 0.0,
     opponent: str = "DET",
     kick_distance: float | None = None,
+    expected: float | None = None,
+    kicker: str | None = None,
 ) -> dict:
-    """A committed ledger row with the three keys `render.prepare_rows` adds."""
+    """A committed ledger row with the keys `render.prepare_rows` adds."""
     return {
         "play_id": play_id,
         "component": component,
@@ -1489,8 +1493,10 @@ def card_row(
         "charged_team": charged_team,
         "luck_epa": luck_epa,
         "actual": actual,
+        "expected": expected,
         "opponent": opponent,
         "kick_distance": kick_distance,
+        "kicker": kicker,
     }
 
 
@@ -2188,3 +2194,120 @@ def test_a_game_with_no_luck_events_is_one_bar_per_team_at_its_own_score():
     assert len(away_bar) == 1 and len(home_bar) == 1
     assert away_bar[0].get_x() <= 23.0 < away_bar[0].get_x() + 3.0
     assert home_bar[0].get_x() <= 31.0 < home_bar[0].get_x() + 3.0
+
+
+# --------------------------------------------------------------------------
+# a kick shows what it was expected to do — figure round 4, Part C
+# --------------------------------------------------------------------------
+#
+# the maintainer's round-4 note: a 41-yard miss costs 3.2 points and a 42-yard miss 3.1,
+# and nothing on the card says why. The make probability is already on every
+# ledger row as `expected`; printing it turns two numbers that look like a
+# rounding difference into two kicks of different difficulty.
+
+
+def test_a_missed_kick_says_what_it_was_expected_to_do():
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    assert outcome_phrase(row | {"actual": 0.0, "expected": 0.88}) == "missed (88% kick)"
+
+
+def test_a_made_kick_says_it_too():
+    row = ledger_row(-0.6, component="field_goal", event_class="35-39 yd", charged_team="DET")
+    assert outcome_phrase(row | {"actual": 1.0, "expected": 0.86}) == "made (86% kick)"
+
+
+def test_an_extra_point_carries_its_own_make_probability():
+    row = ledger_row(0.95, component="extra_point", event_class="extra point", charged_team="GB")
+    assert outcome_phrase(row | {"actual": 0.0, "expected": 0.945}) == "missed (94% kick)"
+
+
+def test_a_kick_without_an_expectation_recorded_says_only_what_happened():
+    """Never invent a probability: a row without `expected` keeps the old words."""
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    assert outcome_phrase(row | {"actual": 0.0}) == "missed"
+
+
+def test_a_fumble_row_is_untouched_by_the_kick_wording():
+    row = ledger_row(2.17, component="fumble", event_class="pass/live", charged_team="DET")
+    assert outcome_phrase(row | {"actual": 0.0, "expected": 0.53, "opponent": "GB"}) == (
+        "recovered by GB"
+    )
+
+
+def test_a_kick_names_its_kicker_when_the_play_by_play_knows_one():
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    assert event_phrase(row | {"kick_distance": 41.0, "kicker": "Crosby"}) == (
+        "41-yd field goal · Crosby"
+    )
+
+
+def test_an_extra_point_names_its_kicker_too():
+    row = ledger_row(0.95, component="extra_point", event_class="extra point", charged_team="GB")
+    assert event_phrase(row | {"kicker": "Crosby"}) == "extra point · Crosby"
+
+
+def test_a_kick_with_no_kicker_on_file_keeps_the_label_it_had():
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    assert event_phrase(row | {"kick_distance": 41.0}) == "41-yd field goal"
+
+
+def test_a_fumble_never_grows_a_kicker():
+    row = ledger_row(2.17, component="fumble", event_class="pass/live", charged_team="DET")
+    assert event_phrase(row | {"kicker": "Crosby"}) == "fumble on a pass"
+
+
+def test_the_plain_label_carries_both_the_kicker_and_the_expectation():
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    label = plain_label(
+        row | {"actual": 0.0, "expected": 0.88, "kick_distance": 41.0, "kicker": "Crosby"}
+    )
+    assert label == "GB 41-yd field goal · Crosby, missed (88% kick)"
+
+
+def test_the_card_prints_the_make_probability_in_its_what_happened_column():
+    rows = [
+        card_row(3.8, play_id=1.0, kick_distance=41.0, expected=0.88, kicker="Crosby"),
+        card_row(3.7, play_id=2.0, kick_distance=42.0, expected=0.87, kicker="Crosby"),
+        card_row(
+            -3.1,
+            play_id=3.0,
+            charged_team="DET",
+            opponent="GB",
+            kick_distance=55.0,
+            expected=0.55,
+            kicker="Prater",
+        ),
+    ]
+    fig, ax = ledger_card(rows)
+    text = figure_text(fig)
+    assert "missed (88% kick)" in text
+    assert "missed (87% kick)" in text
+    assert "41-yd field goal · Crosby" in text
+
+
+def test_the_waterfall_row_labels_carry_the_same_wording_the_card_does():
+    rows = [
+        card_row(3.8, play_id=1.0, kick_distance=41.0, expected=0.88, kicker="Crosby"),
+        card_row(
+            -3.1,
+            play_id=2.0,
+            charged_team="DET",
+            opponent="GB",
+            kick_distance=55.0,
+            expected=0.55,
+            kicker="Prater",
+        ),
+    ]
+    _fig, ax = waterfall(reconciling(rows), rows)
+    labels = [label.get_text() for label in ax.get_yticklabels()]
+    assert "GB 41-yd field goal · Crosby, missed (88% kick)" in labels
+
+
+def test_a_kick_row_never_wraps_onto_a_second_line_on_the_card():
+    """The card's Event column is one line; a two-line row would overprint."""
+    rows = [
+        card_row(3.8, play_id=1.0, kick_distance=41.0, expected=0.88, kicker="Crosby"),
+    ]
+    fig, ax = ledger_card(rows)
+    events = [t.get_text() for t in ax.texts if "field goal" in t.get_text()]
+    assert events and all("\n" not in event for event in events)

@@ -33,7 +33,13 @@ from nfl_simulator.plots import (
     plot_luck_ledger_card,
     plot_team_points_distribution,
 )
-from nfl_simulator.render import ARTICLE_SUFFIX, SUFFIXES, figure_filename, prepare_rows
+from nfl_simulator.render import (
+    ARTICLE_SUFFIX,
+    SUFFIXES,
+    figure_filename,
+    kicker_surname,
+    prepare_rows,
+)
 from nfl_simulator.style import PALETTE, finalize
 
 PPE = 0.8389495557652871
@@ -121,9 +127,32 @@ def test_prepared_rows_read_as_sentences(game):
 
     rows = prepare_rows(ledger_frame(), game, distances={834.0: 42.0})
     assert [plain_label(row) for row in rows] == [
-        "GB 42-yd field goal, missed",
+        "GB 42-yd field goal, missed (88% kick)",
         "GB fumble on a punt, recovered by DET",
     ]
+
+
+def test_a_prepared_kick_row_carries_the_kicker_the_play_by_play_names(game):
+    from nfl_simulator.plots import plain_label
+
+    rows = prepare_rows(ledger_frame(), game, distances={834.0: 42.0}, kickers={834.0: "Crosby"})
+    assert plain_label(rows[0]) == "GB 42-yd field goal · Crosby, missed (88% kick)"
+
+
+def test_a_play_with_no_kicker_on_file_prepares_without_one(game):
+    rows = prepare_rows(ledger_frame(), game, distances={834.0: 42.0})
+    assert rows[0]["kicker"] is None
+
+
+def test_a_kicker_is_read_down_to_the_surname_the_figure_prints():
+    """nflverse writes `M.Crosby`; a card row has no room for the initial."""
+    assert kicker_surname("M.Crosby") == "Crosby"
+    assert kicker_surname("G.Tavecchio") == "Tavecchio"
+
+
+def test_a_kicker_name_that_is_not_on_file_stays_absent():
+    assert kicker_surname(None) is None
+    assert kicker_surname("") is None
 
 
 def test_the_branch_is_recovered_for_an_artifact_that_does_not_carry_it(game):

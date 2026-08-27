@@ -1186,13 +1186,28 @@ def _fumble_phrase(event_class: str) -> str:
     return PLAY_WORDS.get(key, f"a {key.replace('_', ' ')}")
 
 
+KICKS = ("field_goal", "extra_point")
+
+
+def _with_kicker(phrase: str, row: dict) -> str:
+    """`"41-yd field goal"` -> `"41-yd field goal · Crosby"`, when a name is known.
+
+    Round 4: three of Green Bay's five 2018 misses were the same kicker, and a
+    column of anonymous field goals hides that. The name is presentation only —
+    the pricing already used that kicker's shrunk rate — and it is never
+    invented: a play-by-play row without a kicker keeps the label it had.
+    """
+    kicker = row.get("kicker")
+    return f"{phrase} \u00b7 {kicker}" if kicker else phrase
+
+
 def event_phrase(row: dict) -> str:
     """The event itself, in plain words and without the team it is charged to.
 
-    `"42-yd field goal"`, `"fumble on a punt"`. The team is dropped because the
-    ledger card puts each event in its own team's table, where a prefix would
-    repeat the heading on every row; :func:`plain_label` puts it back for the
-    figures whose rows are not grouped.
+    `"42-yd field goal · Crosby"`, `"fumble on a punt"`. The team is dropped
+    because the ledger card puts each event in its own team's table, where a
+    prefix would repeat the heading on every row; :func:`plain_label` puts it
+    back for the figures whose rows are not grouped.
 
     ``kick_distance`` is optional and is never invented: the ledger stores a
     five-yard class, and printing the class midpoint as if it were the distance
@@ -1202,9 +1217,9 @@ def event_phrase(row: dict) -> str:
     if component == "field_goal":
         distance = row.get("kick_distance")
         where = f"{float(distance):.0f}-yd" if distance is not None else str(row["event_class"])
-        return f"{where} field goal"
+        return _with_kicker(f"{where} field goal", row)
     if component == "extra_point":
-        return "extra point"
+        return _with_kicker("extra point", row)
     if component == "fumble":
         return f"fumble on {_fumble_phrase(row['event_class'])}"
     # An unfamiliar component still gets a row rather than a crash: the ledger
@@ -1215,19 +1230,30 @@ def event_phrase(row: dict) -> str:
 
 
 def outcome_phrase(row: dict) -> str:
-    """What actually happened: `"made"`, `"missed"`, `"retained"`, `"recovered by DET"`.
+    """What happened: `"missed (88% kick)"`, `"retained"`, `"recovered by DET"`.
 
     Empty when the ledger row does not carry its branch — :func:`ledger.with_actual`
     recovers ``actual`` from the identity where it can, and where it cannot the
     outcome is unknown and is left unsaid rather than guessed at.
+
+    A kick also states what it was expected to do. Round 4's note: a 41-yard
+    miss costs 3.2 points and a 42-yard miss 3.1, and without the make
+    probability beside them the two points look like a rounding difference
+    rather than two kicks of different difficulty. The percentage is the row's
+    own ``expected`` — the shrunk rate the luck was priced at, not a new number
+    — and a row that does not carry one keeps the bare word.
     """
     branch = row.get("actual")
     if branch is None:
         return ""
     made = bool(round(float(branch)))
     component = str(row["component"])
-    if component in ("field_goal", "extra_point"):
-        return "made" if made else "missed"
+    if component in KICKS:
+        happened = "made" if made else "missed"
+        expected = row.get("expected")
+        if expected is None:
+            return happened
+        return f"{happened} ({round(float(expected) * 100)}% kick)"
     if component == "fumble":
         # Asymmetric on purpose. A fumble the fumbling team recovered is
         # "retained" — "DET fumble, recovered by DET" says the same thing twice
