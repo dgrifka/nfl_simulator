@@ -82,12 +82,40 @@ change an instrument.
 
 | Entity design | Null bound (90th pct) = threshold | Power at 5% | **at 12.5%** | at 25% | at 50% | Resolvable? |
 |---|---|---|---|---|---|---|
-| Residual, defence-season × QB-season (no floor) | *to fill* | | | | | |
-| Residual, defence pooled × QB-season (no floor) | *to fill* | | | | | |
-| Residual, QB-season `σ_q` (no floor) | *to fill* | | | | | |
+| Residual, defence-season × QB-season (no floor) | **5.920 pp** | 0.200 | **0.893** | 1.000 | 1.000 | **Yes** |
+| Residual, defence pooled × QB-season (no floor) | **5.060 pp** | 0.303 | **0.953** | 1.000 | 1.000 | **Yes** |
+| Residual, QB-season `σ_q` (no floor) | **6.889 pp** | 0.200 | **0.780** | 1.000 | 1.000 | **No** |
 
 For comparison, round 1 (with the floor): 9.41 pp / 0.362; 8.09 pp / 0.555;
 — / 0.578.
+
+Filled 2026-08-27 from `research/63_dropped_pick_power_r2.py` →
+`research/outputs/63_dropped_pick_power_r2.json`, **before**
+`research/64_dropped_pick_confounds_r2.py` existed as a fit. Nothing in
+document 43 §7 moved; the gates and their bars are as committed.
+
+**The frame these rows are powered on.** 2,969 throws — arm 2's frame exactly,
+`arm3 rows == arm2 rows: True` — **128** defence-seasons (round 1's gate arm saw
+125), **32** pooled defences, **280** QB-season levels. Chances per
+defence-season: median **22**, min 5, max 43, against round 1's median of 7.
+Worthy throws per QB-season: median **9**, min **1** — and that minimum is the
+amendment working as intended, since a one-throw QB-season is now a level the
+hierarchy shrinks rather than 20 throws deleted around it. Conversion in the
+frame 0.4894, mean `p̂` 0.4937.
+
+**Cost, measured.** 14 cells × 400 datasets = 5,600 crossed fits in **3,730 s of
+wall clock** across a pool of 8 workers (about 6.6 hours of CPU). Per-fit cost,
+as the mean within a cell: median **4.27 s**, min 2.57 s, max 5.08 s — the
+128 × 280 designs sit just under the 5 s note and the pooled 32 × 280 design
+just over half of it. `DATASETS` stayed 400, as this section requires.
+
+**Both gate designs clear Gate C-3, and the expectation below was beaten in the
+direction it hedged against.** The pre-committed text predicted the pooled grain
+would be "the one most likely to resolve" and that the season grain "may still
+miss 0.80". The season grain reached **0.893** — resolvable — so the study's
+primary design, the one document 43 §7's decision rule reaches for first, is the
+one that answers. The `σ_q` row is the only one that stays under the bar, at
+0.780, and it is a nuisance parameter with no pass rule attached to it.
 
 **Pre-committed expectation, so a surprise is recognisable as one:** with
 ~22 chances per defence-season instead of 7, binomial noise per unit drops
