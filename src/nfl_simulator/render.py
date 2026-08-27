@@ -59,6 +59,13 @@ REPLAY_TOLERANCE = 1e-9
 
 SUFFIXES = ("dtw", "luck_ledger", "card")
 
+# The distribution's shipped reading, chosen by looking at the eight variants
+# `research/59_dtw_variants.py` renders (document 42 §1). Three-point bins pool
+# the reachable margins without smoothing between them; the callout states the
+# verdict in a sentence; the arrow says what luck moved and toward whom; and the
+# clubs' marks carry identity in place of two coloured swatches.
+DTW_FIGURE = {"bin_width": 3.0, "callout": True, "arrow": True, "legend_logos": True}
+
 
 # --------------------------------------------------------------------------
 # naming
@@ -288,7 +295,9 @@ def render_game(game_id: str, out_dir: Path | None = None) -> list[Path]:
     written = []
     for suffix in SUFFIXES:
         if suffix == "dtw":
-            fig, ax = plot_bootstrap_distribution(verdict, colors=colours)
+            fig, ax = plot_bootstrap_distribution(
+                verdict, colors=colours, logos=logos, **DTW_FIGURE
+            )
             attach_overtime_sidebar(fig, ax, verdict, toss)
         elif suffix == "luck_ledger":
             fig, ax = plot_luck_ledger(

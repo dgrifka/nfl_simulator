@@ -481,8 +481,169 @@ def _rule(
     )
 
 
+# Where the three annotations that share the top of the plot sit, in axes
+# fractions. The rule callouts hang off the top spine and own everything above
+# 0.95, so the arrow and the deserved-to-win line are stacked under them rather
+# than beside them: a game whose two rules are far apart would otherwise put the
+# arrow straight through both labels.
+ARROW_Y = 0.855
+CALLOUT_Y = 0.76
+
+# How much taller than its tallest bar the plot is drawn. The annotations above
+# are placed by rule rather than by inspection, so the room they need is made
+# rather than hoped for: an annotated figure reserves the whole band they sit
+# in, and a bare one reserves only what the two rule callouts want.
+ANNOTATED_HEADROOM = 1.62
+PLAIN_HEADROOM = 1.18
+
+# The logo legend's two entries, in axes fractions: how far apart their centres
+# sit and how far below the plot they hang. The swatch legend's own anchor is
+# -0.20, and the two are alternatives, so they share the row.
+LOGO_LEGEND_Y = -0.20
+LOGO_LEGEND_GAP = 0.34
+
+
+def _shielded() -> dict:
+    """A cream backing for a label that may land on a bar.
+
+    Invisible on the surface and opaque over a fill, which is what a callout
+    placed by rule rather than by inspection needs: the corner it is put in is
+    empty on most games and is not on all of them."""
+    return {
+        "boxstyle": "square,pad=0.25",
+        "facecolor": PALETTE["bg"],
+        "edgecolor": "none",
+    }
+
+
+def deserved_share(verdict: GameVerdict) -> int:
+    """The favoured team's share as a whole number, rounded as the headline is.
+
+    Rounded from the *home* share and subtracted, so the callout and the
+    headline can never disagree by a point on a share that rounds both ways.
+    """
+    home_share = round(verdict.dtw_home * 100)
+    return home_share if verdict.deserved_winner == verdict.home_team else 100 - home_share
+
+
+def _draw_callout(ax, verdict: GameVerdict, home_colour: str, away_colour: str) -> Text:
+    """`"GB deserved to win 95% of simulations"`, in that team's own colour.
+
+    The baseball run-distribution chart's device. It is the sentence the figure
+    exists to say, and a reader who takes nothing else off the plot should take
+    this. It goes in the upper corner on the favoured team's own side, so the
+    words sit over the bars they describe.
+    """
+    at_home = verdict.deserved_winner == verdict.home_team
+    colour = home_colour if at_home else away_colour
+    return ax.text(
+        0.985 if at_home else 0.015,
+        CALLOUT_Y,
+        f"{verdict.deserved_winner} deserved to win {deserved_share(verdict)}% of simulations",
+        transform=ax.transAxes,
+        ha="right" if at_home else "left",
+        va="top",
+        fontsize=10.5,
+        fontweight="bold",
+        color=colour,
+        zorder=7,
+        bbox=_shielded(),
+    )
+
+
+def _draw_luck_arrow(ax, verdict: GameVerdict):
+    """The span between the two rules, labelled with the luck it measures.
+
+    The patch runs from the actual margin to the deserved one, and its head is
+    at the **actual** end — that is the direction luck pushed the game, and the
+    label says so in the same words. An arrowhead on the deserved end would
+    point one way while the sentence above it pointed the other.
+
+    Sign convention: ``actual - deserved`` is what luck added to the home team's
+    margin, so a positive gap is luck that helped the home team.
+    """
+    gap = verdict.actual_margin - verdict.deserved_margin
+    toward = verdict.home_team if gap > 0 else verdict.away_team
+    span = ax.annotate(
+        "",
+        xy=(verdict.deserved_margin, ARROW_Y),
+        xycoords=("data", "axes fraction"),
+        xytext=(verdict.actual_margin, ARROW_Y),
+        textcoords=("data", "axes fraction"),
+        arrowprops={
+            "arrowstyle": "<-",
+            "color": PALETTE["text_muted"],
+            "linewidth": 1.2,
+            "shrinkA": 0.0,
+            "shrinkB": 0.0,
+        },
+        zorder=6,
+        annotation_clip=False,
+    )
+    label = ax.text(
+        (verdict.actual_margin + verdict.deserved_margin) / 2.0,
+        ARROW_Y + 0.015,
+        f"luck moved the margin {abs(gap):.1f} points toward {toward}",
+        transform=ax.get_xaxis_transform(),
+        ha="center",
+        va="bottom",
+        fontsize=9,
+        color=PALETTE["text_muted"],
+        zorder=7,
+        bbox=_shielded(),
+    )
+    return span, label
+
+
+def _draw_logo_legend(ax, entries) -> None:
+    """The clubs' marks under the plot, in place of two coloured swatches.
+
+    A mark is the identity a reader already knows, so it does the job a swatch
+    does without asking them to hold a colour in their head while they look at
+    the bars. The abbreviation stays beside it: a club without a cached mark
+    still has to be named, and identity is never carried by an image alone.
+    """
+    from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+    count = len(entries)
+    centres = [0.5 + (index - (count - 1) / 2.0) * LOGO_LEGEND_GAP for index in range(count)]
+    for centre, (team, logo) in zip(centres, entries, strict=True):
+        if logo is not None:
+            ax.add_artist(
+                AnnotationBbox(
+                    OffsetImage(
+                        logo,
+                        zoom=logo_zoom(logo, ax.figure, max_width_in=0.34, max_height_in=0.17),
+                    ),
+                    (centre - 0.05, LOGO_LEGEND_Y),
+                    xycoords="axes fraction",
+                    frameon=False,
+                    annotation_clip=False,
+                    box_alignment=(0.5, 0.5),
+                )
+            )
+        ax.text(
+            centre - 0.02,
+            LOGO_LEGEND_Y,
+            f"{team} wins",
+            transform=ax.transAxes,
+            ha="left",
+            va="center",
+            fontsize=10,
+            color=PALETTE["text"],
+            clip_on=False,
+        )
+
+
 def plot_bootstrap_distribution(
-    verdict: GameVerdict, *, bin_width: float = 1.0, colors: tuple[str, str] | None = None
+    verdict: GameVerdict,
+    *,
+    bin_width: float = 1.0,
+    colors: tuple[str, str] | None = None,
+    logos: dict | None = None,
+    callout: bool = False,
+    arrow: bool = False,
+    legend_logos: bool = False,
 ):
     """Deserved margin across the bootstrap, with the actual margin marked.
 
@@ -506,6 +667,7 @@ def plot_bootstrap_distribution(
     Returns ``(figure, axes)`` so a caller can add a panel beside it.
     """
     home_colour, away_colour = colors or (HOME_HUE, AWAY_HUE)
+    logos = logos or {}
     with mpl.rc_context(STYLE):
         fig, ax = plt.subplots(figsize=(7.6, 4.0))
 
@@ -528,7 +690,12 @@ def plot_bootstrap_distribution(
             lower = np.floor(draws.min() / bin_width) * bin_width
             upper = np.ceil(draws.max() / bin_width) * bin_width + bin_width
             edges = np.arange(lower, upper, bin_width)
-            counts, edges = np.histogram(draws, bins=edges, density=True)
+            counts, edges = np.histogram(draws, bins=edges)
+            # Per cent of the simulations, not a density. A density's height
+            # depends on the bin width, so the same game drawn at one point and
+            # at three would carry two different y axes for the same fact; a
+            # share of the runs is the number a reader can actually state.
+            counts = counts / counts.sum() * 100.0
             left = edges[:-1]
             # A bar is the home team's when its whole span is a home win. The
             # bin starting at exactly zero is the first one, since a margin of
@@ -550,26 +717,41 @@ def plot_bootstrap_distribution(
                 linewidth=0.5,
                 zorder=2,
             )
-            ax.set_yticks([])
-            ax.set_ylabel("share of re-flips", fontsize=9, color=PALETTE["text_muted"])
+            # Headroom first: everything placed in axes fractions above depends
+            # on where the bars stop, and `set_ylim` after the fact would move
+            # them relative to a plot they were measured against.
+            ax.set_ylim(
+                0.0, counts.max() * (ANNOTATED_HEADROOM if callout or arrow else PLAIN_HEADROOM)
+            )
+            ax.set_ylabel("% of simulations", fontsize=9, color=PALETTE["text_muted"])
+            # Round 1's review: the figure "makes sense the more you read it".
+            # A y axis with nothing on it is one of the reasons — the reader is
+            # shown a shape and left to guess what its height means.
+            ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(4, min_n_ticks=3))
+            ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))
             # Only the sides that have bars, for the reason the waterfall's
             # legend gives: a key for a colour that appears nowhere sends a
             # reader hunting the figure for it. A degenerate game has one.
-            handles = []
+            sides = []
             if any(edge < 0 for edge in left):
-                handles.append(Patch(facecolor=away_colour, label=f"{verdict.away_team} wins"))
+                sides.append((verdict.away_team, away_colour))
             if any(edge >= 0 for edge in left):
-                handles.append(Patch(facecolor=home_colour, label=f"{verdict.home_team} wins"))
-            ax.legend(
-                handles=handles,
-                loc="upper center",
-                bbox_to_anchor=(0.5, -0.20),
-                ncol=2,
-                frameon=False,
-                fontsize=9,
-                handlelength=1.1,
-                handleheight=0.9,
-            )
+                sides.append((verdict.home_team, home_colour))
+            if legend_logos:
+                _draw_logo_legend(ax, [(team, logos.get(team)) for team, _ in sides])
+            else:
+                ax.legend(
+                    handles=[
+                        Patch(facecolor=colour, label=f"{team} wins") for team, colour in sides
+                    ],
+                    loc="upper center",
+                    bbox_to_anchor=(0.5, -0.20),
+                    ncol=2,
+                    frameon=False,
+                    fontsize=9,
+                    handlelength=1.1,
+                    handleheight=0.9,
+                )
 
         _rule(ax, 0.0, "", color=PALETTE["text_muted"], dashes=(2, 3), weight=1.0)
         deserved_label = _rule(
@@ -593,8 +775,13 @@ def plot_bootstrap_distribution(
 
         ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
         ax.set_axisbelow(True)
+        # "margin, DET perspective" asks the reader to hold a convention. The
+        # subtraction says the same thing and can be read straight off: right of
+        # zero is a DET win because DET's score is the one being subtracted from.
         ax.set_xlabel(
-            f"margin, {verdict.home_team} perspective", fontsize=9, color=PALETTE["text_muted"]
+            f"final margin ({verdict.home_team} \u2212 {verdict.away_team})",
+            fontsize=9,
+            color=PALETTE["text_muted"],
         )
 
         # The count is the number of re-adjudications actually drawn — 200
@@ -603,7 +790,7 @@ def plot_bootstrap_distribution(
         # 160,000 values would be describing a different figure.
         heading = "Deserve-to-Win"
         if not verdict.is_point_mass:
-            heading = f"{heading} — {len(verdict.margin_draws):,} luck re-flips"
+            heading = f"{heading} — {len(verdict.margin_draws):,} simulations"
         draw_header(ax, verdict, heading)
 
         caveat = ax.text(
@@ -621,6 +808,13 @@ def plot_bootstrap_distribution(
         # under the sidebar's paragraphs.
         _wrap_to_width(fig, caveat, ax.get_window_extent().width)
         _lift_colliding_label(fig, deserved_label, actual_label)
+
+        if callout:
+            _draw_callout(ax, verdict, home_colour, away_colour)
+        # Nothing to span on a degenerate game: the bootstrap never changed its
+        # mind, so an arrow there would measure a gap the figure is not about.
+        if arrow and not verdict.is_degenerate:
+            _draw_luck_arrow(ax, verdict)
         return fig, ax
 
 

@@ -22,6 +22,8 @@ import pytest
 
 matplotlib.use("Agg")
 
+from matplotlib.offsetbox import AnnotationBbox  # noqa: E402
+from matplotlib.patches import FancyArrowPatch  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from nfl_simulator.plots import (  # noqa: E402
@@ -938,7 +940,7 @@ def test_the_pill_clears_the_heading_and_the_subtitle_it_shares_a_row_with(bucke
     """`LV_KC_9-48--0-100_dtw.png`: "scoreboard holds" printed through the heading.
 
     Drawn at the real draw count, so the heading is the full-width
-    "Deserve-to-Win - 160,000 luck re-flips" the shipped settings produce rather
+    "Deserve-to-Win - 160,000 simulations" the shipped settings produce rather
     than a short one a fixture happened to make."""
     game = branded(dtw_home=bucket_dtw, draws=np.linspace(-20, 6, 160_000))
     fig, ax = plot_bootstrap_distribution(game)
@@ -973,9 +975,15 @@ def test_a_degenerate_game_legends_only_the_side_that_has_bars():
     assert labels == ["DET wins"]
 
 
-def test_the_distribution_heading_counts_the_re_flips_it_actually_drew():
+def test_the_distribution_heading_counts_the_simulations_it_actually_drew():
     fig, ax = plot_bootstrap_distribution(branded(draws=np.linspace(-12, 6, 1000)))
-    assert "1,000 luck re-flips" in figure_text(fig)
+    assert "1,000 simulations" in figure_text(fig)
+
+
+def test_the_word_re_flips_is_gone_from_the_distribution():
+    """Round 1's review: "re-flips" is the simulator's word, not a reader's."""
+    fig, ax = plot_bootstrap_distribution(branded(draws=np.linspace(-12, 6, 1000)))
+    assert "re-flips" not in figure_text(fig)
 
 
 # --------------------------------------------------------------------------
@@ -1154,3 +1162,220 @@ def test_a_degenerate_card_says_the_bootstrap_never_changed_its_mind():
 def test_the_card_draws_no_axes_because_it_is_not_a_plot():
     fig, ax = plot_game_card(branded())
     assert not ax.axison
+
+
+# --------------------------------------------------------------------------
+# the distribution's variant options — figure workshop round 2, Part A
+# --------------------------------------------------------------------------
+
+DET_BLUE, GB_GREEN = "#0076B6", "#203731"
+
+
+def synthetic_mark(colour=(20, 40, 200)) -> np.ndarray:
+    """A 4x6 fully opaque RGBA block standing in for a club's mark."""
+    mark = np.zeros((4, 6, 4), dtype=np.uint8)
+    mark[:, :, :3] = colour
+    mark[:, :, 3] = 255
+    return mark
+
+
+VARIANTS = [
+    {"bin_width": 1.0, "callout": True},
+    {"bin_width": 3.0, "callout": True},
+    {"bin_width": 3.0, "callout": True, "arrow": True},
+    {"bin_width": 3.0, "callout": True, "arrow": True, "legend_logos": True},
+]
+
+
+def test_a_wider_bin_draws_fewer_bars_and_every_bar_is_that_wide():
+    game = branded(draws=np.linspace(-20.0, 6.0, 4000))
+    narrow = plot_bootstrap_distribution(game, bin_width=1.0)[1]
+    wide = plot_bootstrap_distribution(game, bin_width=3.0)[1]
+    assert len(wide.patches) < len(narrow.patches)
+    assert all(abs(patch.get_width() - 1.0) < 1e-9 for patch in narrow.patches)
+    assert all(abs(patch.get_width() - 3.0) < 1e-9 for patch in wide.patches)
+
+
+def test_a_wider_bin_still_puts_an_edge_on_zero():
+    """Zero decides the winner, so no bar may straddle it at any width."""
+    game = branded(draws=np.linspace(-20.0, 6.0, 4000))
+    _fig, ax = plot_bootstrap_distribution(game, bin_width=3.0)
+    assert all(abs(patch.get_x() % 3.0) < 1e-9 for patch in ax.patches)
+
+
+def test_the_y_axis_is_a_percentage_of_the_simulations():
+    fig, ax = plot_bootstrap_distribution(branded())
+    fig.canvas.draw()
+    assert ax.get_ylabel() == "% of simulations"
+    labels = [tick.get_text() for tick in ax.get_yticklabels() if tick.get_text()]
+    assert labels, "the y axis is worth reading now, so it carries ticks"
+    assert all(label.endswith("%") for label in labels)
+
+
+def test_the_bar_heights_are_the_share_of_simulations_in_each_bin():
+    """Percent, not density: over a one-point grid the bars sum to 100."""
+    _fig, ax = plot_bootstrap_distribution(branded(draws=np.linspace(-20.0, 6.0, 4000)))
+    assert sum(patch.get_height() for patch in ax.patches) == pytest.approx(100.0)
+
+
+def test_the_axis_label_names_the_two_teams_the_margin_runs_between():
+    _fig, ax = plot_bootstrap_distribution(branded())
+    assert ax.get_xlabel() == "final margin (DET \u2212 GB)"
+
+
+# --- the callout ----------------------------------------------------------
+
+
+def test_the_callout_says_who_deserved_to_win_and_how_often():
+    _fig, ax = plot_bootstrap_distribution(branded(), colors=(DET_BLUE, GB_GREEN), callout=True)
+    hits = [text for text in ax.texts if "deserved to win" in text.get_text()]
+    assert len(hits) == 1
+    assert hits[0].get_text() == "GB deserved to win 95% of simulations"
+
+
+def test_the_callout_is_written_in_the_favoured_team_s_own_colour():
+    _fig, ax = plot_bootstrap_distribution(branded(), colors=(DET_BLUE, GB_GREEN), callout=True)
+    hit = next(text for text in ax.texts if "deserved to win" in text.get_text())
+    assert matplotlib.colors.to_hex(hit.get_color()) == GB_GREEN.lower()
+
+
+def test_the_callout_follows_the_favoured_side_when_it_is_the_home_team():
+    _fig, ax = plot_bootstrap_distribution(
+        branded(dtw_home=0.86), colors=(DET_BLUE, GB_GREEN), callout=True
+    )
+    hit = next(text for text in ax.texts if "deserved to win" in text.get_text())
+    assert hit.get_text() == "DET deserved to win 86% of simulations"
+    assert matplotlib.colors.to_hex(hit.get_color()) == DET_BLUE.lower()
+
+
+@pytest.mark.parametrize("dtw", [0.05, 0.86], ids=["away-favoured", "home-favoured"])
+def test_the_callout_never_prints_through_a_rule_label(dtw):
+    fig, ax = plot_bootstrap_distribution(branded(dtw_home=dtw), callout=True)
+    fig.canvas.draw()
+    hit = next(text for text in ax.texts if "deserved to win" in text.get_text())
+    boxes = _rule_label_boxes(fig, ax)
+    assert boxes
+    assert not any(box.overlaps(hit.get_window_extent()) for box in boxes)
+
+
+def test_there_is_no_callout_unless_the_figure_asks_for_one():
+    _fig, ax = plot_bootstrap_distribution(branded())
+    assert not [text for text in ax.texts if "deserved to win" in text.get_text()]
+
+
+# --- the arrow ------------------------------------------------------------
+
+
+def _spans(ax) -> list:
+    return [
+        text for text in ax.texts if isinstance(getattr(text, "arrow_patch", None), FancyArrowPatch)
+    ]
+
+
+def test_the_arrow_runs_from_the_actual_margin_to_the_deserved_one():
+    _fig, ax = plot_bootstrap_distribution(branded(), arrow=True)
+    spans = _spans(ax)
+    assert len(spans) == 1
+    assert spans[0].xyann[0] == pytest.approx(8.0)
+    assert spans[0].xy[0] == pytest.approx(-8.28)
+
+
+def test_the_arrow_says_how_far_luck_moved_the_margin_and_toward_whom():
+    _fig, ax = plot_bootstrap_distribution(branded(), arrow=True)
+    label = next(t for t in ax.texts if t.get_text().startswith("luck moved the margin"))
+    assert label.get_text() == "luck moved the margin 16.3 points toward DET"
+
+
+def test_the_arrow_names_the_other_team_when_luck_ran_the_other_way():
+    game = branded(actual_margin=-3.0, deserved_margin=6.0, draws=np.linspace(-10.0, 14.0, 512))
+    _fig, ax = plot_bootstrap_distribution(game, arrow=True)
+    label = next(t for t in ax.texts if t.get_text().startswith("luck moved the margin"))
+    assert label.get_text() == "luck moved the margin 9.0 points toward GB"
+
+
+def test_the_arrow_is_drawn_in_ink_rather_than_in_either_team_s_colour():
+    _fig, ax = plot_bootstrap_distribution(branded(), colors=(DET_BLUE, GB_GREEN), arrow=True)
+    label = next(t for t in ax.texts if t.get_text().startswith("luck moved the margin"))
+    assert matplotlib.colors.to_hex(label.get_color()) == PALETTE["text_muted"].lower()
+
+
+def test_a_degenerate_game_is_drawn_without_an_arrow():
+    """The bootstrap never changed its mind, so there is nothing to measure."""
+    game = branded(dtw_home=1.0, draws=np.linspace(15.0, 40.0, 512))
+    _fig, ax = plot_bootstrap_distribution(game, arrow=True)
+    assert not _spans(ax)
+    assert not [t for t in ax.texts if t.get_text().startswith("luck moved")]
+
+
+def test_there_is_no_arrow_unless_the_figure_asks_for_one():
+    _fig, ax = plot_bootstrap_distribution(branded())
+    assert not _spans(ax)
+
+
+# --- the logo legend ------------------------------------------------------
+
+
+def test_the_legend_can_be_the_two_clubs_marks_instead_of_two_swatches():
+    logos = {"GB": synthetic_mark(), "DET": synthetic_mark((200, 30, 30))}
+    _fig, ax = plot_bootstrap_distribution(branded(), logos=logos, legend_logos=True)
+    assert ax.get_legend() is None
+    marks = [artist for artist in ax.artists if isinstance(artist, AnnotationBbox)]
+    assert len(marks) == 2
+    assert {"GB wins", "DET wins"} <= {text.get_text() for text in ax.texts}
+
+
+def test_the_swatch_legend_is_what_a_figure_gets_by_default():
+    _fig, ax = plot_bootstrap_distribution(branded())
+    assert ax.get_legend() is not None
+
+
+def test_a_club_without_a_mark_still_gets_its_name_in_the_logo_legend():
+    _fig, ax = plot_bootstrap_distribution(
+        branded(), logos={"DET": synthetic_mark()}, legend_logos=True
+    )
+    assert {"GB wins", "DET wins"} <= {text.get_text() for text in ax.texts}
+    assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 1
+
+
+# --- every variant, on the awkward games ----------------------------------
+
+
+@pytest.mark.parametrize("options", VARIANTS, ids=["V1", "V2", "V3", "V4"])
+def test_every_variant_draws_a_degenerate_game_without_raising(options):
+    game = branded(dtw_home=1.0, draws=np.linspace(15.0, 40.0, 512))
+    _fig, ax = plot_bootstrap_distribution(game, logos={"DET": synthetic_mark()}, **options)
+    assert ax.patches
+
+
+@pytest.mark.parametrize("options", VARIANTS, ids=["V1", "V2", "V3", "V4"])
+def test_every_variant_draws_a_point_mass_game_without_raising(options):
+    game = branded(dtw_home=1.0, actual_margin=8.0, deserved_margin=8.0, draws=np.full(1, 8.0))
+    _fig, ax = plot_bootstrap_distribution(game, logos={"DET": synthetic_mark()}, **options)
+    assert "no luck events" in " ".join(text.get_text() for text in ax.texts).lower()
+
+
+def test_the_arrow_and_its_label_stay_clear_of_everything_else_up_there():
+    """Three annotations share the top of the plot; none may print through another."""
+    fig, ax = plot_bootstrap_distribution(branded(), arrow=True, callout=True)
+    fig.canvas.draw()
+    label = next(t for t in ax.texts if t.get_text().startswith("luck moved the margin"))
+    callout = next(t for t in ax.texts if "deserved to win" in t.get_text())
+    others = _rule_label_boxes(fig, ax) + [callout.get_window_extent()]
+    assert not any(box.overlaps(label.get_window_extent()) for box in others)
+
+
+def test_the_annotated_figure_reserves_a_clear_band_above_its_tallest_bar():
+    """The callout is placed by rule, so the room it needs is made, not found.
+
+    `59_2018_05_GB_DET_V1.png` printed "GB deserved to win 95% of simulations"
+    straight across the three tallest bars, because the histogram filled the
+    frame and the corner the callout is put in was not empty."""
+    game = branded(draws=np.linspace(-20.0, 6.0, 4000))
+    fig, ax = plot_bootstrap_distribution(game, callout=True, arrow=True)
+    fig.canvas.draw()
+    tallest = max(patch.get_height() for patch in ax.patches)
+    callout = next(t for t in ax.texts if "deserved to win" in t.get_text())
+    floor = ax.transData.inverted().transform(
+        (0, callout.get_window_extent().y0)
+    )[1]
+    assert floor > tallest, "the callout sits on a bar"
