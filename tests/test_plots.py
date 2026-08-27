@@ -1676,3 +1676,25 @@ def test_a_row_worth_less_than_a_tenth_of_a_point_is_not_printed_as_zero():
     text = figure_text(fig)
     assert "+0.0 " not in text and not text.endswith("+0.0")
     assert "-0.02" in text
+
+
+def test_the_two_tables_sit_together_when_one_team_had_few_events():
+    """`NYJ_SF_23-17--36-64_luck_ledger.png`: the Jets had three luck events, so
+    their table stopped a third of the way down and the 49ers' section stayed
+    pinned at its fixed height. The hole between them read as a bug."""
+    rows = [
+        card_row(2.0, play_id=1.0, kick_distance=41.0),
+        card_row(1.0, play_id=2.0, kick_distance=36.0),
+        card_row(0.5, play_id=3.0, kick_distance=30.0),
+        *[
+            card_row(-1.0 - index, play_id=10.0 + index, charged_team="DET", opponent="GB")
+            for index in range(5)
+        ],
+    ]
+    _fig, ax = plot_luck_ledger_card(reconciling(rows), rows, points_per_epa=PPE)
+    wide = [patch.get_bbox() for patch in ax.patches if patch.get_bbox().width > 5.0]
+    accents = sorted((box for box in wide if box.height < 0.2), key=lambda box: box.y0)
+    row_rects = [box for box in wide if box.height >= 0.2]
+    away_floor = min(box.y0 for box in row_rects if box.y0 > accents[0].y1)
+    assert away_floor - accents[0].y1 < 1.0, "a hole between the two tables"
+    assert min(box.y0 for box in row_rects) > 0.3, "the last row runs off the card"

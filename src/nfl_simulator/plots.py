@@ -1400,7 +1400,13 @@ LEDGER_HEADER_Y = 12.15
 LEDGER_BOXES_Y = 11.42
 LEDGER_BOX_HEIGHT = 2.15
 LEDGER_SWINGS_Y = 8.90
-LEDGER_SECTION_Y = (8.00, 4.10)
+# The band the two tables live in, and the air between them. Where each section
+# starts is computed from how many rows the one above it has: pinning the second
+# to a fixed height left a hole down the middle of a card whose first team had
+# three luck events, and a hole reads as a bug rather than as margin.
+LEDGER_TABLES_TOP = 8.00
+LEDGER_TABLES_BOTTOM = 0.34
+LEDGER_SECTION_GAP = 0.44
 
 
 @dataclass(frozen=True)
@@ -1616,7 +1622,31 @@ def team_or_abbr(team: str, names: dict | None) -> str:
     return (names or {}).get(team, team)
 
 
-LEDGER_ROW_HEIGHT = 0.44
+LEDGER_ROW_HEIGHT = 0.42
+
+
+def section_height(luck: TeamLuck) -> float:
+    """How tall one team's table is, in inches: header, columns, then its rows.
+
+    Measured rather than assumed, because everything below a section is placed
+    from it — and a team's row count is a property of the game, not of the card.
+    """
+    rows = max(1, len(table_rows(luck)))
+    return 0.76 + 0.48 + (rows - 1) * LEDGER_ROW_HEIGHT + LEDGER_ROW_HEIGHT / 2
+
+
+def section_tops(away: TeamLuck, home: TeamLuck) -> tuple[float, float]:
+    """Where the two tables start, centred in the band they share.
+
+    Two full tables fill the band; two short ones sit in the middle of it with
+    equal air above and below, which reads as a margin. Either way the second
+    follows the first rather than waiting at a fixed height for it.
+    """
+    heights = (section_height(away), section_height(home))
+    total = heights[0] + LEDGER_SECTION_GAP + heights[1]
+    available = LEDGER_TABLES_TOP - LEDGER_TABLES_BOTTOM
+    top = LEDGER_TABLES_TOP - max(0.0, (available - total) / 2.0)
+    return top, top - heights[0] - LEDGER_SECTION_GAP
 
 
 def _draw_team_table(ax, luck: TeamLuck, names, *, y_top, colour, logo, columns):
@@ -1866,7 +1896,7 @@ def plot_luck_ledger_card(
         if verdict.went_to_overtime:
             ax.text(
                 4.0,
-                0.22,
+                0.12,
                 OVERTIME_FOOTER,
                 fontsize=10,
                 ha="center",
@@ -1880,7 +1910,7 @@ def plot_luck_ledger_card(
             (7.40, "Points", "right"),
         )
         for luck, y_top, colour in zip(
-            (away, home), LEDGER_SECTION_Y, (away_colour, home_colour), strict=True
+            (away, home), section_tops(away, home), (away_colour, home_colour), strict=True
         ):
             _draw_team_table(
                 ax,
