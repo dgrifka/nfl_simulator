@@ -215,13 +215,50 @@ fraction of scenario datasets whose upper bound exceeds the threshold.
 
 | Entity design | Null bound (90th pct) = threshold | Power at 5% | **at 12.5%** | at 25% | at 50% | Resolvable? |
 |---|---|---|---|---|---|---|
-| Worthy rate, QB-season (≥ 200 att) | *to fill* | | | | | |
-| Worthy rate, defence-season | *to fill* | | | | | |
-| Residual, defence-season × QB-season | *to fill* | | | | | |
-| Residual, defence pooled × QB-season | *to fill* | | | | | |
-| Residual, QB-season (σ_q) | *to fill* | | | | | |
+| Worthy rate, QB-season (≥ 200 att) | **0.551 pp** | 0.177 | **0.780** | 1.000 | 1.000 | **No** |
+| Worthy rate, defence-season | **0.522 pp** | 0.230 | **0.935** | 1.000 | 1.000 | **Yes** |
+| Residual, defence-season × QB-season | **9.410 pp** | 0.130 | **0.362** | 0.953 | 1.000 | **No** |
+| Residual, defence pooled × QB-season | **8.086 pp** | 0.142 | **0.555** | 0.990 | 1.000 | **No** |
+| Residual, QB-season (σ_q) | **8.075 pp** | 0.193 | **0.578** | 0.988 | 1.000 | **No** |
 
 `RANDOM_SEED = 20260827`, `DATASETS = 400`, `MIN_POWER = 0.80`.
+
+Filled 2026-08-27 from `research/61_dropped_pick_power.py` →
+`research/outputs/61_dropped_pick_power.json`, **before**
+`research/62_dropped_pick_confounds.py` existed as a fit. Nothing in §7 moved.
+
+**The guards (constraint 8), as measured.** Charted passes 80,785 — document
+32's figure exactly, on `play_type == "pass"`. Interception-worthy **2,997**
+(0.00% off the expected count). Intercepted 1,454, so `p̄ = 0.4852` (0.02 pp
+off 0.485). **128** defence-seasons. **28** worthy throws dropped for a null
+covariate, and the 28 are one nested set: all 28 are missing `pass_location`,
+27 of those also `air_yards`, 16 of those also `down`. They are the throws
+nflverse could not place. That leaves **2,969** throws in arm 2's frame. All
+guards ok; nothing needed asking.
+
+**What the residual designs actually see.** The residual question's QB-season
+unit is ≥ 20 worthy throws (§4), and a crossed design gives every row a level
+on both factors, so throws by a QB-season below the floor have no level to
+belong to and leave with it. The gate arm's frame is therefore **1,145 throws,
+125 defence-seasons (32 pooled defences), 46 QB-seasons**, at a **median of 7
+chances per defence-season** against the 22 document 32 §3 reported on the
+unfiltered count. That is the whole reason the two residual rows above read
+0.362 and 0.555 rather than something usable: the floor buys conditioning at
+the price of two thirds of the sample, and it was pre-registered before anyone
+knew which way that trade would land.
+
+**One row deserves a sentence.** Worthy rate at the QB-season grain lands at
+**0.780**, two hundredths under the 0.80 bar. Gate D-1 carries no pass rule, so
+nothing turns on it — but the number is reported rather than rounded up, and it
+means the QB-side spread is stated with an interval and a power figure that is
+honestly just short of the project's own reference.
+
+**Compute, against the §5 estimate.** §5 predicted "under ten minutes" for
+power. The two crossed designs cost ~0.65 s and ~0.22 s per fit, so the 14
+residual cells are ~5,600 grid fits: **565 s of wall clock across nine worker
+processes**, about 40 minutes of CPU. The estimate was optimistic about the
+crossed grid, not about the design; every dataset is seeded from its own index,
+so serial and parallel runs return the same numbers.
 
 ## 7. Pre-registered gates
 
