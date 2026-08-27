@@ -271,7 +271,7 @@ reading found, and what was done about it.
 | `59_*_V1` (both games) | Callout printed across the three tallest bars. **Fixed** — annotation headroom, with a test. |
 | `59_2025_17_DET_MIN_V1` | Eleven visible spikes; the picket-fence reading that decided the bin width. |
 | `59_*_V3`, `V4` | Arrow head at the actual margin, pointing the way luck pushed, label agreeing. Reads correctly on both games. |
-| `59_2025_17_DET_MIN_V4` | The callout asserts a 55% share on a game the pill calls "too close to call". Factually a statement about the simulations, not a verdict — flagged, not changed (D-3). |
+| `59_2025_17_DET_MIN_V4` | The callout asserts a 55% share on a game the pill calls "too close to call". Factually a statement about the simulations, not a verdict — flagged, not changed (D-3); closed in round 3, the callout now declines with the pill. |
 | `GB_DET_*_luck_ledger` | First draft at 12 in drew the home accent bar through the away team's folded row; "vs" sat under both boxes. **Both fixed**, with tests. |
 | `NYJ_SF_*_luck_ledger` | Three-event team left a hole down the middle. **Fixed** — sections flow and centre. |
 | `DEN_WAS_*_luck_ledger` | Headline −2.3 over six green positives. **Fixed** — `NET LUCK` label and the reworded subtitle (§2a). |
@@ -283,19 +283,22 @@ reading found, and what was done about it.
 | `DEN_WAS_*_dtw` | Document 37 §7a's close-margin lift still holds at −3.3 vs −1. |
 | `*_card` (all five) | Unchanged but for the overtime line, as instructed. |
 | `NYJ_SF_*_dtw_article`, `DEN_WAS_*_dtw_article` | Sidebar attached, footer still present, plot at its unwidened size. Trailing space under the plot where the panel is taller (D-5). |
-| `60_matchup_colours.png` | Every cell two distinct halves. The New Orleans row is visibly pale — D-2, drawn rather than hidden. |
+| `60_matchup_colours.png` | Every cell two distinct halves. The New Orleans row was visibly pale — D-2, drawn rather than hidden; closed in round 3, and the row now reads as dark as the rest. |
 
 ---
 
 ## 6. Defect register
 
-**D-1 — the card's headline and its columns are different quantities (open).**
-The headline is the game's net luck signed toward a team; the table lists that
-team's own plays. They can have opposite signs, and a reader who adds Denver's
-column gets +2.3 against a −2.3 headline. Both are labelled now (§2a) and no
-partition of the rows can make a per-team column sum to a zero-sum net — the net
-is "my gross luck minus yours" and spans both tables. Whether to add a per-team
-subtotal, or to reword further, is the maintainer's call.
+**D-1 — the card's headline and its columns are different quantities
+(closed, round 3).** The headline was the game's net luck signed toward a team
+while the table listed that team's own plays, so a reader who added Denver's
+column got +2.3 against a −2.3 headline. Round 2 labelled the two quantities;
+round 3 made them one. The headline is now `TeamLuck.own_points` — the sum of
+the table under it, including the folded row, to 1e-9 — and the game's net luck
+moved to the lane between the boxes as `Net luck: WAS +2.3`, where it is a fact
+about the matchup rather than about a club. the maintainer's call was the third option:
+neither a subtotal row nor a further label, but a different quantity in the
+headline. See §7.
 
 **D-2 — New Orleans' primary is below the contrast floor (closed, round 3).**
 `#D3BC8D` at 1.78:1 on `PALETTE["bg"]`. Closed by a contrast floor in
@@ -308,10 +311,12 @@ blacks. `research/60_matchup_colours.py` now prints the count on every run
 whether or not it fires; a missing line and a zero look the same on a console.
 
 **D-3 — the callout states a share on a game the product refuses to call
-(open).** `MIN deserved to win 55% of simulations` sits beside a "too close to
-call" pill. The sentence is true — it is a statement about the simulations, not a
-verdict — and the pill is immediately above it. Flagged for the maintainer rather than
-reworded, because the callout's wording is a settled decision.
+(closed, round 3).** `MIN deserved to win 55% of simulations` sat beside a "too
+close to call" pill: one figure, two verdicts. Inside the band the callout now
+reads `MIN 55% · DET 45% — too close to call` in `PALETTE["text"]`, because the
+sentence belongs to neither club. Outside the band nothing moved. A degenerate
+game draws no callout at all — see §7 for the one caveat on that. The wording
+was a settled decision and the maintainer settled it again.
 
 **D-4 — waterfall value labels crowd very small bars (cosmetic).** A bar worth
 0.2 points is narrower than its own label, so the label sits against the bar's
@@ -323,7 +328,10 @@ the frame, which is the property that is tested.
 waterfall's height changes with its row count), so a seven-paragraph panel is
 taller than a 4-inch distribution.
 
-**Closed this round:** the round-1 protan defect on `2016_14_NYJ_SF` (document
+**Open after round 3:** D-4 and D-5, both cosmetic. D-1, D-2 and D-3 are
+closed above.
+
+**Closed in round 2:** the round-1 protan defect on `2016_14_NYJ_SF` (document
 41 §6, §8) — resolved by §3, from ΔE 5.2 to 36.5. Round 1's KC/SF finding is
 superseded: it is a clash, just not an RGB one.
 
@@ -335,7 +343,69 @@ not a fix.
 
 ---
 
-## 7. What this round did not do
+## 7. Round 3 — the wording, 2026-08-27
+
+Three decisions the maintainer made after reading this document, implemented on the same
+branch with one commit each. Nothing was fitted, no statistic is new, and the
+replay stayed at 0.00e+00 for all five games. 502 tests pass, 22 written first
+and 3 replaced. Record: `docs/research/results-2026-08-27-exp3.md`, log
+`docs/research/log-2026-08-27-wording.md`.
+
+**V4 is confirmed** as the shipped distribution figure and the darkening rungs
+in the clash ladder are accepted as implemented. Neither needed work.
+
+**(a) The ledger card's headline is the luck on that team's own plays**
+(`a8196f9`, closes D-1). Both boxes carry the same three lines — `LUCK ON OWN
+PLAYS`, the headline, the event count — and the headline is the sum of the table
+under it. The lane between the boxes carries `vs`, the game's net luck in the
+favoured club's colour, and the two margins as one sentence about the scoreboard
+winner: `DET won by 8, deserved to lose by 8.3`. `NET LUCK` and the
+`Actual margin +8 → deserved −8.3` arrow are gone. The boxes narrowed from
+3.10 in to 2.55 in to make the lane readable, and the sentence breaks at its
+comma rather than wherever the measuring lands.
+
+On `2025_13_DEN_WAS`, the card this defect was raised on: both headlines are now
+green (+2.2 and +4.5) over green columns, and the lane reads `Net luck: WAS
++2.3`. Nothing on the card contradicts anything else on it.
+
+**(b) The callout declines with the pill** (`31a2b6d`, closes D-3). Inside the
+band it reads `MIN 55% · DET 45% — too close to call` in ink. Outside the band
+the wording and the club colour are unchanged, and a test pins that.
+
+One caveat worth the maintainer's eye: the handoff also specified that a degenerate game
+draws no callout, which is new behaviour rather than preserved behaviour.
+`LV_KC_9-48--0-100_dtw.png` has therefore lost `KC deserved to win 100% of
+simulations`. Opened and read: the title, the pill, the subtitle and the
+degeneracy caveat all still carry the 100%, and the luck arrow was already
+suppressed on degenerate games for the same reason. Easily reversed.
+
+**(c) A club under the contrast floor wears its secondary everywhere**
+(`805ebd8`, closes D-2). The floor moved from the pair rule up to the club
+lookup, where a club's identity is chosen rather than a pair's:
+`teams.readable_colours` returns the secondary first when the primary is under
+3:1 on the surface, and darkens the darker of the two until it reads if both
+fail. New Orleans is drawn in `#101820` in every figure rather than repainted
+per matchup, and every downstream caller inherits the floor without asking.
+
+| sweep, 992 ordered matchups | before | after |
+|---|---|---|
+| colours under 3:1 on the cream | 31 (all NO) | **0** |
+| `unresolved` | 0 | 0 |
+| `primaries` rung | 738 | 732 |
+| worst-case CVD, min / median | 6.1 / 24.4 | 6.1 / 25.0 |
+| normal-vision separation, min | 15.1 | 15.1 |
+
+The `primaries` rung lost six matchups because the Saints' new black now meets
+the league's other blacks and has to be separated like any other pair.
+`research/60_matchup_colours.py` prints the contrast count whether or not it
+fires: a missing line and a zero look the same on a console, and only one of
+them is a check.
+
+**D-4 and D-5 stay disclosed**, unchanged, by decision.
+
+---
+
+## 8. What these rounds did not do
 
 The logo, the `@[TBD]` handle, the merge to `main`, the community write-up, and
 rendering all 2,761 games. All four remain out by decision.
