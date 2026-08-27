@@ -84,7 +84,8 @@ def main() -> None:
     records = []
     for game_id in EXAMPLES:
         row = sources.game_row(game_id)
-        draws, gaps = replay(game_id, row)
+        result, gaps = replay(game_id, row, sources.schedule_row(game_id))
+        draws = result.margin_draws
         worst = max(gaps.values())
         print(
             f"  {game_id:<18} max |Δ vs committed| {worst:.2e}  {'ok' if worst == 0 else 'check'}"

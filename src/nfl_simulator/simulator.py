@@ -93,6 +93,15 @@ class SimulationResult:
     margin_draws: np.ndarray
     ledger: Ledger
     total_luck_epa: float
+    # The same bootstrap, split into the two teams' deserved points. Optional
+    # and defaulted to ``None`` so nothing that already reads this dataclass
+    # changes shape: a caller with no scoreboard — the summary artifacts carry
+    # margins, not scores — still gets every field it had before. When they are
+    # present, ``home_point_draws - away_point_draws`` is ``margin_draws``
+    # exactly, because the split comes from the same replay rather than from a
+    # second one.
+    home_point_draws: np.ndarray | None = None
+    away_point_draws: np.ndarray | None = None
 
 
 def points_per_epa(games: pl.DataFrame) -> float:
@@ -319,6 +328,51 @@ def _resample(draws: np.ndarray, n_draws: int, rng: np.random.Generator) -> np.n
 # --------------------------------------------------------------------------
 
 
+def _replayed_adjustment(
+    events: Sequence[LuckEvent], n_coin_draws: int, rng: np.random.Generator
+) -> np.ndarray:
+    """One replay of every coin, kept per event rather than summed.
+
+    Shape ``(n_posterior_draws, n_coin_draws, n_events)``. Layer 1 is already
+    done — it is the `expected_draws` vector each event carries. This is layer
+    2: at every posterior draw of `p`, flip every coin `n_coin_draws` times.
+
+    The per-event shape is what lets the margin and the two teams' deserved
+    points come out of **one** replay. Summing here and re-drawing for the
+    split would run two RNG streams over the same coins, and the two figures
+    would then be showing two different adjudications of the same game.
+
+    The adjustment is `actual - replayed`, NOT `replayed - p`. We are replacing
+    the branch that happened with one drawn fairly, so the margin moves by the
+    difference between the two branches. Using the deviation from expectation
+    instead would have mean zero, which would recentre the whole distribution
+    on the actual result and quietly neutralize nothing.
+    """
+    # (posterior draws, events)
+    p = np.column_stack([event.expected_draws for event in events])
+    swing = np.array([event.swing for event in events])
+    actual = np.array([event.actual for event in events])
+
+    uniforms = rng.random((p.shape[0], n_coin_draws, len(events)))
+    replayed = (uniforms < p[:, None, :]).astype(float)
+    return (actual[None, None, :] - replayed) * swing[None, None, :]
+
+
+def _bootstrap(
+    events: Sequence[LuckEvent],
+    actual_margin: float,
+    points_per_epa: float,
+    n_coin_draws: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The bootstrap, plus the per-event adjustment it was computed from."""
+    adjustment = _replayed_adjustment(events, n_coin_draws, rng)
+    margins = actual_margin - adjustment.sum(axis=2) * points_per_epa
+    # DTW per posterior draw, so the interval is a genuine credible interval on
+    # the probability rather than a spread of coin-flip noise.
+    return margins, (margins > 0).mean(axis=1), adjustment
+
+
 def bootstrap_margins(
     events: Sequence[LuckEvent],
     actual_margin: float,
@@ -328,10 +382,6 @@ def bootstrap_margins(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Document 05 §4's two-layer bootstrap, as a callable.
 
-    Layer 1 is already done — it is the `expected_draws` vector each event
-    carries. This runs layer 2 on top of it: at every posterior draw of `p`,
-    flip every coin `n_coin_draws` times and recompute the margin.
-
     Returns ``(margins, dtw_per_draw)`` with shapes
     ``(n_posterior_draws, n_coin_draws)`` and ``(n_posterior_draws,)``.
 
@@ -340,25 +390,62 @@ def bootstrap_margins(
     from it — a calibration check on a copy of the code would prove nothing about
     the code that ships.
     """
-    # (posterior draws, events)
-    p = np.column_stack([event.expected_draws for event in events])
-    swing = np.array([event.swing for event in events])
-    actual = np.array([event.actual for event in events])
+    margins, dtw_per_draw, _adjustment = _bootstrap(
+        events, actual_margin, points_per_epa, n_coin_draws, rng
+    )
+    return margins, dtw_per_draw
 
-    uniforms = rng.random((p.shape[0], n_coin_draws, len(events)))
-    replayed = (uniforms < p[:, None, :]).astype(float)
 
-    # The adjustment is `actual - replayed`, NOT `replayed - p`. We are
-    # replacing the branch that happened with one drawn fairly, so the margin
-    # moves by the difference between the two branches. Using the deviation
-    # from expectation instead would have mean zero, which would recentre the
-    # whole distribution on the actual result and quietly neutralize nothing.
-    adjustment = ((actual[None, None, :] - replayed) * swing[None, None, :]).sum(axis=2)
-    margins = actual_margin - adjustment * points_per_epa
+def _split_points(
+    adjustment: np.ndarray,
+    events: Sequence[LuckEvent],
+    home_team: str,
+    home_points: float,
+    away_points: float,
+    points_per_epa: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """The two teams' deserved points, from an adjustment already replayed.
 
-    # DTW per posterior draw, so the interval is a genuine credible interval on
-    # the probability rather than a spread of coin-flip noise.
-    return margins, (margins > 0).mean(axis=1)
+    A team's deserved points are its actual points minus the luck booked on
+    **its own** plays. `swing` is signed to the home team's margin throughout,
+    so a home-charged event's adjustment comes off the home score and an
+    away-charged one's goes onto the away score — the two signs that make
+    ``home - away`` the margin the same replay produced.
+    """
+    home_mask = np.array([event.charged_team == home_team for event in events], dtype=bool)
+    home_luck = adjustment[:, :, home_mask].sum(axis=2)
+    away_luck = adjustment[:, :, ~home_mask].sum(axis=2)
+    return (
+        (home_points - home_luck * points_per_epa).ravel(),
+        (away_points + away_luck * points_per_epa).ravel(),
+    )
+
+
+def team_point_draws(
+    events: Sequence[LuckEvent],
+    *,
+    home_team: str,
+    home_points: float,
+    away_points: float,
+    points_per_epa: float,
+    n_coin_draws: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Each team's deserved points across the bootstrap, on the scoreboard's scale.
+
+    The same two-layer bootstrap :func:`bootstrap_margins` runs, split by the
+    team each event is charged to. Called with the same ``rng`` state it
+    reproduces that function's margins draw for draw, because both consume one
+    replay of the same coins in the same order.
+
+    A game with nothing to adjudicate deserved the score it got, so it returns
+    the two actual scores as single draws — the degenerate case
+    :func:`simulate_game` already draws for the margin.
+    """
+    if not events:
+        return np.full(1, float(home_points)), np.full(1, float(away_points))
+    adjustment = _replayed_adjustment(events, n_coin_draws, rng)
+    return _split_points(adjustment, events, home_team, home_points, away_points, points_per_epa)
 
 
 def simulate_game(
@@ -373,11 +460,18 @@ def simulate_game(
     n_coin_draws: int = DEFAULT_COIN_DRAWS,
     seed: int = DEFAULT_SEED,
     include_blocked: bool = False,
+    home_points: float | None = None,
+    away_points: float | None = None,
 ) -> SimulationResult:
     """Deserve-to-win for one game.
 
     `plays` must be the plays of a single game, carrying a `result` column with
     the actual home margin.
+
+    ``home_points`` and ``away_points`` are the scoreboard, and they are
+    optional because the adjudication does not need them: the margin is what
+    the simulator decides. Given them, the result also carries each team's
+    deserved points, split out of the same replay the margin came from.
     """
     if plays.is_empty():
         raise ValueError("cannot simulate a game with no plays")
@@ -385,6 +479,18 @@ def simulate_game(
     game_id = plays["game_id"][0]
     actual_margin = float(plays["result"][0])
     rng = np.random.default_rng(seed)
+
+    # The two scores and the margin are the same fact stated twice. A caller
+    # that hands over a pair which does not subtract to `result` has fetched the
+    # wrong game's scoreboard, and the per-team distributions would then be
+    # drawn around scores the margin underneath them does not belong to.
+    if home_points is not None and away_points is not None:
+        gap = float(home_points) - float(away_points) - actual_margin
+        if abs(gap) > 1e-9:
+            raise ValueError(
+                f"the scoreboard {away_points}-{home_points} does not subtract to "
+                f"{game_id}'s margin of {actual_margin:+.0f} ({gap:+.4f} apart)"
+            )
 
     # The fumble builder always receives the unfiltered frame. Four blocked field
     # goals also carry a fumble row, and dropping them here would leave the
@@ -405,6 +511,7 @@ def simulate_game(
         # Nothing to adjudicate. The distribution is degenerate at the actual
         # result, and DTW is 1 or 0 — correctly, since no coin was involved.
         dtw = 1.0 if actual_margin > 0 else 0.0
+        has_score = home_points is not None and away_points is not None
         return SimulationResult(
             game_id=game_id,
             actual_margin=actual_margin,
@@ -414,11 +521,28 @@ def simulate_game(
             margin_draws=np.full(1, actual_margin),
             ledger=ledger,
             total_luck_epa=total_luck_epa,
+            home_point_draws=np.full(1, float(home_points)) if has_score else None,
+            away_point_draws=np.full(1, float(away_points)) if has_score else None,
         )
 
-    margins, dtw_per_draw = bootstrap_margins(
+    # One replay. `bootstrap_margins` is still the public arithmetic document 10
+    # checks; this asks the same helper for the per-event adjustment as well, so
+    # the two teams' point distributions come out of the coins the margin was
+    # already computed from rather than out of a second stream.
+    margins, dtw_per_draw, adjustment = _bootstrap(
         events, actual_margin, points_per_epa, n_coin_draws, rng
     )
+
+    home_draws = away_draws = None
+    if home_points is not None and away_points is not None:
+        home_draws, away_draws = _split_points(
+            adjustment,
+            events,
+            plays["home_team"][0],
+            float(home_points),
+            float(away_points),
+            points_per_epa,
+        )
 
     return SimulationResult(
         game_id=game_id,
@@ -432,4 +556,6 @@ def simulate_game(
         margin_draws=margins.ravel(),
         ledger=ledger,
         total_luck_epa=total_luck_epa,
+        home_point_draws=home_draws,
+        away_point_draws=away_draws,
     )

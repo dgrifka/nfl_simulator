@@ -274,6 +274,10 @@ PILL_COLOURS = {
 HEADING_OFFSET = 62
 RULE_OFFSET = 52
 SUBTITLE_OFFSET = 36
+# The second subtitle line, when a figure has one. The team-points figure puts
+# the most-likely scoreline here, under the actual one it is being compared to,
+# which is where the baseball run-distribution chart puts its own.
+SUBTITLE_EXTRA_OFFSET = 22
 # Two lines' room: the caption is wrapped clear of the verdict pill, which puts
 # it on two lines on a narrow figure.
 CAPTION_OFFSET = 12
@@ -286,7 +290,13 @@ def pill_colour(bucket: str) -> str:
 
 
 def draw_header(
-    ax, verdict: GameVerdict, heading: str, *, caption: str | None = None, left_points: float = 0.0
+    ax,
+    verdict: GameVerdict,
+    heading: str,
+    *,
+    caption: str | None = None,
+    left_points: float = 0.0,
+    subtitle_extra: str | None = None,
 ):
     """The title block every per-game figure wears: heading, rule, subtitle, pill.
 
@@ -345,6 +355,8 @@ def draw_header(
     )
 
     at(SUBTITLE_OFFSET, verdict.subtitle_line(), fontsize=9.5, color=PALETTE["text_muted"])
+    if subtitle_extra:
+        at(SUBTITLE_EXTRA_OFFSET, subtitle_extra, fontsize=9.5, color=PALETTE["text_muted"])
 
     # The pill sits on the **subtitle** row, not beside the heading. `finalize`
     # stamps the data credit into the top-right corner of the saved pixels, and
@@ -636,7 +648,7 @@ def _draw_luck_arrow(ax, verdict: GameVerdict):
     return span, label
 
 
-def _draw_logo_legend(ax, entries) -> None:
+def _draw_logo_legend(ax, entries, *, template: str = "{team} wins") -> None:
     """The clubs' marks under the plot, in place of two coloured swatches.
 
     A mark is the identity a reader already knows, so it does the job a swatch
@@ -666,7 +678,7 @@ def _draw_logo_legend(ax, entries) -> None:
         ax.text(
             centre - 0.02,
             LOGO_LEGEND_Y,
-            f"{team} wins",
+            template.format(team=team),
             transform=ax.transAxes,
             ha="left",
             va="center",
@@ -863,6 +875,260 @@ def plot_bootstrap_distribution(
         # mind, so an arrow there would measure a gap the figure is not about.
         if arrow and not verdict.is_degenerate:
             _draw_luck_arrow(ax, verdict)
+        return fig, ax
+
+
+# --------------------------------------------------------------------------
+# the team-points distribution — the share image
+# --------------------------------------------------------------------------
+
+# Three points is a field goal, and a field goal is the smallest step a
+# scoreboard usually takes. Bins narrower than that comb the histogram into the
+# gaps between reachable scores; bins wider than that pool a touchdown with a
+# field goal. Aligned to the three-point grid so the same score is the same bar
+# in both teams' fills.
+TEAM_POINTS_BIN = 3.0
+
+# The two fills overlap, which the margin histogram's never did — every margin
+# bar was wholly one side's. An overlap drawn at full strength hides whichever
+# team is drawn second, so both are drawn translucent and the shared region
+# reads as a third, darker shade rather than as one team's colour.
+TEAM_POINTS_ALPHA = 0.6
+
+# ...and every translucent fill is then a diluted colour, which is the trap
+# `plot_bootstrap_distribution` already records: at 0.55 Green Bay's #203731
+# reads as grey, and a grey fill under a green mark in the legend is identity
+# lost. So the silhouette is traced at full strength in the club's own colour
+# and the dilution is confined to the interior, where its only job is to let the
+# team behind show through.
+TEAM_POINTS_OUTLINE = 1.8
+
+
+def point_bin_edges(values, *, bin_width: float = TEAM_POINTS_BIN) -> np.ndarray:
+    """Bin edges on the three-point grid, spanning ``values`` and never negative.
+
+    ``values`` is everything the axis has to hold — both teams' draws and both
+    actual scores, so a club whose deserved points sit nowhere near its own
+    scoreline still has its rule inside the frame.
+
+    A scoreboard has no negative side, so the grid is anchored at zero and the
+    axis stops there. It stops *below* zero only if a distribution actually
+    reaches there, because hiding a draw is worse than showing a score no club
+    ever put on a board.
+    """
+    values = np.asarray(values, dtype=float)
+    lower = min(0.0, np.floor(values.min() / bin_width) * bin_width)
+    if values.min() >= 0.0:
+        lower = max(0.0, np.floor(values.min() / bin_width) * bin_width)
+    upper = np.ceil(values.max() / bin_width) * bin_width + bin_width
+    return np.arange(lower, upper, bin_width)
+
+
+def most_likely_score(draws, edges) -> int:
+    """The centre of the fullest bin, to the nearest point.
+
+    The mode rather than the mean, because a scoreline is a thing that happened
+    and a mean of scorelines is not one. Rounded half up rather than with
+    numpy's round-half-to-even, so 40.5 is 41 on every game rather than on every
+    other one.
+    """
+    counts, _edges = np.histogram(np.asarray(draws, dtype=float), bins=edges)
+    index = int(np.argmax(counts))
+    centre = (edges[index] + edges[index + 1]) / 2.0
+    return int(np.floor(centre + 0.5))
+
+
+def most_likely_line(verdict: GameVerdict, home: int, away: int) -> str:
+    """`"Most likely: GB 27 – DET 23"` — away first, as the score line reads."""
+    return f"Most likely: {verdict.away_team} {away} \u2013 {verdict.home_team} {home}"
+
+
+def _check_reconciles(verdict: GameVerdict, home_draws: np.ndarray, away_draws: np.ndarray) -> None:
+    """The two point distributions must be this game's margin distribution.
+
+    They are a split of one replay, not a second one, so the subtraction is an
+    identity rather than an approximation. Drawing a pair that fails it would
+    put two teams' scores under a headline computed from different coins.
+    """
+    if len(home_draws) != len(away_draws) or len(home_draws) != len(verdict.margin_draws):
+        raise ValueError(
+            f"{verdict.game_id}'s point distributions do not reconcile with its margin "
+            f"draws: {len(home_draws)} home and {len(away_draws)} away against "
+            f"{len(verdict.margin_draws)} margins."
+        )
+    drift = float(np.abs((home_draws - away_draws) - np.asarray(verdict.margin_draws)).max())
+    if drift > 1e-9:
+        raise ValueError(
+            f"{verdict.game_id}'s point distributions do not reconcile with its margin "
+            f"draws ({drift:.2e} apart at worst). Stop rather than draw them."
+        )
+
+
+def plot_team_points_distribution(
+    verdict: GameVerdict,
+    home_draws,
+    away_draws,
+    *,
+    bin_width: float = TEAM_POINTS_BIN,
+    colors: tuple[str, str] | None = None,
+    logos: dict | None = None,
+    callout: bool = False,
+    legend_logos: bool = False,
+):
+    """Each team's deserved points, as two overlapping histograms on one points axis.
+
+    The margin histogram answers "by how much"; this answers "what would the
+    scoreboard have said", which is the question a reader scrolling past a share
+    image actually has. It is the baseball simulator's run-distribution chart in
+    this repo's style: two fills, each team's actual score as a dashed rule in
+    its own colour, and the most likely scoreline stated in words above the plot
+    so nobody has to read a mode off a histogram.
+
+    Nothing here is a new statistic. The two distributions are one replay of the
+    same coins the margin distribution is drawn from, split by the team each
+    luck event is charged to, and the split is checked against the margin draws
+    before a bar is drawn.
+
+    ``colors`` and ``logos`` are the game's ``(home, away)`` pair and marks,
+    supplied by the caller — see :func:`plot_bootstrap_distribution`.
+
+    Returns ``(figure, axes)``.
+    """
+    home_colour, away_colour = colors or (HOME_HUE, AWAY_HUE)
+    logos = logos or {}
+    home_draws = np.asarray(home_draws, dtype=float)
+    away_draws = np.asarray(away_draws, dtype=float)
+    _check_reconciles(verdict, home_draws, away_draws)
+
+    scores = [
+        float(score) for score in (verdict.home_score, verdict.away_score) if score is not None
+    ]
+    edges = point_bin_edges(
+        np.concatenate([home_draws, away_draws, np.array(scores or [], dtype=float)]),
+        bin_width=bin_width,
+    )
+
+    with mpl.rc_context(STYLE):
+        fig, ax = plt.subplots(figsize=(7.6, 4.0))
+
+        # Away first, so the home team's fill lands on top of it — the same
+        # order the score line and the legend read in, so a reader who checks
+        # which fill is in front is checking one convention, not two.
+        tallest = 0.0
+        for draws, colour in ((away_draws, away_colour), (home_draws, home_colour)):
+            counts, _edges = np.histogram(draws, bins=edges)
+            # Per cent of the simulations, not a density: a density's height
+            # depends on the bin width, so the same game at one point and at
+            # three would carry two different y axes for the same fact.
+            counts = counts / counts.sum() * 100.0
+            tallest = max(tallest, counts.max())
+            ax.bar(
+                edges[:-1],
+                counts,
+                width=bin_width,
+                align="edge",
+                # An RGBA face rather than `alpha=`, which would dilute the
+                # outline with the fill and put the identity back where it was.
+                color=mpl.colors.to_rgba(colour, TEAM_POINTS_ALPHA),
+                linewidth=0,
+                zorder=2,
+            )
+            ax.stairs(
+                counts,
+                edges,
+                color=colour,
+                linewidth=TEAM_POINTS_OUTLINE,
+                zorder=3,
+            )
+
+        ax.set_ylim(0.0, tallest * (ANNOTATED_HEADROOM if callout else PLAIN_HEADROOM))
+        ax.set_ylabel("% of simulations", fontsize=9, color=PALETTE["text_muted"])
+        ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(4, min_n_ticks=3))
+        ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))
+        ax.set_xlim(edges[0], edges[-1])
+        ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
+        ax.set_axisbelow(True)
+        ax.set_xlabel("points scored", fontsize=9, color=PALETTE["text_muted"])
+
+        # The two scorelines, each in its own club's colour and each boxed, so a
+        # reader can see at a glance how far the scoreboard sat from the fill.
+        rules = [
+            _rule(
+                ax,
+                float(score),
+                f"{team} {score:.0f} (Actual)",
+                color=colour,
+                dashes=(5, 3),
+                weight=2.0,
+                boxed=True,
+            )
+            for team, score, colour in (
+                (verdict.away_team, verdict.away_score, away_colour),
+                (verdict.home_team, verdict.home_score, home_colour),
+            )
+            if score is not None
+        ]
+
+        heading = "Deserve-to-Win"
+        if len(home_draws) > 1:
+            heading = f"{heading} \u2014 {len(home_draws):,} simulations"
+        draw_header(
+            ax,
+            verdict,
+            heading,
+            subtitle_extra=most_likely_line(
+                verdict,
+                most_likely_score(home_draws, edges),
+                most_likely_score(away_draws, edges),
+            ),
+        )
+
+        entries = [
+            (verdict.away_team, logos.get(verdict.away_team)),
+            (verdict.home_team, logos.get(verdict.home_team)),
+        ]
+        if legend_logos:
+            _draw_logo_legend(ax, entries, template="{team}")
+        else:
+            ax.legend(
+                handles=[
+                    Patch(
+                        facecolor=mpl.colors.to_rgba(colour, TEAM_POINTS_ALPHA),
+                        edgecolor=colour,
+                        linewidth=TEAM_POINTS_OUTLINE,
+                        label=team,
+                    )
+                    for team, colour in (
+                        (verdict.away_team, away_colour),
+                        (verdict.home_team, home_colour),
+                    )
+                ],
+                loc="upper center",
+                bbox_to_anchor=(0.5, -0.20),
+                ncol=2,
+                frameon=False,
+                fontsize=9,
+                handlelength=1.1,
+                handleheight=0.9,
+            )
+
+        caveat = ax.text(
+            0,
+            -0.42,
+            verdict.interval_note(),
+            transform=ax.transAxes,
+            fontsize=8,
+            color=PALETTE["text_muted"],
+            va="top",
+        )
+        _wrap_to_width(fig, caveat, ax.get_window_extent().width)
+        if verdict.went_to_overtime:
+            caveat.set_text(f"{caveat.get_text()}\n{OVERTIME_FOOTER}")
+        if len(rules) == 2:
+            _lift_colliding_label(fig, rules[0], rules[1])
+
+        if callout:
+            _draw_callout(ax, verdict, home_colour, away_colour)
         return fig, ax
 
 

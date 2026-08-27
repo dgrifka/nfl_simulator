@@ -54,6 +54,7 @@ from nfl_simulator.plots import (  # noqa: E402
     plot_game_card,
     plot_luck_ledger,
     plot_luck_ledger_card,
+    plot_team_points_distribution,
     running_totals,
     table_rows,
     team_ledgers,
@@ -1923,3 +1924,267 @@ def test_the_card_says_which_quantity_each_number_is():
     text = figure_text(fig)
     assert text.count("LUCK ON OWN PLAYS") == 2, "each headline names the quantity it is"
     assert "on each team's own plays" in text, "and the tables name theirs"
+
+
+# --------------------------------------------------------------------------
+# the team-points distribution — figure round 4, Part B
+# --------------------------------------------------------------------------
+#
+# The share image stops asking about a margin and asks about a scoreline. The
+# two histograms are the two teams' deserved points, so the axis is points and
+# has no negative side, and the pair has to subtract to the margin distribution
+# the rest of the product already publishes — the figure refuses to draw if it
+# does not.
+
+
+def points_pair(game: GameVerdict, away_at: float = 41.0):
+    """Two point distributions that subtract to ``game``'s own margin draws."""
+    away = np.full(len(game.margin_draws), float(away_at)) + np.linspace(
+        -3.0, 3.0, len(game.margin_draws)
+    )
+    return away + np.asarray(game.margin_draws, dtype=float), away
+
+
+def points_figure(game: GameVerdict | None = None, away_at: float = 41.0, **kwargs):
+    """The figure, its verdict and the two draw arrays it was drawn from."""
+    game = game if game is not None else branded(draws=np.linspace(-14.0, -2.0, 600))
+    home, away = points_pair(game, away_at)
+    fig, ax = plot_team_points_distribution(game, home, away, colors=(DET_BLUE, GB_GREEN), **kwargs)
+    return fig, ax, game, home, away
+
+
+def _bar_containers(ax):
+    return [c for c in ax.containers if isinstance(c, matplotlib.container.BarContainer)]
+
+
+SCORE_RULE = re.compile(r"^\w+ \d+ \(Actual\)$")
+
+
+def _score_label_boxes(fig, ax) -> list:
+    """The two boxed scoreline labels' bounding boxes, in display pixels."""
+    fig.canvas.draw()
+    return [t.get_window_extent() for t in ax.texts if SCORE_RULE.match(t.get_text())]
+
+
+def _positive_bars(container) -> list:
+    return [patch for patch in container.patches if patch.get_height() > 0]
+
+
+# --- the arithmetic it refuses to draw without ----------------------------
+
+
+def test_the_figure_refuses_two_distributions_that_are_not_this_games_margin():
+    game = branded(draws=np.linspace(-14.0, -2.0, 600))
+    home, away = points_pair(game)
+    with pytest.raises(ValueError, match="reconcile"):
+        plot_team_points_distribution(game, home + 1.0, away)
+
+
+def test_the_figure_draws_when_the_two_distributions_do_subtract_to_the_margin():
+    fig, ax, _game, _home, _away = points_figure()
+    assert _bar_containers(ax)
+
+
+# --- the axis -------------------------------------------------------------
+
+
+def test_the_points_axis_never_shows_a_negative_score():
+    _fig, ax, _game, _home, _away = points_figure()
+    assert ax.get_xlim()[0] >= 0.0
+
+
+def test_the_axis_is_labelled_points_rather_than_a_margin():
+    _fig, ax, _game, _home, _away = points_figure()
+    assert "points" in ax.get_xlabel().lower()
+    assert "−" not in ax.get_xlabel(), "a points axis is not a subtraction"
+
+
+def test_the_bins_are_three_points_wide_and_sit_on_the_three_point_grid():
+    _fig, ax, _game, _home, _away = points_figure()
+    for container in _bar_containers(ax):
+        for patch in container.patches:
+            assert patch.get_width() == pytest.approx(3.0)
+            assert patch.get_x() % 3.0 == pytest.approx(0.0)
+
+
+def test_the_two_histograms_share_one_set_of_bin_edges():
+    """Two grids would make the same score two different bars."""
+    _fig, ax, _game, _home, _away = points_figure()
+    away_bars, home_bars = _bar_containers(ax)
+    starts = {round(p.get_x(), 6) for p in away_bars.patches}
+    assert {round(p.get_x(), 6) for p in home_bars.patches} <= starts | {
+        round(p.get_x(), 6) for p in home_bars.patches
+    }
+    for patch in home_bars.patches:
+        assert patch.get_x() % 3.0 == pytest.approx(0.0)
+
+
+# --- the two fills --------------------------------------------------------
+
+
+def test_the_away_team_is_drawn_first_so_the_home_fill_sits_on_top():
+    _fig, ax, _game, _home, _away = points_figure()
+    away_bars, home_bars = _bar_containers(ax)
+    assert away_bars.patches[0].get_facecolor()[:3] == pytest.approx(
+        matplotlib.colors.to_rgb(GB_GREEN), abs=0.004
+    )
+    assert home_bars.patches[0].get_facecolor()[:3] == pytest.approx(
+        matplotlib.colors.to_rgb(DET_BLUE), abs=0.004
+    )
+
+
+def test_both_fills_are_translucent_so_the_overlap_is_visible():
+    _fig, ax, _game, _home, _away = points_figure()
+    for container in _bar_containers(ax):
+        assert container.patches[0].get_facecolor()[3] == pytest.approx(0.6)
+
+
+def test_each_histogram_is_outlined_at_full_strength_in_its_club_s_colour():
+    """A 0.6-alpha #203731 reads as grey; the outline is what keeps GB green."""
+    _fig, ax, _game, _home, _away = points_figure()
+    outlines = {
+        matplotlib.colors.to_hex(patch.get_edgecolor()).upper()
+        for patch in ax.patches
+        if isinstance(patch, matplotlib.patches.StepPatch)
+    }
+    assert outlines == {GB_GREEN.upper(), DET_BLUE.upper()}
+    for patch in ax.patches:
+        if isinstance(patch, matplotlib.patches.StepPatch):
+            assert patch.get_edgecolor()[3] == pytest.approx(1.0)
+
+
+def test_the_points_y_axis_is_a_percentage_of_the_simulations():
+    _fig, ax, _game, _home, _away = points_figure()
+    assert "%" in ax.yaxis.get_major_formatter().format_data(0.4)
+    assert "simulations" in ax.get_ylabel()
+
+
+# --- the two actual scores ------------------------------------------------
+
+
+def test_each_team_s_actual_score_is_marked_and_named():
+    fig, ax, _game, _home, _away = points_figure()
+    text = figure_text(fig)
+    assert "GB 23 (Actual)" in text
+    assert "DET 31 (Actual)" in text
+
+
+def test_the_actual_score_rules_stand_at_the_scores_themselves():
+    _fig, ax, _game, _home, _away = points_figure()
+    assert 23.0 in _vline_positions(ax)
+    assert 31.0 in _vline_positions(ax)
+
+
+def test_an_actual_score_rule_wears_its_own_club_s_colour():
+    _fig, ax, _game, _home, _away = points_figure()
+    colours = {
+        round(line.get_xdata()[0], 3): matplotlib.colors.to_hex(line.get_color()).upper()
+        for line in ax.lines
+        if len(set(line.get_xdata())) == 1
+    }
+    assert colours[23.0] == GB_GREEN.upper()
+    assert colours[31.0] == DET_BLUE.upper()
+
+
+def test_two_scores_a_point_apart_do_not_print_through_each_other():
+    """`2025_13_DEN_WAS`: 27-26, and the two boxed labels overlapped."""
+    game = branded(
+        game_id="2025_13_DEN_WAS",
+        home_team="WAS",
+        away_team="DEN",
+        home_score=26,
+        away_score=27,
+        actual_margin=-1.0,
+        deserved_margin=-3.3,
+        dtw_home=0.14,
+        draws=np.linspace(-9.0, 2.0, 600),
+    )
+    fig, ax, _game, _home, _away = points_figure(game)
+    boxes = _score_label_boxes(fig, ax)
+    assert len(boxes) == 2
+    assert not boxes[0].overlaps(boxes[1])
+
+
+# --- the most-likely scoreline --------------------------------------------
+
+
+def test_the_subtitle_states_the_most_likely_scoreline():
+    fig, _ax, _game, home, away = points_figure()
+    line = next(
+        t.get_text() for t in fig.findobj(matplotlib.text.Text) if t.get_text().startswith("Most ")
+    )
+    assert re.fullmatch(r"Most likely: GB \d+ – DET \d+", line), line
+
+
+def test_the_most_likely_score_is_the_modal_bin_rather_than_the_mean():
+    """A lopsided distribution's mode and mean are different scores.
+
+    Nine hundred draws at 33 points and a hundred at 21: the mode's bin is
+    33-36, whose centre rounds to 35, while the mean is 31.8 and would print 32.
+    """
+    game = branded(draws=np.concatenate([np.full(900, -8.0), np.full(100, -20.0)]))
+    away = np.full(len(game.margin_draws), 41.0)
+    fig, _ax = plot_team_points_distribution(game, away + game.margin_draws, away)
+    line = next(
+        t.get_text() for t in fig.findobj(matplotlib.text.Text) if t.get_text().startswith("Most ")
+    )
+    assert line == "Most likely: GB 41 – DET 35", line
+
+
+# --- the heading and the reused furniture ---------------------------------
+
+
+def test_the_heading_counts_the_simulations_it_actually_drew():
+    fig, _ax, _game, _home, _away = points_figure()
+    assert "Deserve-to-Win — 600 simulations" in figure_text(fig)
+
+
+def test_the_figure_carries_the_verdict_pill():
+    fig, ax, game, _home, _away = points_figure()
+    pill = next(t for t in ax.texts if t.get_text() == game.bucket)
+    assert pill.get_bbox_patch() is not None
+
+
+def test_the_points_figure_carries_the_interval_caveat():
+    fig, _ax, game, _home, _away = points_figure()
+    assert MEASURED_COVERAGE in figure_text(fig)
+
+
+def test_an_overtime_points_figure_says_the_toss_is_reported_not_neutralized():
+    fig, _ax, _game, _home, _away = points_figure(
+        branded(went_to_overtime=True, draws=np.linspace(-14.0, -2.0, 600))
+    )
+    assert REPORTED_NOT_NEUTRALIZED in figure_text(fig)
+
+
+def test_the_points_callout_says_who_deserved_to_win_and_how_often():
+    fig, _ax, _game, _home, _away = points_figure(callout=True)
+    assert "GB deserved to win 95% of simulations" in figure_text(fig)
+
+
+def test_a_degenerate_game_draws_no_callout_here_either():
+    game = branded(dtw_home=1.0, interval=(1.0, 1.0), draws=np.linspace(2.0, 26.0, 600))
+    fig, _ax, _game, _home, _away = points_figure(game, callout=True)
+    assert "deserved to win" not in figure_text(fig)
+
+
+def test_the_legend_carries_both_clubs_marks_and_names():
+    fig, ax, _game, _home, _away = points_figure(
+        legend_logos=True, logos={"DET": synthetic_mark(), "GB": synthetic_mark((10, 90, 20))}
+    )
+    text = figure_text(fig)
+    assert "GB" in text and "DET" in text
+    assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 2
+
+
+# --- the game with nothing to adjudicate ----------------------------------
+
+
+def test_a_game_with_no_luck_events_is_one_bar_per_team_at_its_own_score():
+    game = branded(dtw_home=1.0, interval=(1.0, 1.0), draws=np.full(1, 8.0))
+    fig, ax = plot_team_points_distribution(game, np.full(1, 31.0), np.full(1, 23.0))
+    away_bars, home_bars = _bar_containers(ax)
+    away_bar, home_bar = _positive_bars(away_bars), _positive_bars(home_bars)
+    assert len(away_bar) == 1 and len(home_bar) == 1
+    assert away_bar[0].get_x() <= 23.0 < away_bar[0].get_x() + 3.0
+    assert home_bar[0].get_x() <= 31.0 < home_bar[0].get_x() + 3.0

@@ -31,6 +31,7 @@ from nfl_simulator.plots import (
     plot_game_card,
     plot_luck_ledger,
     plot_luck_ledger_card,
+    plot_team_points_distribution,
 )
 from nfl_simulator.render import ARTICLE_SUFFIX, SUFFIXES, figure_filename, prepare_rows
 from nfl_simulator.style import PALETTE, finalize
@@ -158,8 +159,15 @@ def figures(game):
         game, deserved_margin=game.actual_margin - sum(r["luck_epa"] for r in rows) * PPE
     )
     colours = ("#0076B6", "#203731")
+    # Round 4: the `dtw` share image is the two teams' deserved points. The two
+    # draw arrays have to be this verdict's own margin draws split in two, which
+    # is what the figure checks before it draws anything.
+    away_draws = np.full(len(reconciling.margin_draws), float(reconciling.away_score))
+    home_draws = away_draws + np.asarray(reconciling.margin_draws, dtype=float)
     return {
-        "dtw": plot_bootstrap_distribution(reconciling, colors=colours)[0],
+        "dtw": plot_team_points_distribution(reconciling, home_draws, away_draws, colors=colours)[
+            0
+        ],
         "luck_ledger": plot_luck_ledger_card(reconciling, rows, points_per_epa=PPE, colors=colours)[
             0
         ],
@@ -202,6 +210,19 @@ def test_the_two_rule_labels_are_still_clear_on_the_branded_figure(game):
     ]
     assert len(boxes) == 2
     assert not boxes[0].overlaps(boxes[1])
+
+
+def test_the_share_distribution_is_a_points_axis_and_the_article_one_a_margin(game):
+    """Round 4's swap: the timeline gets a scoreline, the article keeps the margin."""
+    share = figures(game)["dtw"].axes[0]
+    article, _ax = plot_bootstrap_distribution(game)
+    assert share.get_xlabel() == "points scored"
+    assert "final margin" in article.axes[0].get_xlabel()
+
+
+def test_the_four_share_suffixes_did_not_change(game):
+    """The `dtw` file is the same name for a different figure, not a fifth file."""
+    assert SUFFIXES == ("dtw", "luck_ledger", "card", "waterfall")
 
 
 def test_the_palette_the_card_paints_is_the_house_one():

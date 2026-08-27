@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-import numpy as np
 import polars as pl
 
 from nfl_simulator import paths
@@ -40,6 +39,7 @@ from nfl_simulator.plots import (
     plot_game_card,
     plot_luck_ledger,
     plot_luck_ledger_card,
+    plot_team_points_distribution,
     verdict_from_row,
 )
 from nfl_simulator.style import finalize
@@ -76,6 +76,13 @@ ARTICLE_SUFFIX = "dtw_article"
 # verdict in a sentence; the arrow says what luck moved and toward whom; and the
 # clubs' marks carry identity in place of two coloured swatches.
 DTW_FIGURE = {"bin_width": 3.0, "callout": True, "arrow": True, "legend_logos": True}
+
+# Round 4: the share image is the two teams' deserved points rather than the
+# margin. Same three-point bins, same callout, same marks in the legend — and no
+# luck arrow, because an arrow measures a distance along a margin axis and this
+# axis is a scoreboard. The margin histogram is not retired: it is what
+# `ARTICLE_SUFFIX` draws, where the overtime panel already lives.
+TEAM_POINTS_FIGURE = {"bin_width": 3.0, "callout": True, "legend_logos": True}
 
 
 # --------------------------------------------------------------------------
@@ -223,15 +230,29 @@ def _simulation_context():
     }
 
 
-def replay(game_id: str, row: dict) -> tuple[np.ndarray, dict]:
-    """The game's bootstrap draws, re-simulated and checked against the summary.
+def replay(game_id: str, row: dict, schedule: dict | None = None):
+    """The game's bootstrap, re-simulated and checked against the summary.
 
     The shipped parquet keeps the summary, not the 160,000 draws, so a figure
     that shows the distribution has to redraw it. Redrawing it is only safe if
     the redraw lands on the published number — otherwise the histogram belongs
     to a different adjudication than the headline over it.
+
+    ``schedule`` supplies the two scores. Given them the result also carries
+    each team's deserved points, split out of the same replay — which is why
+    this returns the whole :class:`SimulationResult` rather than the margins
+    alone: two figures drawn from two replays of the same coins would be two
+    adjudications wearing one headline.
     """
     from nfl_simulator.simulator import simulate_game
+
+    schedule = schedule or {}
+    scores = {
+        "home_points": schedule.get("home_score"),
+        "away_points": schedule.get("away_score"),
+    }
+    if scores["home_points"] is None or scores["away_points"] is None:
+        scores = {}
 
     context = _simulation_context()
     result = simulate_game(
@@ -245,6 +266,7 @@ def replay(game_id: str, row: dict) -> tuple[np.ndarray, dict]:
         n_coin_draws=COIN_DRAWS,
         seed=RANDOM_SEED,
         include_blocked=False,
+        **scores,
     )
     gaps = {
         "deserved_margin": abs(result.deserved_margin - row["deserved_margin"]),
@@ -256,7 +278,7 @@ def replay(game_id: str, row: dict) -> tuple[np.ndarray, dict]:
         raise SystemExit(
             f"{game_id} does not replay to its shipped summary ({gaps}). Stop rather than draw it."
         )
-    return result.margin_draws, gaps
+    return result, gaps
 
 
 def kick_distances(game_id: str) -> dict:
@@ -299,8 +321,8 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
 
     row = sources.game_row(game_id)
     schedule = sources.schedule_row(game_id)
-    draws, _gaps = replay(game_id, row)
-    verdict = verdict_from_row(row, draws, schedule)
+    result, _gaps = replay(game_id, row, schedule)
+    verdict = verdict_from_row(row, result.margin_draws, schedule)
 
     ledger = sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
     rows = prepare_rows(ledger, verdict, kick_distances(game_id))
@@ -313,9 +335,22 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
     written = []
     for suffix in SUFFIXES:
         if suffix == "dtw":
-            fig, _ax = plot_bootstrap_distribution(
-                verdict, colors=colours, logos=logos, **DTW_FIGURE
-            )
+            # The scoreline figure when the scoreboard is on file, which it is
+            # for every game with a schedule row. A game without one still gets
+            # a share image: the margin histogram it got before round 4.
+            if result.home_point_draws is not None:
+                fig, _ax = plot_team_points_distribution(
+                    verdict,
+                    result.home_point_draws,
+                    result.away_point_draws,
+                    colors=colours,
+                    logos=logos,
+                    **TEAM_POINTS_FIGURE,
+                )
+            else:
+                fig, _ax = plot_bootstrap_distribution(
+                    verdict, colors=colours, logos=logos, **DTW_FIGURE
+                )
         elif suffix == "luck_ledger":
             fig, _ax = plot_luck_ledger_card(
                 verdict,

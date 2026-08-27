@@ -13,7 +13,8 @@ import pytest
 
 from nfl_simulator.components import fit_fg_baseline, fit_fumble_baseline
 from nfl_simulator.fg_model import FieldGoalModel
-from nfl_simulator.simulator import points_per_epa, simulate_game
+from nfl_simulator.ledger import Ledger
+from nfl_simulator.simulator import points_per_epa, simulate_game, team_point_draws
 
 HOME, AWAY = "HOM", "AWY"
 
@@ -872,3 +873,144 @@ def test_the_v12_kicking_population_is_still_reproducible(baselines, fg_model):
         include_blocked=True,
     )
     assert [e.component for e in result.ledger] == ["field_goal"]
+
+
+# --------------------------------------------------------------------------
+# per-team deserved points — figure round 4, Part B
+# --------------------------------------------------------------------------
+#
+# The share image asks a different question of the same bootstrap: not "what
+# margin did the game deserve" but "what score did each side deserve". It is a
+# split of the adjustment the margin already carries, so it must reconcile with
+# `bootstrap_margins` exactly rather than approximately — a figure drawn from a
+# second replay of the same coins would be a different adjudication with the
+# same headline over it.
+
+
+def luck_event(
+    *,
+    charged_team: str = HOME,
+    actual: float = 0.0,
+    expected: float = 1.0,
+    swing: float = 3.0,
+    play_id: float = 1.0,
+    n_draws: int = 8,
+) -> LuckEvent:
+    """One event whose `p` is a flat posterior, so a replay is deterministic.
+
+    `expected` of exactly 0 or 1 makes `uniforms < p` the same branch on every
+    draw, which is what lets a test state an identity rather than a tolerance.
+    """
+    return LuckEvent(
+        play_id=play_id,
+        component="field_goal",
+        event_class="40-44 yd",
+        charged_team=charged_team,
+        actual=actual,
+        expected_draws=np.full(n_draws, expected),
+        swing=swing if charged_team == HOME else -swing,
+    )
+
+
+def test_the_two_team_point_draws_reconcile_with_the_margin_draws_one_for_one():
+    """The split is of the margin's own adjustment, not a second replay of it."""
+    events = [
+        luck_event(charged_team=HOME, actual=0.0, expected=0.8, play_id=1.0),
+        luck_event(charged_team=AWAY, actual=1.0, expected=0.4, play_id=2.0),
+        luck_event(charged_team=HOME, actual=1.0, expected=0.55, play_id=3.0),
+    ]
+    margins, _dtw = bootstrap_margins(
+        events,
+        actual_margin=6.0,
+        points_per_epa=0.84,
+        n_coin_draws=64,
+        rng=np.random.default_rng(11),
+    )
+    home_draws, away_draws = team_point_draws(
+        events,
+        home_team=HOME,
+        home_points=27.0,
+        away_points=21.0,
+        points_per_epa=0.84,
+        n_coin_draws=64,
+        rng=np.random.default_rng(11),
+    )
+    assert np.abs((home_draws - away_draws) - margins.ravel()).max() < 1e-9
+
+
+def test_a_game_with_no_luck_events_deserved_the_score_it_got():
+    home_draws, away_draws = team_point_draws(
+        [],
+        home_team=HOME,
+        home_points=23.0,
+        away_points=17.0,
+        points_per_epa=0.84,
+        n_coin_draws=64,
+        rng=np.random.default_rng(3),
+    )
+    assert home_draws.tolist() == [23.0]
+    assert away_draws.tolist() == [17.0]
+
+
+def test_the_two_teams_luck_adds_up_to_the_luck_the_ledger_booked():
+    """Each side's points move by its own luck, and the two partition the total."""
+    events = [
+        luck_event(charged_team=HOME, actual=0.0, expected=1.0, swing=3.0, play_id=1.0),
+        luck_event(charged_team=AWAY, actual=1.0, expected=0.0, swing=2.0, play_id=2.0),
+    ]
+    ledger = Ledger(tuple(event.to_entry() for event in events))
+    home_draws, away_draws = team_point_draws(
+        events,
+        home_team=HOME,
+        home_points=27.0,
+        away_points=21.0,
+        points_per_epa=0.5,
+        n_coin_draws=16,
+        rng=np.random.default_rng(5),
+    )
+    home_luck = (27.0 - home_draws) / 0.5
+    away_luck = (away_draws - 21.0) / 0.5
+    assert (home_luck + away_luck) == pytest.approx(ledger.total_luck_epa())
+
+
+def test_each_team_only_carries_the_luck_on_its_own_plays():
+    """A home-charged event moves the home score and leaves the away score alone."""
+    events = [luck_event(charged_team=HOME, actual=0.0, expected=1.0, swing=3.0)]
+    home_draws, away_draws = team_point_draws(
+        events,
+        home_team=HOME,
+        home_points=27.0,
+        away_points=21.0,
+        points_per_epa=0.5,
+        n_coin_draws=16,
+        rng=np.random.default_rng(5),
+    )
+    assert away_draws.tolist() == [21.0] * len(away_draws)
+    assert home_draws.tolist() == [27.0 + 1.5] * len(home_draws)
+
+
+def test_the_simulator_carries_the_two_point_distributions_when_it_is_given_the_scores(
+    baselines, fg_model
+):
+    rows = [fumble_play(float(i), fumbler=HOME, recoverer=AWAY) for i in range(1, 4)]
+    # 24 - 21 is the fixture's own `result` of +3; a scoreboard that did not
+    # agree with the margin would be a different game, and the simulator says so.
+    result = run(rows, baselines, fg_model, n_coin_draws=100, home_points=24, away_points=21)
+    assert result.home_point_draws is not None
+    gap = result.home_point_draws - result.away_point_draws
+    assert np.abs(gap - result.margin_draws).max() < 1e-9
+
+
+def test_a_scoreboard_that_disagrees_with_the_margin_is_refused(baselines, fg_model):
+    """The two scores and the margin are the same fact; a mismatch is a wrong game."""
+    rows = [fumble_play(float(i), fumbler=HOME, recoverer=AWAY) for i in range(1, 4)]
+    with pytest.raises(ValueError, match="scoreboard"):
+        run(rows, baselines, fg_model, n_coin_draws=10, home_points=24, away_points=17)
+
+
+def test_the_point_distributions_are_absent_when_no_score_was_supplied(baselines, fg_model):
+    """Nothing else changes shape: a caller with no scoreboard still simulates."""
+    rows = [fumble_play(float(i), fumbler=HOME, recoverer=AWAY) for i in range(1, 4)]
+    result = run(rows, baselines, fg_model, n_coin_draws=100)
+    assert result.home_point_draws is None
+    assert result.away_point_draws is None
