@@ -1698,3 +1698,14 @@ def test_the_two_tables_sit_together_when_one_team_had_few_events():
     away_floor = min(box.y0 for box in row_rects if box.y0 > accents[0].y1)
     assert away_floor - accents[0].y1 < 1.0, "a hole between the two tables"
     assert min(box.y0 for box in row_rects) > 0.3, "the last row runs off the card"
+
+
+def test_the_card_says_which_quantity_each_number_is():
+    """`DEN_WAS_27-26--86-14_luck_ledger.png`: Denver's headline read -2.3 while
+    every row of Denver's own table was a green positive summing to +2.3. Both
+    are true — the headline is the game's net luck, the table is the luck on that
+    team's own plays — and unlabelled they read as a contradiction."""
+    fig, _ax = ledger_card()
+    text = figure_text(fig)
+    assert text.count("NET LUCK") == 2, "each headline names the quantity it is"
+    assert "on each team's own plays" in text, "and the tables name theirs"

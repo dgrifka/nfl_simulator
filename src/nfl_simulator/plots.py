@@ -1582,9 +1582,24 @@ def _draw_team_box(ax, luck: TeamLuck, names, *, x_centre, y_top, colour, logo, 
         color=colour,
         zorder=3,
     )
+    # The headline is the *game's* net and the table under it is that team's
+    # own plays, and the two can have opposite signs — Denver's card read -2.3
+    # over a column of green positives. Naming the quantity is what stops the
+    # pair reading as a contradiction.
     ax.text(
         x_centre,
-        y_top - 1.30,
+        y_top - 1.18,
+        "NET LUCK",
+        fontsize=7.5,
+        fontweight="bold",
+        ha="center",
+        va="top",
+        color=PALETTE["text_muted"],
+        zorder=3,
+    )
+    ax.text(
+        x_centre,
+        y_top - 1.34,
         f"{luck.net_points:+.1f} points of luck",
         fontsize=19,
         fontweight="bold",
@@ -1864,7 +1879,7 @@ def plot_luck_ledger_card(
         ax.text(
             4.0,
             LEDGER_SWINGS_Y - 0.34,
-            f"Top {LEDGER_TOP_ROWS} per team",
+            f"Top {LEDGER_TOP_ROWS} on each team's own plays",
             fontsize=10,
             ha="center",
             va="top",
