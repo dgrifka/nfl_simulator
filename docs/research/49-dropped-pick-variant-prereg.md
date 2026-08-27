@@ -179,3 +179,37 @@ Nothing renders on the product figures in this round.
 | In-sample `u_d` (the game's own throws in its defence-season) | Accepted, v1.3 convention; ~3 of ~22 throws |
 | 2016–2021 coverage | None; the variant is a 2022+ object |
 | Receiver-drop symmetry (document 28) | Not built; the reason this is a variant |
+
+---
+
+## 10. Outcome
+
+Round 4 ran 2026-08-27 on `feat/dropped-pick-variant`, off
+`docs/dropped-pick-confounds`. Full record: document 50. **Unmerged.**
+
+| Part | Result | Commit |
+|---|---|---|
+| A — the fit and its artifact | `trace_dropped_pick.nc` + `dropped_pick_summary.json` written. **V-6 PASS** (0 divergences, max r̂ 1.0070 on `sigma_q`, min ESS 587/522 over 429 parameters). **V-8 FAIL** — 2022 NYG's 89% interval [0.289, 0.509] against §6's [0.30, 0.70], 1.1 pp outside, 9 of 10 inside | `795f07b` |
+| B — the component, TDD | `dropped_picks.py`, `simulator.dropped_pick_events`, the default-off switch, `SimulationResult.variant`. V-2, V-3, V-4, V-5, V-7 all PASS as tests; 502 → 525 | `7ad17be` |
+| C — V-1 and the audit | **V-1 PASS exactly**: 2,761 games, max \|Δ deserved margin\| 0.00e+00, and 0.00e+00 on DTW% and both bounds. V-2 over 1,139 variant games: 0.00e+00. Read-side round trip 0.00e+00 over 2,969 rows. §7's audit written, **provisional on V-8's ruling** | `2cf395b` |
+| D — the record | Document 50, this section, document 05 §3's row, `results-2026-08-27-exp4.md`, the queue | this commit |
+
+**The round is stopped at §6's V-8 stop-and-ask, as pre-registered.** Document
+50 §5a states the fork; neither option is taken by the session that found the
+breach.
+
+**Two things §6 left open, disclosed rather than resolved silently.**
+
+1. **"A median throw" is undefined here.** Both readings — column-wise median of
+   the design matrix, and every covariate at its median with the derived column
+   derived from it — were computed. They breach identically, so the construction
+   choice is not the cause and no choice was needed. A future gate quoted on a
+   reference row should write the row down.
+2. **§7's pre-committed expectation held; the tail was not pre-committed.**
+   Median \|ΔDTW\| on affected games is 1.62 pp, inside "low single digits", and
+   the 10 pp tripwire that would have made the sign convention the first suspect
+   did not fire. The 89% upper bound is 27.4 pp and the largest margin move is
+   13.36 points, which §7 did not anticipate in either direction. Document 50 §4
+   shows it is the component's own arithmetic, and the sign convention was
+   independently checked (V-7, the read-side round trip, the swing-table
+   reproduction).
