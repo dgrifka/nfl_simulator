@@ -547,20 +547,40 @@ def deserved_share(verdict: GameVerdict) -> int:
     return home_share if verdict.deserved_winner == verdict.home_team else 100 - home_share
 
 
-def _draw_callout(ax, verdict: GameVerdict, home_colour: str, away_colour: str) -> Text:
+def _draw_callout(ax, verdict: GameVerdict, home_colour: str, away_colour: str) -> Text | None:
     """`"GB deserved to win 95% of simulations"`, in that team's own colour.
 
     The baseball run-distribution chart's device. It is the sentence the figure
     exists to say, and a reader who takes nothing else off the plot should take
     this. It goes in the upper corner on the favoured team's own side, so the
     words sit over the bars they describe.
+
+    Two games get something else, because on them that sentence is not the one
+    the figure is entitled to say:
+
+    * **Inside the band**, the pill declines to name a winner and the callout
+      must not name one either — it states both shares and says so. It is ink
+      rather than a club colour, since it belongs to neither team.
+    * **A degenerate game** gets no callout. "100% of simulations" repeats the
+      title, and a bootstrap that never changed its mind is the last place to
+      put a sentence about how often something happened. The luck arrow is
+      already suppressed here for the same reason.
     """
+    if verdict.is_degenerate:
+        return None
     at_home = verdict.deserved_winner == verdict.home_team
-    colour = home_colour if at_home else away_colour
+    if verdict.bucket == TOO_CLOSE:
+        message = f"{verdict.headline().replace(' / ', ' \u00b7 ')} \u2014 {TOO_CLOSE}"
+        colour = PALETTE["text"]
+    else:
+        message = (
+            f"{verdict.deserved_winner} deserved to win {deserved_share(verdict)}% of simulations"
+        )
+        colour = home_colour if at_home else away_colour
     return ax.text(
         0.985 if at_home else 0.015,
         CALLOUT_Y,
-        f"{verdict.deserved_winner} deserved to win {deserved_share(verdict)}% of simulations",
+        message,
         transform=ax.transAxes,
         ha="right" if at_home else "left",
         va="top",

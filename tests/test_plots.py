@@ -1266,6 +1266,41 @@ def test_the_callout_never_prints_through_a_rule_label(dtw):
     assert not any(box.overlaps(hit.get_window_extent()) for box in boxes)
 
 
+def test_a_game_inside_the_band_declines_to_call_it_in_the_callout_too():
+    """The pill says "too close to call" and the callout said "MIN deserved to
+    win 55% of simulations" over it. One figure, two verdicts."""
+    game = verdict(dtw_home=0.55, actual_margin=13.0, deserved_margin=0.7)
+    _fig, ax = plot_bootstrap_distribution(game, colors=(DET_BLUE, GB_GREEN), callout=True)
+    printed = [t.get_text() for t in ax.texts]
+    assert printed.count("MIN 55% \u00b7 DET 45% \u2014 too close to call") == 1
+    assert not [t for t in ax.texts if "deserved to win" in t.get_text()]
+
+
+def test_the_band_callout_is_ink_because_it_belongs_to_neither_team():
+    game = verdict(dtw_home=0.55, actual_margin=13.0, deserved_margin=0.7)
+    _fig, ax = plot_bootstrap_distribution(game, colors=(DET_BLUE, GB_GREEN), callout=True)
+    hit = next(t for t in ax.texts if t.get_text().endswith("\u2014 too close to call"))
+    assert matplotlib.colors.to_hex(hit.get_color()) == PALETTE["text"].lower()
+
+
+def test_a_degenerate_game_draws_no_callout_at_all():
+    """Every re-flip landed the same way, so "100% of simulations" states the
+    title over again and invites a bootstrap that never moved to be read as
+    evidence that it could not. The arrow is already suppressed here."""
+    game = branded(dtw_home=1.0)
+    _fig, ax = plot_bootstrap_distribution(game, colors=(DET_BLUE, GB_GREEN), callout=True)
+    assert not [t for t in ax.texts if "deserved to win" in t.get_text()]
+    assert not [t for t in ax.texts if "too close to call" in t.get_text()]
+
+
+def test_a_game_outside_the_band_keeps_the_callout_it_had():
+    game = branded(dtw_home=0.62)
+    _fig, ax = plot_bootstrap_distribution(game, colors=(DET_BLUE, GB_GREEN), callout=True)
+    hit = next(t for t in ax.texts if "deserved to win" in t.get_text())
+    assert hit.get_text() == "DET deserved to win 62% of simulations"
+    assert matplotlib.colors.to_hex(hit.get_color()) == DET_BLUE.lower()
+
+
 def test_there_is_no_callout_unless_the_figure_asks_for_one():
     _fig, ax = plot_bootstrap_distribution(branded())
     assert not [text for text in ax.texts if "deserved to win" in text.get_text()]
