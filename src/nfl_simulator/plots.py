@@ -406,6 +406,11 @@ def _wrap_to_width(fig, text: Text, width_px: float) -> None:
     Matplotlib's own ``wrap=True`` wraps to the *figure* edge, which is not a
     boundary this module controls: ``attach_overtime_sidebar`` widens the figure,
     and a caveat wrapped to it widens with it and runs under the sidebar.
+
+    A break the caller already put in is kept and wrapped inside, rather than
+    collapsed and re-broken wherever the measuring lands. The ledger card's
+    margin sentence breaks at its comma for that reason: re-flowed as one run it
+    read "deserved to lose / by 8.3", which parts a number from its clause.
     """
     renderer = _renderer(fig)
     font = text.get_fontproperties()
@@ -414,16 +419,17 @@ def _wrap_to_width(fig, text: Text, width_px: float) -> None:
         return renderer.get_text_width_height_descent(line, font, False)[0] > width_px
 
     lines: list[str] = []
-    current = ""
-    for word in text.get_text().split():
-        candidate = f"{current} {word}" if current else word
-        if current and too_wide(candidate):
+    for source in text.get_text().split("\n"):
+        current = ""
+        for word in source.split():
+            candidate = f"{current} {word}" if current else word
+            if current and too_wide(candidate):
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
             lines.append(current)
-            current = word
-        else:
-            current = candidate
-    if current:
-        lines.append(current)
 
     text.set_wrap(False)
     text.set_text("\n".join(lines))
@@ -1399,6 +1405,13 @@ LEDGER_TITLE_Y = 12.62
 LEDGER_HEADER_Y = 12.15
 LEDGER_BOXES_Y = 11.42
 LEDGER_BOX_HEIGHT = 2.15
+# Narrower than the first draft's 3.10, because the lane between the two boxes
+# stopped being a two-letter "vs" and became the game's net luck and the sentence
+# that states the two margins. A box wide enough for "Washington Commanders" at
+# 13 pt is wide enough; the inches it gives back are what make the lane readable.
+LEDGER_BOX_WIDTH = 2.55
+LEDGER_BOX_X = (1.83, 6.17)
+LEDGER_LANE_WIDTH = LEDGER_BOX_X[1] - LEDGER_BOX_X[0] - LEDGER_BOX_WIDTH
 LEDGER_SWINGS_Y = 8.90
 # The band the two tables live in, and the air between them. Where each section
 # starts is computed from how many rows the one above it has: pinning the second
@@ -1430,6 +1443,17 @@ class TeamLuck:
     @property
     def n_events(self) -> int:
         return len(self.rows)
+
+    @property
+    def own_points(self) -> float:
+        """The luck on this team's own plays — the sum of its own table.
+
+        Not ``net_points``: that is the *game's* net, which the away team's own
+        plays move as surely as the home team's. Denver's round-2 card headlined
+        −2.3 over a column of green positives adding to +2.3, and both numbers
+        were right. This is the one the column adds up to.
+        """
+        return sum(row.points for row in self.rows)
 
 
 def team_ledgers(verdict: GameVerdict, rows, *, points_per_epa: float) -> tuple[TeamLuck, TeamLuck]:
@@ -1505,6 +1529,48 @@ def card_header_lines(verdict: GameVerdict) -> list[str]:
     return [matchup, f"{final}  |  DTW: {verdict.headline()}"]
 
 
+def net_luck(away: TeamLuck, home: TeamLuck) -> tuple[float, str]:
+    """The game's net luck and the team it favoured, from the two own-plays sums.
+
+    Home own-plays minus away own-plays is the gap between the actual margin and
+    the deserved one, which is why the card can state it as one line instead of
+    printing a signed number in each box and leaving the reader to subtract.
+    Returned unsigned, with the name of whoever it favoured, because a signed
+    number in the lane between two boxes has no side to belong to.
+    """
+    net = home.own_points - away.own_points
+    return abs(net), (home.team if net >= 0 else away.team)
+
+
+def margin_sentence(verdict: GameVerdict) -> str:
+    """`"DET won by 8, deserved to lose by 8.3"` — both margins, one subject.
+
+    The subject is always the scoreboard winner, so the two clauses are about the
+    same team and the reader never has to flip a sign mid-sentence. The actual
+    margin prints whole because it is a scoreboard, the deserved one to a tenth
+    because it is an estimate.
+    """
+    gap = verdict.actual_margin - verdict.deserved_margin
+    if abs(gap) < 0.05:
+        return "The deserved margin is the actual one."
+
+    deserved = verdict.deserved_margin
+    winner = verdict.scoreboard_winner
+    if winner is None:
+        favoured = verdict.home_team if deserved > 0 else verdict.away_team
+        scores = ""
+        if verdict.home_score is not None and verdict.away_score is not None:
+            scores = f" {verdict.away_score:.0f}\u2013{verdict.home_score:.0f}"
+        return f"tied{scores}, {favoured} deserved to win by {abs(deserved):.1f}"
+
+    toward_winner = deserved if winner == verdict.home_team else -deserved
+    actual = f"{winner} won by {abs(verdict.actual_margin):.0f}"
+    if abs(toward_winner) < 0.05:
+        return f"{actual}, deserved dead level."
+    verb = "win" if toward_winner > 0 else "lose"
+    return f"{actual}, deserved to {verb} by {abs(toward_winner):.1f}"
+
+
 def _luck_colour(points: float) -> str:
     """Green for luck a team received, red for luck it paid, ink for neither."""
     if points > 0:
@@ -1512,6 +1578,28 @@ def _luck_colour(points: float) -> str:
     if points < 0:
         return PALETTE["bad"]
     return PALETTE["text_muted"]
+
+
+def points_label(points: float) -> str:
+    """A signed points figure, to a tenth — or to a hundredth when a tenth is 0.
+
+    "+0.0" beside an event that really did move the margin reads as a rounding
+    failure rather than as a small number. The rule holds for a box headline as
+    well as for a row: a headline that rounded a real +0.04 to +0.0 would stop
+    matching the column it is the sum of, which is the whole point of round 3.
+    """
+    return f"{points:+.2f}" if abs(points) < 0.1 else f"{points:+.1f}"
+
+
+def _headline_colour(points: float) -> str:
+    """The box headline's colour, which unlike a row has no neutral state.
+
+    A row printing "+0.00" is a real event that moved nothing, and muting it says
+    so. A headline is a verdict on a whole team's luck, and a muted one reads as
+    missing data rather than as nothing owed, so zero goes green with the rest of
+    the not-in-debt.
+    """
+    return PALETTE["good"] if points >= 0 else PALETTE["bad"]
 
 
 def _rounded(ax, xy, width, height, *, facecolor, edgecolor="none", pad=0.06, zorder=1):
@@ -1554,8 +1642,8 @@ def _card_logo(ax, logo, x, y, *, max_width_in, max_height_in):
 
 
 def _draw_team_box(ax, luck: TeamLuck, names, *, x_centre, y_top, colour, logo, detail):
-    """One club's summary panel: mark, name, its net luck, and one muted line."""
-    width, height = 3.10, LEDGER_BOX_HEIGHT
+    """One club's summary panel: mark, name, its own-plays luck, one muted line."""
+    width, height = LEDGER_BOX_WIDTH, LEDGER_BOX_HEIGHT
     left = x_centre - width / 2.0
     _rounded(
         ax,
@@ -1582,14 +1670,14 @@ def _draw_team_box(ax, luck: TeamLuck, names, *, x_centre, y_top, colour, logo, 
         color=colour,
         zorder=3,
     )
-    # The headline is the *game's* net and the table under it is that team's
-    # own plays, and the two can have opposite signs — Denver's card read -2.3
-    # over a column of green positives. Naming the quantity is what stops the
-    # pair reading as a contradiction.
+    # The headline is the sum of the table underneath it, to the last decimal.
+    # Round 2 headlined the game's net here and labelled the difference; round 3
+    # made the two one quantity, so there is nothing left to reconcile. The
+    # game's net moved to the lane between the boxes, where it belongs to both.
     ax.text(
         x_centre,
         y_top - 1.18,
-        "NET LUCK",
+        "LUCK ON OWN PLAYS",
         fontsize=7.5,
         fontweight="bold",
         ha="center",
@@ -1600,16 +1688,16 @@ def _draw_team_box(ax, luck: TeamLuck, names, *, x_centre, y_top, colour, logo, 
     ax.text(
         x_centre,
         y_top - 1.34,
-        f"{luck.net_points:+.1f} points of luck",
+        f"{points_label(luck.own_points)} points",
         fontsize=19,
         fontweight="bold",
         ha="center",
         va="top",
-        color=_luck_colour(luck.net_points),
+        color=_headline_colour(luck.own_points),
         zorder=3,
     )
     ax.plot(
-        [x_centre - 1.15, x_centre + 1.15],
+        [x_centre - width / 2 + 0.28, x_centre + width / 2 - 0.28],
         [y_top - 1.68, y_top - 1.68],
         color=PALETTE["grid"],
         linewidth=0.6,
@@ -1745,12 +1833,10 @@ def _draw_team_table(ax, luck: TeamLuck, names, *, y_top, colour, logo, columns)
             color=PALETTE["text_muted"],
             zorder=3,
         )
-        # A tenth of a point printed as "+0.0" reads as a rounding failure
-        # rather than as a small number — the waterfall's own rule, kept.
         ax.text(
             columns[2][0],
             y,
-            f"{row.points:+.2f}" if abs(row.points) < 0.1 else f"{row.points:+.1f}",
+            points_label(row.points),
             fontsize=12,
             fontweight="bold",
             ha=columns[2][2],
@@ -1829,18 +1915,12 @@ def plot_luck_ledger_card(
             header_y -= 0.30
         ax.plot([0.55, 7.45], [LEDGER_BOXES_Y + 0.20] * 2, color=PALETTE["grid"], linewidth=0.8)
 
-        # The luck winner's box carries the two margins, because that team is the
-        # one the scoreboard flattered and the gap is what it was flattered by.
-        # The other box carries its own event count instead: the same line on
-        # both would print the game's one fact twice.
-        winner = home if home.net_points >= away.net_points else away
-        margins = (
-            f"Actual margin {verdict.actual_margin:+.0f} \u2192 "
-            f"deserved {verdict.deserved_margin:+.1f}"
-        )
-        for luck, x_centre, colour in (
-            (away, 2.05, away_colour),
-            (home, 5.95, home_colour),
+        # Both boxes carry the same three lines, because they now state the same
+        # quantity about two teams. What is true of the matchup rather than of a
+        # club — the game's net luck, and which way the two margins ran — goes in
+        # the lane between them.
+        for luck, x_centre, colour in zip(
+            (away, home), LEDGER_BOX_X, (away_colour, home_colour), strict=True
         ):
             _draw_team_box(
                 ax,
@@ -1850,19 +1930,41 @@ def plot_luck_ledger_card(
                 y_top=LEDGER_BOXES_Y,
                 colour=colour,
                 logo=logos.get(luck.team),
-                detail=margins if luck is winner else f"{luck.n_events} luck events",
+                detail=f"{luck.n_events} luck events",
             )
-        # In the lane between the two boxes, at their own vertical middle.
         ax.text(
             4.0,
-            LEDGER_BOXES_Y - LEDGER_BOX_HEIGHT / 2,
+            LEDGER_BOXES_Y - 0.66,
             "vs",
-            fontsize=16,
+            fontsize=13,
             ha="center",
             va="center",
             style="italic",
             color=PALETTE["text_muted"],
         )
+        size, favoured = net_luck(away, home)
+        if size >= 0.05:
+            ax.text(
+                4.0,
+                LEDGER_BOXES_Y - 1.06,
+                f"Net luck: {favoured} +{size:.1f}",
+                fontsize=10.5,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                color=home_colour if favoured == verdict.home_team else away_colour,
+            )
+        sentence = ax.text(
+            4.0,
+            LEDGER_BOXES_Y - 1.32,
+            margin_sentence(verdict).replace(", ", ",\n"),
+            fontsize=8.5,
+            ha="center",
+            va="top",
+            linespacing=1.35,
+            color=PALETTE["text_muted"],
+        )
+        _wrap_to_width(fig, sentence, LEDGER_LANE_WIDTH * fig.dpi)
 
         ax.plot([0.55, 7.45], [LEDGER_SWINGS_Y + 0.23] * 2, color=PALETTE["grid"], linewidth=0.8)
         ax.text(
@@ -1900,7 +2002,7 @@ def plot_luck_ledger_card(
             ax.text(
                 4.0,
                 4.60,
-                "This game had no luck events to re-price.\nThe deserved margin is the actual one.",
+                "This game had no luck events to re-price.",
                 fontsize=14,
                 ha="center",
                 va="center",

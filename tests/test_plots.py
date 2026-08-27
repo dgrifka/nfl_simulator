@@ -31,6 +31,8 @@ from nfl_simulator.plots import (  # noqa: E402
     BAND_HIGH,
     BAND_LOW,
     CLEAR_FLIP,
+    LEDGER_BOX_HEIGHT,
+    LEDGER_BOXES_Y,
     OVERTIME_TITLE,
     REPORTED_NOT_NEUTRALIZED,
     SCOREBOARD_HOLDS,
@@ -41,6 +43,8 @@ from nfl_simulator.plots import (  # noqa: E402
     band_sweep,
     bucket_label,
     luck_bars,
+    margin_sentence,
+    net_luck,
     overtime_lines,
     pill_colour,
     plain_label,
@@ -1509,20 +1513,157 @@ def test_the_card_is_portrait_because_it_is_a_share_image():
     assert fig.get_figheight() > fig.get_figwidth()
 
 
-def test_the_luck_winner_s_headline_is_green_and_the_loser_s_red():
+def headline_texts(ax) -> list:
+    """The two big numbers in the team boxes, away box first."""
+    found = [t for t in ax.texts if t.get_text().endswith(" points")]
+    return sorted(found, key=lambda t: t.get_position()[0])
+
+
+def middle_column(ax) -> str:
+    """The lane between the two boxes, read top line down, wrapping unwound."""
+    band = (LEDGER_BOXES_Y - LEDGER_BOX_HEIGHT, LEDGER_BOXES_Y)
+    lane = [
+        t
+        for t in ax.texts
+        if t.get_position()[0] == pytest.approx(4.0) and band[0] < t.get_position()[1] <= band[1]
+    ]
+    lines = [t.get_text() for t in sorted(lane, key=lambda t: -t.get_position()[1])]
+    return " ".join(" ".join(line.split()) for line in lines)
+
+
+def test_a_box_headline_is_the_luck_on_that_team_s_own_plays():
+    """Round 2 shipped a card whose headline was the game's net and whose table
+    was that team's own plays, so a red headline sat over a green column."""
+    rows = gb_det_rows()
+    away, home = team_ledgers(reconciling(rows), rows, points_per_epa=PPE)
+    for luck in (away, home):
+        assert luck.own_points == pytest.approx(
+            sum(row.points for row in table_rows(luck)), abs=1e-9
+        )
+    fig, ax = ledger_card(rows)
+    printed = [t.get_text() for t in headline_texts(ax)]
+    assert printed == [f"{away.own_points:+.1f} points", f"{home.own_points:+.1f} points"]
+
+
+def test_a_folded_table_still_adds_up_to_its_own_headline():
+    """`and n more` carries the exact sum it replaces, so the column adds up."""
+    rows = gb_det_rows() + [
+        card_row(1.1, play_id=8.0, kick_distance=44.0),
+        card_row(0.9, play_id=9.0, kick_distance=47.0),
+    ]
+    away, _home = team_ledgers(reconciling(rows), rows, points_per_epa=PPE)
+    assert len(table_rows(away)) == 6
+    assert away.own_points == pytest.approx(sum(row.points for row in table_rows(away)), abs=1e-9)
+
+
+def test_a_headline_wears_green_when_the_team_gained_and_red_when_it_paid():
+    rows = [
+        card_row(-3.0, play_id=1.0, charged_team="GB", kick_distance=41.0),
+        card_row(-3.1, play_id=2.0, charged_team="DET", opponent="GB", kick_distance=55.0),
+    ]
+    fig, ax = ledger_card(rows)
+    away_headline, home_headline = headline_texts(ax)
+    assert away_headline.get_text().startswith("+")
+    assert matplotlib.colors.to_hex(away_headline.get_color()) == PALETTE["good"].lower()
+    assert home_headline.get_text().startswith("-")
+    assert matplotlib.colors.to_hex(home_headline.get_color()) == PALETTE["bad"].lower()
+
+
+def test_both_boxes_name_the_quantity_their_headline_is():
+    fig, _ax = ledger_card()
+    assert figure_text(fig).count("LUCK ON OWN PLAYS") == 2
+
+
+def test_the_old_net_luck_headline_is_gone():
+    text = figure_text(ledger_card()[0])
+    assert "NET LUCK" not in text
+    assert "points of luck" not in text
+
+
+# --- the middle column ----------------------------------------------------
+
+
+def test_the_net_luck_is_the_gap_between_the_two_margins():
+    """Net luck is home own-plays minus away own-plays, and that is the gap."""
+    rows = gb_det_rows()
+    game = reconciling(rows)
+    away, home = team_ledgers(game, rows, points_per_epa=PPE)
+    size, favoured = net_luck(away, home)
+    assert size == pytest.approx(abs(game.actual_margin - game.deserved_margin))
+    assert size == pytest.approx(abs(home.own_points - away.own_points))
+    assert favoured == "DET"
+
+
+def test_the_middle_column_states_the_net_luck_in_the_favoured_team_s_colour():
+    fig, ax = ledger_card(colors=(DET_BLUE, GB_GREEN))
+    net = next(t for t in ax.texts if t.get_text().startswith("Net luck"))
+    assert re.fullmatch(r"Net luck: (GB|DET) \+\d+\.\d", net.get_text())
+    assert net.get_text() == "Net luck: DET +11.5"
+    assert matplotlib.colors.to_hex(net.get_color()) == DET_BLUE.lower()
+    assert net.get_fontweight() == "bold"
+    assert "Net luck: DET +11.5" in middle_column(ax)
+
+
+def test_the_middle_column_reads_vs_above_the_two_numbers():
     fig, ax = ledger_card()
-    headlines = [t for t in ax.texts if t.get_text().endswith("points of luck")]
-    assert len(headlines) == 2
-    colours = {matplotlib.colors.to_hex(t.get_color()) for t in headlines}
-    assert colours == {PALETTE["good"].lower(), PALETTE["bad"].lower()}
-    green = next(
-        t for t in headlines if matplotlib.colors.to_hex(t.get_color()) == PALETTE["good"].lower()
+    assert middle_column(ax).startswith("vs ")
+    assert "VS" not in figure_text(fig)
+
+
+def test_the_margin_sentence_reads_from_the_scoreboard_winner():
+    """DET won by 8 and deserved to lose, so the sentence says both about DET."""
+    fig, ax = ledger_card()
+    game = reconciling(gb_det_rows())
+    sentence = f"DET won by 8, deserved to lose by {abs(game.deserved_margin):.1f}"
+    assert margin_sentence(game) == sentence
+    assert sentence in middle_column(ax)
+
+
+def test_the_margin_sentence_breaks_at_its_comma_rather_than_mid_clause():
+    """Wrapped to the lane it read "deserved to lose / by 8.3", which orphans the
+    number from the clause it belongs to. The comma is where a reader breaks."""
+    fig, ax = ledger_card()
+    sentence = next(t for t in ax.texts if t.get_text().startswith("DET won by 8"))
+    assert sentence.get_text().split("\n")[0] == "DET won by 8,"
+
+
+def test_the_margin_sentence_says_deserved_to_win_when_the_winner_deserved_it():
+    game = verdict(
+        home_team="DEN",
+        away_team="WAS",
+        home_score=27,
+        away_score=26,
+        actual_margin=1.0,
+        deserved_margin=3.3,
     )
-    red = next(
-        t for t in headlines if matplotlib.colors.to_hex(t.get_color()) == PALETTE["bad"].lower()
+    assert margin_sentence(game) == "DEN won by 1, deserved to win by 3.3"
+
+
+def test_the_margin_sentence_names_the_favoured_team_on_a_tie():
+    game = verdict(
+        home_team="MIN",
+        away_team="DET",
+        home_score=20,
+        away_score=20,
+        actual_margin=0.0,
+        deserved_margin=2.1,
     )
-    assert green.get_text().startswith("+")
-    assert red.get_text().startswith("-")
+    assert margin_sentence(game) == "tied 20\u201320, MIN deserved to win by 2.1"
+
+
+def test_a_game_with_no_luck_says_the_two_margins_are_the_same_one():
+    game = replace(branded(), deserved_margin=branded().actual_margin)
+    assert margin_sentence(game) == "The deserved margin is the actual one."
+    fig, ax = plot_luck_ledger_card(game, [], points_per_epa=PPE)
+    lane = middle_column(ax)
+    assert "The deserved margin is the actual one." in lane
+    assert "Net luck" not in lane, "a game with no luck has no net to state"
+    normalised = " ".join(figure_text(fig).split())
+    assert normalised.count("The deserved margin is the actual one.") == 1
+
+
+def test_the_old_margin_arrow_is_gone():
+    assert "Actual margin" not in figure_text(ledger_card()[0])
 
 
 def test_the_card_states_the_sign_convention_its_points_column_uses():
@@ -1533,15 +1674,11 @@ def test_the_card_states_the_sign_convention_its_points_column_uses():
     )
 
 
-def test_the_luck_winner_s_box_carries_the_two_margins():
-    fig, _ax = ledger_card()
-    game = reconciling(gb_det_rows())
-    assert f"Actual margin +8 \u2192 deserved {game.deserved_margin:+.1f}" in figure_text(fig)
-
-
-def test_the_other_box_counts_that_team_s_own_luck_events():
-    fig, _ax = ledger_card()
-    assert "5 luck events" in figure_text(fig)
+def test_both_boxes_count_their_own_luck_events():
+    """The event count is the one line both boxes carry, so neither is a stub."""
+    text = figure_text(ledger_card()[0])
+    assert "5 luck events" in text
+    assert "2 luck events" in text
 
 
 def test_the_card_carries_the_header_the_baseball_ledger_carries():
@@ -1702,10 +1839,10 @@ def test_the_two_tables_sit_together_when_one_team_had_few_events():
 
 def test_the_card_says_which_quantity_each_number_is():
     """`DEN_WAS_27-26--86-14_luck_ledger.png`: Denver's headline read -2.3 while
-    every row of Denver's own table was a green positive summing to +2.3. Both
-    are true — the headline is the game's net luck, the table is the luck on that
-    team's own plays — and unlabelled they read as a contradiction."""
+    every row of Denver's own table was a green positive summing to +2.3. Round 2
+    labelled the two quantities; round 3 made them one quantity, so the headline
+    and the column under it are now the same number."""
     fig, _ax = ledger_card()
     text = figure_text(fig)
-    assert text.count("NET LUCK") == 2, "each headline names the quantity it is"
+    assert text.count("LUCK ON OWN PLAYS") == 2, "each headline names the quantity it is"
     assert "on each team's own plays" in text, "and the tables name theirs"
