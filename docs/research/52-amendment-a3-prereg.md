@@ -149,3 +149,27 @@ mirror)`.
 | G-3 floor | document 05 §7's, unchanged | this document |
 | Flat swing | −3.55 EPA (document 47 §3's pooled fallback) | `70` |
 | Seed | 20260827 (fits), 20260817 (simulator) | as before |
+
+---
+
+## 8. Outcome
+
+Round 5 ran 2026-08-27 on `feat/dropped-pick-variant`. Full record: document 53.
+**Unmerged.**
+
+| Gate | Result | Commit |
+|---|---|---|
+| **R-3** — ruling on V-8 | **Made.** The 2022 NYG breach of 1.1 pp on one of ten lines is immaterial; the bound stands unamended. Recorded in documents 50 §2 and 49 §10 | `cf73e8b` |
+| **G-1** — self-fulfilment (clause 5) | **BLOCKED.** Eighteen week-out folds fitted; **7 of 18 miss Gate C-1** at §7's spec (weeks 1, 3, 7, 9, 13, 14, 16) — 0 divergences in all eighteen, r̂ at worst 1.0146 on `sigma_d`/`sigma_q`, ESS-tail as low as 245. The agreement statistic is **not computed**, and neither is the week-out variant's audit. All eighteen traces are on disk; the fits cost 188 s | `2c3223a` |
+| **G-2** — pricing sensitivity | **PASS.** Every throw at the pooled −3.55 EPA moves **129** games across a verdict bucket, **0.94** of the 137 the binned swing moves, against a ≥ 0.50 bar. Element-wise: 116 in both move sets, 21 binned-only, 13 flat-only | `a4ce823` |
+| **G-3** — materiality (clause 4) | **PASS.** On the 1,033 affected games, median \|ΔDTW\| **1.62 pp** against a median 89% half-width of **0.56 pp**, clear by 1.06 pp; also clear on the means (6.96 vs 1.91 pp). §5's pre-committed note expected a possible fail by comparing a median move to a *mean full width*; the gate was computed on its own text | `a4ce823` |
+| **G-4** — the mirror (clause 3) | **Not run.** Round 6, and it now waits on G-1 as well | — |
+| **V-1** — v1.3 untouched | **PASS**, twice: 0.00e+00 over 2,761 games on the deserved margin, DTW% and both bounds, re-printed at the end of both audit runs | `2c3223a`, `a4ce823` |
+
+**A-3 is not enacted.** Both substantive gates pass; what is missing is the
+precondition to G-1, so clause 5 has no bound and §4's editions do not ship.
+The treatment table therefore does **not** read `variant (A-3 pending mirror)` —
+that wording describes the state after G-1 passes. Document 53 §5 carries the
+three routes on the fold spec; none is taken by the session that found the
+failure.
+
