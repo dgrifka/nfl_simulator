@@ -122,3 +122,24 @@ verdict. No power run. C-1 sampler bars on the new fit. Seed `20260827`.
 | Bin table | `yardline_100` thirds × down {1–2, 3–4}; min 30 per branch; pooled fallback | `65` |
 | Pooled swing fallback | escaped mean − picked mean, recomputed; expect ≈ 3.5 EPA | document 32 §3 |
 | `β̂` source | `research/outputs/64_dropped_pick_confounds_r2.json` | `65` |
+
+---
+
+## 6. Outcome
+
+Round 3 ran 2026-08-27 on `docs/dropped-pick-confounds`. Full record: document
+48.
+
+| Part | Result | Commit |
+|---|---|---|
+| A — rulings recorded | R-1 and R-2 carried into documents 43 §7 and 46 §4/§7, and the two §8 register rows they close | `d9b098b` |
+| B — game-clustering check | **§2 row 1 landed.** `σ_d` 5.83 pp [1.99, 8.88], upper clears 5.920 pp; `σ_g` 8.53 pp [2.45, 13.22]; Gate C-1 PASS (0 divergences, 0 of 1,461 over a bar). R-2's wording stands | `410f588` |
+| C — the diagnostic | 2,278 game-team rows; all six bin cells above the 30-per-branch floor, every swing negative; median `fortune_epa` +0.00, 89% [−3.32, +3.70], 10.8% at or over one full pick | `4ee8c46` |
+| D — the record | Document 48, `results-2026-08-27-exp3b.md`, hypothesis queue | this commit |
+
+**One deviation, disclosed in document 48 §6:** §3's imputation instruction
+assumed `pass_location` was the only null on the 28 dropped rows. It is not —
+`air_yards` is null on 27 of them and `down` on 16 — so the "reference level"
+rule was applied to every null covariate rather than to `pass_location` alone.
+The pre-registered tripwire held: mean `p̂` over the 2,969 modelled rows is
+0.4934 against round 2's 0.4937.
