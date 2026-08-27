@@ -52,6 +52,11 @@ SCOREBOARD_HOLDS = "scoreboard holds"
 
 # Measured, not asserted. Document 10 §"What this establishes": 0.9152 informative
 # coverage at the shipped 800 coin draws. Document 33 §3: 1,226 of 2,761 games.
+# Document 16 measured the overtime toss and refused it, so every figure that
+# draws a ledger has to say the ledger is one event short on purpose. Silence
+# would let a reader take the figure for the whole story.
+OVERTIME_FOOTER = "Went to overtime; the coin toss is reported, not neutralized."
+
 NOMINAL_COVERAGE = "89%"
 MEASURED_COVERAGE = "91.5%"
 DEGENERATE_SHARE = "44.4%"
@@ -817,6 +822,13 @@ def plot_bootstrap_distribution(
         # widens — the footnote then ran the full width of the widened figure and
         # under the sidebar's paragraphs.
         _wrap_to_width(fig, caveat, ax.get_window_extent().width)
+        # Appended *after* the wrap rather than drawn as a second object below
+        # it: the caveat wraps to one line or two depending on the game, and an
+        # annotation at a fixed offset under it lands on the second line half
+        # the time. Document 16 refused the toss, so a game that had one has to
+        # say the ledger is one event short on purpose.
+        if verdict.went_to_overtime:
+            caveat.set_text(f"{caveat.get_text()}\n{OVERTIME_FOOTER}")
         _lift_colliding_label(fig, deserved_label, actual_label)
 
         if callout:
@@ -1147,8 +1159,6 @@ HOW_TO_READ = (
     "Start at the actual margin. Each bar is one luck event re-priced at its "
     "expectation. The last bar is the margin the game deserved."
 )
-
-OVERTIME_FOOTER = "Went to overtime; the coin toss is reported, not neutralized."
 
 
 def plot_luck_ledger(
@@ -1852,6 +1862,17 @@ def plot_luck_ledger_card(
                 color=PALETTE["text_muted"],
             )
             return fig, ax
+
+        if verdict.went_to_overtime:
+            ax.text(
+                4.0,
+                0.22,
+                OVERTIME_FOOTER,
+                fontsize=10,
+                ha="center",
+                va="center",
+                color=PALETTE["text_muted"],
+            )
 
         columns = (
             (1.00, "Event", "left"),

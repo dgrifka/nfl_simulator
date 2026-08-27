@@ -64,6 +64,12 @@ REPLAY_TOLERANCE = 1e-9
 # not been taught, which is fine in an article and wrong on a timeline.
 SUFFIXES = ("dtw", "luck_ledger", "card", "waterfall")
 
+# Not a fifth share image — an extra, written only when a caller asks for it and
+# only when the game actually went to overtime. Round 1's review: document 16's
+# six-paragraph panel is the right amount of methodology for an article and far
+# too much beside a card somebody scrolls past.
+ARTICLE_SUFFIX = "dtw_article"
+
 # The distribution's shipped reading, chosen by looking at the eight variants
 # `research/59_dtw_variants.py` renders (document 42 §1). Three-point bins pool
 # the reachable margins without smoothing between them; the callout states the
@@ -275,13 +281,18 @@ def kick_distances(game_id: str) -> dict:
 # --------------------------------------------------------------------------
 
 
-def render_game(game_id: str, out_dir: Path | None = None) -> list[Path]:
+def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = False) -> list[Path]:
     """Write this game's four PNGs and return their paths, in ``SUFFIXES`` order.
 
-    The overtime sidebar is attached to the two wide figures whenever the game
-    went to overtime, because document 16's refusal is a fact about *those*
-    figures' ledger. The card carries the one-line version instead — a card with
-    a sidebar is no longer a card.
+    **No share image carries the sidebar.** Document 16's refusal is a fact about
+    every one of these figures' ledgers, and every one of them states it — but as
+    one muted line, not as six paragraphs of methodology down the side. The
+    sidebar also grows the figure, so an overtime game and a regulation one came
+    out at two different widths and a timeline crops them differently.
+
+    ``article=True`` adds one more file for an overtime game,
+    ``{...}_dtw_article.png``: the distribution with the panel attached. That is
+    where the six paragraphs belong.
     """
     out_dir = Path(out_dir) if out_dir is not None else paths.RESEARCH_OUTPUT_DIR
     sources = load_sources()
@@ -302,10 +313,9 @@ def render_game(game_id: str, out_dir: Path | None = None) -> list[Path]:
     written = []
     for suffix in SUFFIXES:
         if suffix == "dtw":
-            fig, ax = plot_bootstrap_distribution(
+            fig, _ax = plot_bootstrap_distribution(
                 verdict, colors=colours, logos=logos, **DTW_FIGURE
             )
-            attach_overtime_sidebar(fig, ax, verdict, toss)
         elif suffix == "luck_ledger":
             fig, _ax = plot_luck_ledger_card(
                 verdict,
@@ -316,10 +326,9 @@ def render_game(game_id: str, out_dir: Path | None = None) -> list[Path]:
                 names=names,
             )
         elif suffix == "waterfall":
-            fig, ax = plot_luck_ledger(
+            fig, _ax = plot_luck_ledger(
                 verdict, rows, points_per_epa=sources.slope, colors=colours, logos=logos
             )
-            attach_overtime_sidebar(fig, ax, verdict, toss)
         else:
             fig, _ax = plot_game_card(verdict, colors=colours, logos=logos)
         written.append(
@@ -331,4 +340,9 @@ def render_game(game_id: str, out_dir: Path | None = None) -> list[Path]:
                 bbox_inches=None if suffix in ("card", "luck_ledger") else "tight",
             )
         )
+
+    if article and toss is not None:
+        fig, ax = plot_bootstrap_distribution(verdict, colors=colours, logos=logos, **DTW_FIGURE)
+        attach_overtime_sidebar(fig, ax, verdict, toss)
+        written.append(finalize(fig, out_dir / figure_filename(verdict, ARTICLE_SUFFIX)))
     return written

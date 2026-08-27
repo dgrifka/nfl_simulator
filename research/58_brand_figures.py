@@ -13,7 +13,8 @@ is a `SystemExit`.
 
     uv run python research/58_brand_figures.py
 
-Writes fifteen PNGs to ``research/outputs/`` plus
+Writes twenty share PNGs to ``research/outputs/`` — four per game — plus one
+``_dtw_article.png`` for each of the two overtime games, plus
 ``research/outputs/58_brand_figures.json``. None of it is committed —
 ``research/outputs/`` is gitignored, this script is the artifact, and document
 41 is the record.
@@ -35,6 +36,7 @@ import json
 from nfl_simulator import paths
 from nfl_simulator.plots import luck_bars, plain_label, verdict_from_row
 from nfl_simulator.render import (
+    ARTICLE_SUFFIX,
     SUFFIXES,
     figure_filename,
     kick_distances,
@@ -113,7 +115,7 @@ def main() -> None:
     written = []
     for record in records:
         verdict = record["verdict"]
-        paths_out = render_game(record["game_id"])
+        paths_out = render_game(record["game_id"], article=True)
         written.extend(paths_out)
         home, away = record["colours"]
         marks = ", ".join(f"{team} {'✓' if ok else '—'}" for team, ok in record["logos"].items())
@@ -125,7 +127,9 @@ def main() -> None:
         for bar in record["bars"][:3]:
             print(f"      {bar.points:+6.2f}  {bar.label}")
 
-    print(f"\n{'=' * 76}\n{len(written)} PNGs\n{'=' * 76}")
+    share = [path for path in written if ARTICLE_SUFFIX not in path.name]
+    article = [path for path in written if ARTICLE_SUFFIX in path.name]
+    print(f"\n{'=' * 76}\n{len(share)} share PNGs + {len(article)} article PNGs\n{'=' * 76}")
     for path in written:
         print(f"  {path}")
 
@@ -149,7 +153,11 @@ def main() -> None:
                         "n_bars": len(record["bars"]),
                         "labels": record["labels"],
                         "files": [
-                            figure_filename(record["verdict"], suffix) for suffix in SUFFIXES
+                            figure_filename(record["verdict"], suffix)
+                            for suffix in (
+                                *SUFFIXES,
+                                *((ARTICLE_SUFFIX,) if record["verdict"].went_to_overtime else ()),
+                            )
                         ],
                     }
                     for record in records

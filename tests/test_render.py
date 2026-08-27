@@ -23,13 +23,16 @@ import pytest
 from PIL import Image
 
 from nfl_simulator.plots import (
+    OVERTIME_FOOTER,
     GameVerdict,
+    OvertimeToss,
+    attach_overtime_sidebar,
     plot_bootstrap_distribution,
     plot_game_card,
     plot_luck_ledger,
     plot_luck_ledger_card,
 )
-from nfl_simulator.render import SUFFIXES, figure_filename, prepare_rows
+from nfl_simulator.render import ARTICLE_SUFFIX, SUFFIXES, figure_filename, prepare_rows
 from nfl_simulator.style import PALETTE, finalize
 
 PPE = 0.8389495557652871
@@ -203,3 +206,72 @@ def test_the_two_rule_labels_are_still_clear_on_the_branded_figure(game):
 
 def test_the_palette_the_card_paints_is_the_house_one():
     assert PALETTE["bg"] == "#FCFAF6"
+
+
+# --------------------------------------------------------------------------
+# overtime — a footer on the share images, the sidebar for the article
+# --------------------------------------------------------------------------
+
+
+def overtime(game) -> GameVerdict:
+    return replace(game, went_to_overtime=True)
+
+
+def share_figures(game):
+    """The three figures a timeline sees, as `render_game` builds them."""
+    return {suffix: figures(game)[suffix] for suffix in ("dtw", "luck_ledger", "card")}
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card"])
+def test_every_share_figure_says_the_toss_is_reported_not_neutralized(game, suffix):
+    fig = share_figures(overtime(game))[suffix]
+    text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
+    assert OVERTIME_FOOTER in text.replace("\n", " ")
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card"])
+def test_a_regulation_game_carries_no_overtime_line(game, suffix):
+    fig = share_figures(game)[suffix]
+    text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
+    assert "Went to overtime" not in text
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card"])
+def test_no_share_figure_carries_the_sidebar(game, suffix):
+    """Round 1's review: the sidebar is overwhelming on a share image. Six
+    paragraphs of methodology beside a card is an article, not a post."""
+    assert len(share_figures(overtime(game))[suffix].axes) == 1
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card"])
+def test_an_overtime_share_figure_is_the_size_a_regulation_one_is(game, suffix):
+    """The sidebar grew the figure. Two games annotated differently were then
+    drawn at two different widths, and a timeline crops them differently."""
+    regulation = share_figures(game)[suffix].get_size_inches()
+    assert list(share_figures(overtime(game))[suffix].get_size_inches()) == list(regulation)
+
+
+def test_the_card_puts_the_overtime_line_under_the_interval_line(game):
+    """The card's layout is frozen; this is the one line added to it."""
+    fig = share_figures(overtime(game))["card"]
+    ax = fig.axes[0]
+    footer = next(t for t in ax.texts if t.get_text() == OVERTIME_FOOTER)
+    interval = next(t for t in ax.texts if "interval on" in t.get_text())
+    assert footer.get_position()[1] < interval.get_position()[1]
+    assert footer.get_fontsize() == interval.get_fontsize()
+
+
+def test_the_article_file_is_named_for_the_figure_it_is_a_version_of(game):
+    assert figure_filename(game, ARTICLE_SUFFIX) == "GB_DET_23-31--95-5_dtw_article.png"
+    assert ARTICLE_SUFFIX not in SUFFIXES, "the article is an extra, not a fourth share image"
+
+
+def test_the_sidebar_is_what_the_article_version_adds(game):
+    """`render_game(..., article=True)` is the only path that attaches it."""
+    fig, ax = plot_bootstrap_distribution(overtime(game))
+    before = fig.get_size_inches()[0]
+    panel = attach_overtime_sidebar(
+        fig, ax, overtime(game), OvertimeToss(received="GB", season=2016, delta_dtw_home=-0.21)
+    )
+    assert panel is not None
+    assert fig.get_size_inches()[0] > before
