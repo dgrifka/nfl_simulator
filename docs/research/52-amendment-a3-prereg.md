@@ -1,0 +1,151 @@
+# 52 — Amendment A-3: the hands-on-the-ball class, pre-registered
+
+*Written 2026-08-27 in a Fable 5 brainstorm after document 50, **before any
+further fit**. the maintainer's decision: keep the dropped-pick variant and make it a
+ledger row, on the terms below. This document is the amendment's text, the
+gates it must clear, and what it costs. It is written the way document 21
+wrote A-2 — so that a reader can see exactly what rule changed and why —
+and unlike A-2 it is being enacted, conditionally, not merely proposed.*
+
+*Inputs: documents 05 (the rule), 09 (receiver drops persist), 21 (A-2),
+28 (C-1, and why consistency binds), 32, 43–50 (the dropped-pick study and
+the variant's audit), 33 (materiality and the flip audit).*
+
+---
+
+## 1. What changes, stated plainly
+
+**Before A-3:** the ledger removes what *nobody controlled* — a bounce, a
+kick's drift. Gate A's test is mechanism.
+
+**After A-3:** the ledger also removes outcomes that a player controlled
+*unreliably* — where the finish is near a coin and the entity's persistent
+skill explains a small, measured share of it — **priced at the entity's
+shrunk, posterior-sampled rate**, so a genuinely skilled entity keeps its
+edge. Gate A's mechanism test stays for the existing rows; A-3 opens a
+second, narrower door beside it, with its own gates.
+
+This is a redefinition of "deserve to win" toward *what would not have
+persisted*, and the community write-up says so in its first paragraph.
+Document 28's objection — that a measured zero is not a mechanism — is not
+answered; it is overruled by the product's owner, on the record, with the
+arithmetic attached (§6).
+
+## 2. Why the maintainer is doing it, honestly
+
+The variant changes the verdict bucket on 12.03% of 2022–2025 games
+(document 50). Its persistent-skill share is ~1.4% per throw (document 48).
+Both are true: a near-coin, three times a game, at ~2 EPA a flip, is a lot of
+luck. the maintainer's judgement is that this is what most readers mean by luck, and
+that a simulator which leaves it in is answering a narrower question than
+the one fans ask. This document does not pretend the effect size is
+evidence; it records that the *definition* was chosen, and that the size is
+what the definition implies.
+
+## 3. The amendment text
+
+> ### Amendment A-3 — the hands-on-the-ball class
+>
+> A component whose outcome a player controls, but whose finish is
+> near-random, may be neutralized **partially, at the entity's shrunk
+> posterior rate**, if and only if all of the following hold, each
+> pre-registered before the component's fit:
+>
+> 1. **A powered measurement of the entity spread**, at the grain the
+>    component charges (Gate C-3 ≥ 0.80 at the 12.5% reference), with the
+>    result reported whichever way it lands.
+> 2. **The expectation is drawn, not fixed**: `p` for every event is a
+>    vector of posterior draws over the entity effect and the covariate
+>    effects, so uncertainty about the entity widens the distribution.
+> 3. **Both directions of the same event class enter together or not at
+>    all.** Defender drops and receiver drops are one class.
+> 4. **The materiality floor** (document 05 §7): median |ΔDTW| on affected
+>    games ≥ the incumbent's median 89% half-width on the same games.
+> 5. **Self-fulfilment bounded**: the entity effect read for a game must be
+>    shown, by a held-out check, not to be materially the game's own.
+> 6. **Coverage declared**: a component with partial season coverage ships
+>    as a separately labelled edition, never silently mixed with the strict
+>    ledger.
+> 7. **A sunset**: re-tested every season against clause 1; a class whose
+>    entity spread becomes a trait (cross-season persistence clears the
+>    same bound) reverts to `core`.
+>
+> A component admitted under A-3 is recorded in document 05 §3's treatment
+> table as **`partial (A-3)`**.
+
+## 4. The two editions (clause 6, made concrete)
+
+| Edition | Seasons | Ledger | Product label |
+|---|---|---|---|
+| **Strict** (v1.3) | 2016–2025 | fumbles, FG, XP | `strict` on every image |
+| **Hands-on-the-ball** (v2.0) | 2022–2025 | strict + dropped picks + receiver drops | `v2.0` on every image |
+
+Every figure and every public number names its edition. A game before 2022
+has only the strict edition and says so. Which edition is the *headline*
+on a 2022+ game page is a product decision recorded in the figure round,
+not here.
+
+## 5. Gates for this round (round 5), committed now
+
+**R-3 — ruling on V-8.** The 2022 NYG interval [0.289, 0.509] against a
+[0.30, 0.70] sanity bound is recorded as **immaterial**: the bound was a
+plausibility check, the breach is 1.1 pp on one of ten lines, and the model
+is describing a bad defence-season as bad. Document 50 §2 carries the
+reasoning; the bound is not amended.
+
+**G-1 — self-fulfilment (clause 5).** Refit the dropped-pick model **18
+times, leaving out one week-of-season at a time** (all four seasons' week
+`w` out together), and read each game's `u_d` from the fit that excluded
+its week. Re-run the audit with those draws. Statistic: element-wise
+agreement of verdict bucket between the in-sample variant and the week-out
+variant over 2022–2025, and median |ΔDTW| between them on affected games.
+**Pass:** agreement ≥ 90% **and** median |ΔDTW| < 1.0 pp. On pass,
+production keeps the in-sample read with this bound recorded. On fail,
+production must use the week-out read (18 traces), and the cost is noted.
+
+**G-2 — pricing sensitivity.** Re-run the audit with every throw priced at
+the pooled swing (−3.55 EPA) instead of its bin. Statistic: the number of
+games that change verdict bucket under the flat swing, as a share of the
+137 that change under the binned swing. **Pass:** ≥ 50% — the effect is
+the coin, not the goal-line cell. On fail, the swing table is re-derived
+with a higher cell floor before any row ships, as its own pre-registered
+step.
+
+**G-3 — materiality (clause 4).** On the 1,033 affected games: median
+|ΔDTW| under the variant versus the median of v1.3's 89% half-width on
+those same games. **Pass:** median move ≥ median half-width. *Pre-committed
+note:* round 4's numbers put this close — 1.62 pp against a mean full width
+of 3.83 pp — and it may fail. If it fails, A-3 is **not enacted** for
+dropped picks on median grounds, the variant stays a labelled variant, and
+the tail (12% bucket moves) is reported beside the failure. The floor is
+not re-tuned for this component.
+
+**G-4 — the mirror (clause 3).** A-3 is enacted only when the receiver-drop
+component (the parked mirror) has passed its own pre-registered gates in
+round 6. Until then the treatment table reads `variant (A-3 pending
+mirror)`.
+
+## 6. What the amendment costs, so nobody discovers it later
+
+- The word "luck" on the game page now includes things players did.
+- Two editions of every 2022+ game; one edition before 2022.
+- The kicker precedent is stretched: FG partial neutralization rests on a
+  branch (the ball in flight); A-3's rests on low persistence alone.
+- Receiver drops persist ~21% relative (document 09) — more than
+  defender finishing — so the mirror will neutralize less per event and the
+  two directions will be visibly asymmetric. That is the honest outcome of
+  clause 2, not a defect.
+- Anything else with a near-coin finish and a small skill share (contested
+  catches, fourth-and-short stops) can now cite this door. The register in
+  document 05 §3 must say, for each, why it does or does not qualify.
+
+## 7. Constants
+
+| Constant | Value | Where |
+|---|---|---|
+| Week-out folds | 18 (weeks 1–18, all seasons together) | `research/69_dropped_pick_weekout.py` |
+| G-1 bars | agreement ≥ 0.90; median \|ΔDTW\| < 1.0 pp | this document |
+| G-2 bar | ≥ 0.50 of binned bucket moves | this document; `research/70_dropped_pick_sensitivity.py` |
+| G-3 floor | document 05 §7's, unchanged | this document |
+| Flat swing | −3.55 EPA (document 47 §3's pooled fallback) | `70` |
+| Seed | 20260827 (fits), 20260817 (simulator) | as before |
