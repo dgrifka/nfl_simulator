@@ -33,6 +33,7 @@ from nfl_simulator.plots import (  # noqa: E402
     CLEAR_FLIP,
     LEDGER_BOX_HEIGHT,
     LEDGER_BOXES_Y,
+    MEASURED_COVERAGE,
     OVERTIME_TITLE,
     REPORTED_NOT_NEUTRALIZED,
     SCOREBOARD_HOLDS,
@@ -1170,6 +1171,47 @@ def test_a_degenerate_card_says_the_bootstrap_never_changed_its_mind():
 def test_the_card_draws_no_axes_because_it_is_not_a_plot():
     fig, ax = plot_game_card(branded())
     assert not ax.axison
+
+
+# --- the share footer, figure round 4 Part A ------------------------------
+
+# The whole footer, and nothing else on it. the maintainer's round-4 call: the card is
+# the figure for somebody who will not open the other two, and a measured
+# coverage figure is a methodological aside they cannot act on. It stays on the
+# article figure, where a reader has already asked for the methodology.
+CARD_SHARE_NOTE = re.compile(r"^89% interval on \w+'s share: \d+–\d+%\.$")
+
+
+def _card_note(fig) -> str:
+    notes = [
+        text.get_text()
+        for text in fig.findobj(matplotlib.text.Text)
+        if "interval on" in text.get_text()
+    ]
+    assert len(notes) == 1, notes
+    return notes[0]
+
+
+def test_the_card_footer_states_the_interval_and_stops_there():
+    assert CARD_SHARE_NOTE.match(_card_note(plot_game_card(branded())[0]))
+
+
+def test_the_word_coverage_appears_nowhere_on_the_card():
+    assert "coverage" not in figure_text(plot_game_card(branded())[0]).lower()
+
+
+def test_a_degenerate_card_still_says_the_interval_collapsed():
+    """Part A moves the coverage stamp; it does not touch the degenerate note."""
+    text = figure_text(plot_game_card(branded(dtw_home=1.0, interval=(1.0, 1.0)))[0])
+    assert "collapses to a point" in text
+
+
+def test_the_article_figure_keeps_the_coverage_sentence_the_card_dropped():
+    """Document 10's measured coverage belongs where the methodology already is."""
+    game = branded(went_to_overtime=True)
+    fig, ax = plot_bootstrap_distribution(game)
+    attach_overtime_sidebar(fig, ax, game, toss())
+    assert f"coverage at {MEASURED_COVERAGE}" in figure_text(fig)
 
 
 # --------------------------------------------------------------------------

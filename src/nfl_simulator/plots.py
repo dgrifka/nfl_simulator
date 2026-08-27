@@ -2216,10 +2216,16 @@ def plot_game_card(verdict: GameVerdict, *, colors: tuple[str, str] | None = Non
             share_low, share_high = (
                 (low, high) if favoured == verdict.home_team else (1 - high, 1 - low)
             )
+            # The interval, and nothing else. Round 4: the card is the figure
+            # for somebody who will not open the other two, and `(measured
+            # coverage 91.5%)` is a methodological aside they cannot act on —
+            # it reads as a second, competing percentage beside the one the
+            # card is about. Document 10's number is not dropped: it stays on
+            # the article figure, where a reader has already asked for the
+            # methodology, via `GameVerdict.interval_note`.
             note = (
                 f"{NOMINAL_COVERAGE} interval on {favoured}'s share: "
-                f"{share_low * 100:.0f}–{share_high * 100:.0f}% "
-                f"(measured coverage {MEASURED_COVERAGE})."
+                f"{share_low * 100:.0f}–{share_high * 100:.0f}%."
             )
         centred(0.098, note, fontsize=11, color=PALETTE["text_muted"])
 
