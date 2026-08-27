@@ -104,6 +104,14 @@ produce. Read that way the bound was set on the point estimate's scale and
 applied to an interval's, and 0.30 is roughly 1.6 `sigma_d` below the league
 rate of 0.49. That reading is offered, not adopted: §5 leaves it to the maintainer.
 
+**Ruled, 2026-08-27.** *R-3 (document 52 §5): the 2022 NYG breach of 1.1 pp on
+one of ten lines is immaterial; the bound stands unamended.* the maintainer's ruling in
+the document 52 brainstorm, taken after reading this document. The consequence
+is recorded rather than assumed: §4's audit is **no longer provisional** — it is
+round 4's result, read on the fit above — and §5's item 1 is closed. Nothing
+else in §5 moves: amendment A-3 still needs its gates (document 52 §5, run in
+round 5) and v1.3 is still the published adjudication.
+
 ## 3. The gate table, every row
 
 | Gate | Statement | Bar | Result |
@@ -291,7 +299,7 @@ Neither of these is chosen here.
 
 | Item | Status |
 |---|---|
-| V-8 breached on 2022 NYG by 1.1 pp | **Open — the maintainer's ruling.** Everything in §4 is provisional on it |
+| V-8 breached on 2022 NYG by 1.1 pp | **Closed — ruling R-3** (document 52 §5, recorded in §2): immaterial, the bound stands unamended. §4 is no longer provisional |
 | "A median throw" was undefined in document 49 §6 | **Resolved by reporting both readings.** They agree on the verdict, so no choice was needed |
 | Game effect (8.5 pp) treated as luck | Disclosed, excluded from `p_i` — document 49 §2 and §9, unchanged |
 | In-sample `u_d` (the game's own ~3 of ~22 throws) | Accepted, v1.3's convention — document 49 §9, unchanged |

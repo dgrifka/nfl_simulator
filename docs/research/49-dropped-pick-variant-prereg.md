@@ -213,3 +213,18 @@ breach.
    shows it is the component's own arithmetic, and the sign convention was
    independently checked (V-7, the read-side round trip, the swing-table
    reproduction).
+
+### Ruling R-3 on V-8, 2026-08-27
+
+**R-3 (document 52 §5): the 2022 NYG breach of 1.1 pp on one of ten lines is
+immaterial; the bound stands unamended.**
+
+This is a ruling on §6's V-8 stop-and-ask, made by the maintainer in the document 52
+brainstorm after reading document 50, in the same shape as ruling R-1 on the
+cross-check tolerance: the gate's text is not edited, the breach is disclosed,
+and the reason is on the record (document 50 §2 — a clean sampler, `sigma_d`
+reproducing round 3, and one interval's lower tail on the most extreme of 128
+levels). The first option in document 50 §5a is the one taken; the second — an
+amendment restating V-8 on the point estimate — is not written. Round 4 is
+unblocked and its audit is no longer provisional.
+
