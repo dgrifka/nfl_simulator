@@ -15,16 +15,25 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 import pytest
-from matplotlib.colors import to_rgb
 from PIL import Image
 
 from nfl_simulator import teams as teams_module
-from nfl_simulator.style import PALETTE
+from nfl_simulator.style import (
+    CVD_FLOOR,
+    CVD_KINDS,
+    NORMAL_FLOOR,
+    PALETTE,
+    contrast_ratio,
+    separated,
+    separations,
+)
 from nfl_simulator.teams import (
     CLASH_DISTANCE,
     FALLBACK_COLORS,
+    FALLBACKS,
     colour_distance,
     pair_colors,
+    resolve_pair,
     team_colors,
     team_logo,
 )
@@ -37,8 +46,9 @@ ROWS = [
     ("KC", "Kansas City Chiefs", "Chiefs", "#E31837", "#FFB612", "kc"),
     ("SF", "San Francisco 49ers", "49ers", "#AA0000", "#B3995D", "sf"),
     ("ATL", "Atlanta Falcons", "Falcons", "#A71930", "#000000", "atl"),
-    ("TB", "Tampa Bay Buccaneers", "Buccaneers", "#A71930", "#FF7900", "tb"),
+    ("TB", "Tampa Bay Buccaneers", "Buccaneers", "#A71930", "#322F2B", "tb"),
     ("OAK", "Oakland Raiders", "Raiders", "#000000", "#A5ACAF", "lv"),
+    ("NYJ", "New York Jets", "Jets", "#003F2D", "#000000", "nyj"),
 ]
 
 
@@ -96,28 +106,43 @@ def test_two_distinguishable_primaries_are_left_alone(table):
     assert pair_colors("GB", "DET") == ("#203731", "#0076B6")
 
 
-def test_a_pair_that_merely_shares_a_family_is_still_left_alone(table):
-    """KC's red and SF's are 0.32 apart, which the rule does not treat as a clash."""
+def test_a_pair_the_rgb_rule_passes_can_still_be_two_reds_nobody_can_read(table):
+    """Kansas City's red and San Francisco's are 0.32 apart in RGB, which round
+    1's rule called separate, and 12.9 apart in OKLab under *normal* vision —
+    under the 15 the dataviz skill calls a hard floor. Both move."""
+    assert colour_distance("#E31837", "#AA0000") >= CLASH_DISTANCE, "the RGB rule sees nothing"
     home, away = pair_colors("KC", "SF")
-    assert (home, away) == ("#E31837", "#AA0000")
-    assert colour_distance(home, away) >= CLASH_DISTANCE
+    assert (home, away) != ("#E31837", "#AA0000")
+    assert separations(home, away)["normal"] >= NORMAL_FLOOR
 
 
-def test_a_genuine_clash_lightens_the_away_team_until_the_two_separate(table):
-    """ATL and TB ship the identical primary #A71930 — undrawable as two bars."""
+def test_a_genuine_clash_reaches_for_a_club_colour_before_a_tint(table):
+    """ATL and TB ship the identical primary #A71930 — undrawable as two bars.
+
+    Round 1 lightened the away red by 45%. Tampa Bay's own pewter separates and
+    is a colour somebody actually recognises, so it goes first now."""
     home, away = pair_colors("ATL", "TB")
     assert home == "#A71930"
-    assert away != "#A71930"
-    assert colour_distance(home, away) >= CLASH_DISTANCE
-    # Lightened toward white, so it stays recognisably the same team's red.
-    assert all(
-        channel >= original for channel, original in zip(to_rgb(away), to_rgb(home), strict=True)
-    )
+    assert away == "#322F2B", "the Buccaneers' own secondary, not a tinted red"
+    assert resolve_pair("ATL", "TB")[2] == "away secondary"
 
 
-def test_the_clash_rule_never_repaints_the_home_team(table):
-    """Colour follows the entity: the home team wears its own primary either way."""
-    assert pair_colors("ATL", "TB")[0] == pair_colors("ATL", "GB")[0]
+def test_the_home_team_moves_only_after_everything_the_away_team_can_wear(table):
+    """Round 1's rule only ever repainted the away side, and that left pairs with
+    nowhere to go that was still a club's own colour. The home colour may now
+    move — but only to the home club's *own* secondary, and only once the away
+    side has been tried first."""
+    assert resolve_pair("ATL", "TB")[2] == "away secondary"
+    home, _away = pair_colors("ATL", "GB")
+    assert home in team_colors("ATL"), "if it moves, it moves to that club's own colour"
+
+
+def test_the_fallback_named_is_the_one_that_actually_fired(table):
+    for home_team, away_team in (("DET", "GB"), ("ATL", "TB"), ("SF", "NYJ")):
+        home, away, rule = resolve_pair(home_team, away_team)
+        assert (home, away) == pair_colors(home_team, away_team)
+        assert rule in FALLBACKS
+        assert rule != "unresolved"
 
 
 # --------------------------------------------------------------------------
@@ -197,3 +222,72 @@ def test_the_anchor_neutral_is_clear_of_every_club_a_total_could_be_confused_wit
     would need moving from the ones that would not. The anchor neutral is chosen
     so the question never arises."""
     assert colour_distance(primary, PALETTE["anchor"]) >= CLASH_DISTANCE
+
+
+# --------------------------------------------------------------------------
+# colour-vision separation — figure workshop round 2, Part C
+# --------------------------------------------------------------------------
+
+
+def worst_cvd(first: str, second: str) -> float:
+    return min(separations(first, second)[kind] for kind in CVD_KINDS)
+
+
+def test_two_colours_a_protan_reader_cannot_tell_apart_are_separated(table):
+    """`2016_14_NYJ_SF`: Jets green against 49ers red is protan ΔE 5.2. The RGB
+    rule cannot see it — the two are 0.42 apart — so the figure shipped with two
+    bars a colourblind reader reads as one."""
+    assert worst_cvd("#003F2D", "#AA0000") < CVD_FLOOR, "the defect this rule exists for"
+    home, away = pair_colors("SF", "NYJ")
+    assert worst_cvd(home, away) >= CVD_FLOOR
+
+
+def test_a_separated_pair_is_still_separated_for_a_reader_with_normal_vision(table):
+    home, away = pair_colors("SF", "NYJ")
+    assert separations(home, away)["normal"] >= NORMAL_FLOOR
+
+
+def test_a_separated_pair_still_reads_against_the_cream_surface(table):
+    home, away = pair_colors("SF", "NYJ")
+    assert contrast_ratio(away, PALETTE["bg"]) >= 3.0
+
+
+def test_the_identical_primaries_still_resolve(table):
+    """ATL and TB both ship #A71930, which no simulation can pull apart."""
+    home, away = pair_colors("ATL", "TB")
+    assert home != away
+    assert worst_cvd(home, away) >= CVD_FLOOR
+    assert separations(home, away)["normal"] >= NORMAL_FLOOR
+
+
+def test_a_pair_that_already_separates_is_left_alone(table):
+    """Green Bay's green against Detroit's blue needs no help under any vision."""
+    assert pair_colors("DET", "GB") == ("#0076B6", "#203731")
+
+
+def test_the_rule_is_deterministic(table):
+    assert pair_colors("SF", "NYJ") == pair_colors("SF", "NYJ")
+    assert pair_colors("ATL", "TB") == pair_colors("ATL", "TB")
+
+
+def test_the_separations_are_the_dataviz_validator_s_four_readings(table):
+    readings = separations("#0076B6", "#203731")
+    assert set(readings) == {"normal", *CVD_KINDS}
+    assert all(value > 0 for value in readings.values())
+
+
+def test_a_colour_is_perfectly_separable_from_nothing_but_itself(table):
+    assert all(value == pytest.approx(0.0) for value in separations("#AA0000", "#AA0000").values())
+
+
+def test_a_pair_that_can_only_be_separated_in_lightness_is_darkened_not_lightened(table):
+    """On a cream surface, lightening a colour walks it into the background.
+
+    San Francisco's red beside Kansas City's is the league's hardest matchup:
+    neither club's secondary reads on the cream, and every candidate light enough
+    to separate the two reds is too light to see. Darkening does both at once."""
+    home, away, rule = resolve_pair("SF", "KC")
+    assert rule.endswith("darkened")
+    assert separated(home, away)
+    assert contrast_ratio(home, PALETTE["bg"]) >= 3.0
+    assert contrast_ratio(away, PALETTE["bg"]) >= 3.0

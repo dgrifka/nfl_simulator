@@ -172,15 +172,152 @@ def rc_style() -> dict:
 
 # Euclidean distance in RGB, and the blend applied when a pair falls under it.
 # Both are the baseball run-distribution chart's numbers
-# (`Simulator/visualizations.py:453-457`).
+# (`Simulator/visualizations.py:453-457`). `CLASH_DARKEN` is this project's
+# own: the baseball chart never ran a contrast check, and on a cream surface
+# blending toward white costs the very contrast a last resort has to pass.
 CLASH_DISTANCE = 0.20
 CLASH_LIGHTEN = 0.45
+CLASH_DARKEN = 0.45
 
 
 def colour_distance(first: str, second: str) -> float:
     """Euclidean distance between two colours in RGB, each channel on 0-1."""
     a, b = to_rgb(first), to_rgb(second)
     return sum((x - y) ** 2 for x, y in zip(a, b, strict=True)) ** 0.5
+
+
+# --------------------------------------------------------------------------
+# colour-vision separation — the `dataviz` skill's computable checks, ported
+# --------------------------------------------------------------------------
+
+# The RGB rule above is cheap and blind. It cannot see that the Jets' #003F2D
+# and the 49ers' #AA0000 — 0.42 apart in RGB, comfortably "separate" — collapse
+# onto each other for a reader with protanopia. What follows is the `dataviz`
+# skill's own validator (`scripts/validate_palette.js`), ported so a matchup can
+# be checked before it is drawn rather than after it has shipped.
+#
+# Machado, Oliveira & Fernandes (2009) at severity 1.0, in **linear** RGB. The
+# simulation model is part of the calibration, not an implementation detail:
+# swapping in another one moves borderline pairs and would need the floors below
+# re-derived, which is why the matrices are quoted here rather than pulled from
+# whatever a colour library happens to ship.
+MACHADO = {
+    "protan": (
+        (0.152286, 1.052583, -0.204868),
+        (0.114503, 0.786281, 0.099216),
+        (-0.003882, -0.048116, 1.051998),
+    ),
+    "deutan": (
+        (0.367322, 0.860646, -0.227968),
+        (0.280085, 0.672501, 0.047413),
+        (-0.011820, 0.042940, 0.968881),
+    ),
+    "tritan": (
+        (1.255528, -0.076749, -0.178779),
+        (-0.078411, 0.930809, 0.147602),
+        (0.004733, 0.691367, 0.303900),
+    ),
+}
+CVD_KINDS = ("protan", "deutan", "tritan")
+
+# OKLab ΔE ×100. The skill's numbers, unchanged: 8 is the target for a
+# colourblind reader and 6 is the floor, legal only where a second, non-colour
+# encoding carries the same identity. Every figure in this product carries one —
+# a legend, a direct label, or the club's own mark — so the floor is the gate
+# and the band between 6 and 8 is reported rather than refused. 15 is a hard
+# gate under normal vision: below it a full-colour reader cannot tell the two
+# apart either, and no amount of labelling makes two identical bars two bars.
+CVD_TARGET = 8.0
+CVD_FLOOR = 6.0
+NORMAL_FLOOR = 15.0
+# WCAG, against whatever surface the figure is drawn on.
+CONTRAST_MIN = 3.0
+
+
+def _linear(colour: str) -> tuple[float, float, float]:
+    """sRGB to linear RGB, the space every transform below works in."""
+
+    def channel(value: float) -> float:
+        return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+    return tuple(channel(component) for component in to_rgb(colour))
+
+
+def _oklab(rgb) -> tuple[float, float, float]:
+    """Linear RGB to OKLab."""
+    red, green, blue = rgb
+    long_ = np.cbrt(0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue)
+    medium = np.cbrt(0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue)
+    short = np.cbrt(0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue)
+    return (
+        0.2104542553 * long_ + 0.7936177850 * medium - 0.0040720468 * short,
+        1.9779984951 * long_ - 2.4285922050 * medium + 0.4505937099 * short,
+        0.0259040371 * long_ + 0.7827717662 * medium - 0.8086757660 * short,
+    )
+
+
+def simulate_cvd(colour: str, kind: str) -> tuple[float, float, float]:
+    """``colour`` as a reader with ``kind`` sees it, in linear RGB."""
+    rgb = _linear(colour)
+    matrix = MACHADO[kind]
+    return tuple(
+        min(1.0, max(0.0, sum(row[index] * rgb[index] for index in range(3)))) for row in matrix
+    )
+
+
+def delta_e(first: str, second: str, kind: str | None = None) -> float:
+    """Euclidean distance between two colours in OKLab, ×100.
+
+    ``kind=None`` is unsimulated vision; otherwise the pair is put through the
+    named colour-vision simulation first.
+    """
+    a = _oklab(simulate_cvd(first, kind) if kind else _linear(first))
+    b = _oklab(simulate_cvd(second, kind) if kind else _linear(second))
+    return 100.0 * float(np.hypot(np.hypot(a[0] - b[0], a[1] - b[1]), a[2] - b[2]))
+
+
+def separations(first: str, second: str) -> dict[str, float]:
+    """The four readings of how far apart two colours are.
+
+    ``normal`` plus one per colour-vision simulation. Returned together because
+    the decision is on the whole set — a pair that separates beautifully for a
+    full-colour reader and not at all for a protan reader is not a usable pair,
+    and a single worst-case number hides which reader it failed.
+    """
+    return {
+        "normal": delta_e(first, second),
+        **{kind: delta_e(first, second, kind) for kind in CVD_KINDS},
+    }
+
+
+def relative_luminance(colour: str) -> float:
+    red, green, blue = _linear(colour)
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+
+def contrast_ratio(first: str, second: str) -> float:
+    """WCAG contrast ratio, which is what a mark needs against its surface."""
+    high, low = sorted((relative_luminance(first), relative_luminance(second)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def separated(first: str, second: str) -> bool:
+    """Whether every reader can tell two marks apart.
+
+    All four readings, not their average: a pair is only as usable as its worst
+    reader. Contrast against the surface is a separate question — it is a
+    property of one mark rather than of a pair — and is checked by the caller
+    that is free to move a colour.
+    """
+    readings = separations(first, second)
+    return readings["normal"] >= NORMAL_FLOOR and all(
+        readings[kind] >= CVD_FLOOR for kind in CVD_KINDS
+    )
+
+
+def reads_on(colour: str, surface: str | None = None) -> bool:
+    """Whether a mark clears the WCAG floor against the surface it is drawn on."""
+    return contrast_ratio(colour, PALETTE["bg"] if surface is None else surface) >= CONTRAST_MIN
 
 
 def lighten(color: str, amount: float = 0.5) -> str:
@@ -193,6 +330,21 @@ def lighten(color: str, amount: float = 0.5) -> str:
     """
     r, g, b = to_rgb(color)
     return to_hex((r + (1 - r) * amount, g + (1 - g) * amount, b + (1 - b) * amount))
+
+
+def darken(color: str, amount: float = 0.45) -> str:
+    """Blend ``color`` toward black by ``amount`` (0 = unchanged, 1 = black).
+
+    The mirror of :func:`lighten`, and the one the cream surface usually wants.
+    Lightening a colour toward white moves it *toward* the background: Kansas
+    City's red against San Francisco's cannot be separated by lightening either
+    of them, because every candidate light enough to separate is too light to
+    read on ``PALETTE["bg"]``. Darkening separates in lightness and gains
+    contrast at the same time.
+    """
+    red, green, blue = to_rgb(color)
+    keep = 1.0 - amount
+    return to_hex((red * keep, green * keep, blue * keep))
 
 
 def title_axes(

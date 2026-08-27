@@ -12,16 +12,17 @@ in every figure it appears in, home or away. The one exception is the clash
 rule below, and it repaints only the away team — so a club's colour is stable
 across the figures where it is at home.
 
-**A pair has to be separable before it is pretty.** Some primaries are
-identical (ATL and TB both ship ``#A71930``; LV, OAK and PIT are all black) and
-some are a few percent apart. Drawn as two bars they are one bar. When the RGB
-distance falls under :data:`CLASH_DISTANCE` the away team's colour is lightened
-toward white — it stays recognisably that team's hue, and the two fills stop
-being one shape. This is the baseball run-distribution chart's rule, kept
-identical so the two projects separate a clash the same way.
+**A pair has to be separable before it is pretty, and separable for
+everybody.** Some primaries are identical (ATL and TB both ship ``#A71930``; LV,
+OAK and PIT are all black), some are a few percent apart, and some are far apart
+in RGB and identical to a colourblind reader — the Jets' green against the 49ers'
+red is 0.42 in RGB and 5.2 in OKLab under protanopia. :func:`resolve_pair` runs
+the `dataviz` skill's four readings, keeps the cheap RGB rule as its first check,
+and substitutes club colours before synthetic tints.
 
 Colour is never the only encoding regardless: every figure that uses these also
-carries a legend, direct labels, or the club's logo.
+carries a legend, direct labels, or the club's logo. That is what makes the
+skill's 6-8 warning band legal here rather than merely tolerated.
 
 Everything downloaded here lands under ``data/`` and is gitignored. The logos
 are ESPN's and the clubs' — cached for rendering, never redistributed.
@@ -35,7 +36,16 @@ import numpy as np
 import polars as pl
 
 from nfl_simulator import paths
-from nfl_simulator.style import CLASH_DISTANCE, CLASH_LIGHTEN, colour_distance, lighten
+from nfl_simulator.style import (
+    CLASH_DARKEN,
+    CLASH_DISTANCE,
+    CLASH_LIGHTEN,
+    colour_distance,
+    darken,
+    lighten,
+    reads_on,
+    separated,
+)
 
 # The baseball style's grey pair, for an abbreviation the table does not carry.
 # A figure that cannot colour a team is still worth drawing; a crash is not.
@@ -48,13 +58,30 @@ __all__ = [
     "CLASH_DISTANCE",
     "CLASH_LIGHTEN",
     "FALLBACK_COLORS",
+    "FALLBACKS",
     "colour_distance",
     "load_team_table",
     "pair_colors",
+    "resolve_pair",
     "team_colors",
     "team_logo",
     "team_name",
 ]
+
+# The order the clash rule tries things in, and the name each attempt is
+# reported under. A real club colour before a synthetic tint: a reader who knows
+# the Buccaneers knows their pewter, and nobody knows a 45%-lightened red.
+FALLBACKS = (
+    "primaries",
+    "away secondary",
+    "home secondary",
+    "away lightened",
+    "away secondary lightened",
+    "away darkened",
+    "away secondary darkened",
+    "home darkened",
+    "unresolved",
+)
 
 # A logo pixel this close to white is the surround the club's PNG ships with,
 # not part of the mark. Left in, it prints as a white postage stamp on cream.
@@ -108,23 +135,85 @@ def team_name(team_abbr: str) -> str:
     return (row or {}).get("team_name") or team_abbr
 
 
-def pair_colors(home_team: str, away_team: str) -> tuple[str, str]:
-    """The two primaries to draw a game in, separated if they clash.
+def resolve_pair(home_team: str, away_team: str) -> tuple[str, str, str]:
+    """The two colours to draw a game in, and the name of the rule that chose them.
 
-    Only the **away** colour ever moves. Repainting whichever of the two happened
-    to be darker would mean a club's colour changed depending on who it played,
-    and a reader who knows the team would read the figure wrong.
+    **The RGB rule is blind and this is what it was blind to.** It kept the Jets'
+    ``#003F2D`` beside the 49ers' ``#AA0000`` because the two are 0.42 apart in
+    RGB — and for a reader with protanopia they are 5.2 apart in OKLab, well
+    under the 6 the `dataviz` skill calls a floor. `2016_14_NYJ_SF` shipped in
+    round 1 with two bars a colourblind reader sees as one. The RGB rule stays as
+    the first, cheap check; the four readings in :func:`style.separations` are the
+    ones that decide.
 
-    Nothing here has to dodge the figures' own marks. That was tried, and the
-    threshold it needed sat between Green Bay at 0.147 and the Raiders at 0.177
-    — too fine to be a rule. `style.PALETTE["anchor"]` is instead chosen to be
-    0.281 from the nearest primary in the league, so no club ever collides with
-    it and no team's colour has to move for a figure's convenience.
+    Candidates are tried in a fixed order, and the first that separates *and*
+    reads against the cream is taken. A real club colour comes before a synthetic
+    tint, because a reader who knows the Buccaneers knows their pewter and nobody
+    knows a 45%-lightened red:
+
+    1. the two primaries, untouched
+    2. the away team's secondary
+    3. the home team's secondary, the away primary restored
+    4. the away primary lightened toward white
+    5. the away secondary lightened
+    6. the away primary darkened toward black
+    7. the away secondary darkened
+    8. the home primary darkened
+
+    Step 8 exists for exactly one matchup in the league: San Francisco at home
+    against Kansas City. Two reds 12.9 apart under normal vision, and neither
+    club's secondary — the Chiefs' gold, the 49ers' tan — reads on cream at all.
+    Nothing the away side can wear separates them; darkening the 49ers' own red
+    to ``#5e0000`` does, at 30.1. Last in the order because the home team's
+    colour is the one a reader is least expecting to move.
+
+    Steps 6 and 7 are this round's addition, and they are why ``unresolved`` is
+    zero. The four the round was specified with leave 15 of the 992 ordered
+    matchups with nowhere to go — Philadelphia's midnight green against seven
+    opponents, Kansas City's red against San Francisco's, and three more. Every
+    one of them fails the same way: the pair needs separating in *lightness*, and
+    on a cream surface every candidate light enough to separate is too light to
+    read on the background. Darkening separates and gains contrast at once. The
+    baseball chart lightens only because it never ran a contrast check.
+
+    Step 3 is the one place a home team's colour moves, and it is deliberate:
+    round 1's rule only ever repainted the away side, and that left pairs like
+    Kansas City's red against San Francisco's — 12.9 apart under **normal**
+    vision — with nowhere to go that was still a club's own colour.
+
+    Only the colour being *substituted* is checked for contrast against the
+    surface. New Orleans' ``#D3BC8D`` reads at 1.78:1 on the cream and cannot be
+    fixed by moving anybody else, so gating the incumbent would make every game
+    the Saints host unresolvable rather than merely low-contrast.
     """
-    home = team_colors(home_team)[0]
-    away = team_colors(away_team)[0]
-    if colour_distance(home, away) < CLASH_DISTANCE:
-        away = lighten(away, CLASH_LIGHTEN)
+    home, home_second = team_colors(home_team)
+    away, away_second = team_colors(away_team)
+
+    candidates = (
+        (home, away, None),
+        (home, away_second, away_second),
+        (home_second, away, home_second),
+        (home, lighten(away, CLASH_LIGHTEN), lighten(away, CLASH_LIGHTEN)),
+        (home, lighten(away_second, CLASH_LIGHTEN), lighten(away_second, CLASH_LIGHTEN)),
+        (home, darken(away, CLASH_DARKEN), darken(away, CLASH_DARKEN)),
+        (home, darken(away_second, CLASH_DARKEN), darken(away_second, CLASH_DARKEN)),
+        (darken(home, CLASH_DARKEN), away, darken(home, CLASH_DARKEN)),
+    )
+    for (first, second, moved), name in zip(candidates, FALLBACKS, strict=False):
+        # The cheap check first, exactly as before: two colours a quarter of the
+        # RGB cube apart are usually fine, and the four simulations cost more.
+        if name == "primaries" and colour_distance(first, second) < CLASH_DISTANCE:
+            continue
+        if separated(first, second) and (moved is None or reads_on(moved)):
+            return first, second, name
+    # A figure is still worth drawing. `research/60_matchup_colours.py` counts
+    # how many matchups get this far, and the answer is meant to stay zero.
+    return home, darken(away, CLASH_DARKEN), "unresolved"
+
+
+def pair_colors(home_team: str, away_team: str) -> tuple[str, str]:
+    """The two colours to draw a game in. See :func:`resolve_pair` for the rule."""
+    home, away, _rule = resolve_pair(home_team, away_team)
     return home, away
 
 
