@@ -318,3 +318,41 @@ the A-2 clause 3 kind and must not be described as one.
 | League conversion `p̄` | 0.485 | document 32 §3; re-read from data, stop if it differs by > 1 pp |
 | Cross-check tolerance | 1.0 pp | this document §5 |
 | Expected worthy throws | 2,997 (stop if > 5% off) | document 32 §3 |
+
+## 11. Outcome
+
+Appended 2026-08-27, after the run. §6–7 were not edited beyond the Part A
+fill. Full record: `docs/research/44-dropped-pick-confounds.md`; results file
+`docs/research/results-2026-08-27-exp1.md`; log
+`docs/research/log-2026-08-27-dropped-picks.md`.
+
+| Gate | Statistic | Verdict |
+|---|---|---|
+| C-1, arm 2 sampler | 0 divergences, max `r_hat` **1.0105** on `sigma_q`, min ess_bulk 475, min ess_tail 418, over 429 parameters | **FAIL** on `r_hat` — one parameter, and not the gate's own |
+| C-1, arm 2b sampler | 0 divergences, max `r_hat` 1.0057, min ess_bulk **387**, min ess_tail **345**, both on `sigma_q` | **FAIL** on ESS |
+| C-1, grid self-checks | Beta-binomial edge mass 1.0e-18 and 9.1e-25; crossed edge mass 2.9e-03 and 2.5e-03 | **PASS** |
+| C-1, arm 2 / arm 3 cross-check | `sigma_d` 89% upper bound: arm 2 9.05 pp vs arm 3 9.37 pp (gap **0.32 pp**) and 9.32 pp pooled (gap **0.27 pp**), tolerance 1.0 pp | **PASS** |
+| C-2, defence-season × QB-season | 89% upper bound **9.37 pp** vs threshold 9.41 pp | **PASS** by 0.04 pp — not reportable, C-3 failed |
+| C-2, defence pooled × QB-season | 89% upper bound **9.32 pp** vs threshold 8.09 pp | **FAIL** by 1.23 pp — not reportable, C-3 failed |
+| C-2, QB-season `sigma_q` | 89% upper bound **9.30 pp** vs threshold 8.07 pp | **FAIL** — not reportable, C-3 failed |
+| C-3, defence-season × QB-season | Power at 12.5% relative **0.362** | **FAIL** |
+| C-3, defence pooled × QB-season | Power at 12.5% relative **0.555** | **FAIL** |
+| C-3, QB-season `sigma_q` | Power at 12.5% relative **0.578** | **FAIL** |
+| D-1, worthy rate QB-season | Population SD **0.939 pp** [0.767, 1.122], 26.6% relative, C-3 power 0.780 | Reported, no pass rule |
+| D-1, worthy rate defence-season | Population SD **0.979 pp** [0.821, 1.148], 26.4% relative, C-3 power **0.935** | Reported, no pass rule — the study's only C-3 pass |
+
+**§0's reading, as committed: the first row.** Unresolvable at this sample, as
+document 09 read onside kicks. The diagnostic says "not persistent *at this
+sample*"; avenue (3) stays closed on grounds of **unmeasurability**, not of a
+measured zero.
+
+**Commits.** `6cdeb5d` this pre-registration · `67a98b6` Part A, the power table
+and its thresholds · `feca435` Part B, the fits · Part C, this record, the
+results file and the queue. Branch `docs/dropped-pick-confounds`, cut from
+`docs/dropped-pick-prereg` rather than from `main` because this document is not
+on `main` — so merging it merges `6cdeb5d` too. Unmerged; the maintainer merges.
+`git diff main -- src/` is empty; 502 tests pass.
+
+**One question is open and it is the maintainer's**: the Gate C-1 failure on `sigma_q`.
+The remedy is longer chains, which changes §5's committed inference spec, so
+nothing was substituted.
