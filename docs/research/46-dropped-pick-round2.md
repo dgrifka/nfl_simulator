@@ -209,6 +209,14 @@ cross-check failure at the pooled grain should have been written as a grain-
 matched comparison in the first place is a change to document 43 §5's committed
 text, so it was not made.
 
+**Ruled 2026-08-27 (document 47 R-1).** The cross-check is like-grain only.
+Against arm 3's defence-season × QB-season `σ_d` the gap is **1.04 pp against a
+1.0 pp tolerance**, recorded as **PASS-at-tolerance** with the 0.04 pp disclosed,
+and arm 2's `β̂` is quotable. The pooled row is **withdrawn as unlike-grain** —
+arm 2's `σ_d` is a defence-season scale and arm 3's pooled `σ_d` is a
+four-season one, so the 4.07 pp gap was never a cross-check. The register row
+below closes on that ruling.
+
 ## 5. Secondaries — now like-for-like, and they change document 44 §6's reading
 
 | Quantity | Entities | Round 2 | Round 1 |
@@ -289,8 +297,9 @@ QB-season only, C-3 passed, C-2 failed:
 > for how catchable, contested, deep and hurried each throw was, the gap between
 > defences is about as large as this project calls meaningful."*
 
-**(b) The reading that also honours the pooled design and the season-to-season
-correlation**, both of which cleared C-3 and neither of which the rule consults:
+**(b) — ADOPTED (document 47 R-2).** The reading that also honours the pooled
+design and the season-to-season correlation, both of which cleared C-3 and
+neither of which the rule consults. This is the wording that ships:
 
 > *"Interceptions your opponent dropped are counted here as they happened. In any
 > given season some defences finish more of their chances than others — but that
@@ -308,6 +317,10 @@ design's power at 5% is 0.20 and 0.30.
 every powered number this round produced, and (a)'s "repeatably" is a word the
 pre-registered rule supplies rather than one the data earned.
 
+**Decided 2026-08-27 (document 47 R-2):** (b), and document 43 §7's decision
+rule is amended so that when both grains clear C-3 both are reported and the
+wording must be consistent with both. Avenue (3) is closed on the evidence.
+
 ## 8. Register
 
 | Defect | Evidence | Status |
@@ -317,8 +330,8 @@ pre-registered rule supplies rather than one the data earned.
 | The ≥ 20-worthy floor costs 61% of the sample | Document 44 §2 | **Closed by amendment A-1.** 1,145 → 2,969 throws, median 7 → 22 chances, power 0.362 → 0.892 |
 | Charter hindsight in `is_catchable_ball` / `is_contested_ball` | Document 43 §3(c) | **Closed, immaterial**, second round confirming: `σ_d` 6.35 → 6.71 pp |
 | Charter hindsight in `is_interception_worthy` itself | Document 45 §2 (A-3) | **Gross form ruled out**, −17.1 pp gap. Subtle uniform-severity hindsight remains undetectable by this probe (§6) |
-| **Gate C-1's cross-check fails** | §4a: gaps 1.04 pp and 4.07 pp vs a 1.0 pp tolerance | **Open — the maintainer's call.** The pooled comparison is grain-mismatched by construction; fixing that is a change to document 43 §5's committed text |
-| **Two powered designs disagree on Gate C-2** | §4: FAIL by 2.12 pp at the season grain, PASS by 0.05 pp pooled | **Open — the maintainer's call.** §7 offers both wordings. Round 1's version of this was a low-power artifact; this one is not |
+| **Gate C-1's cross-check** | §4a: gap 1.04 pp like-grain, 4.07 pp unlike-grain, vs a 1.0 pp tolerance | **Closed by ruling (document 47 R-1).** Like-grain only: **PASS-at-tolerance** at 1.04 pp with the 0.04 pp disclosed; the pooled comparison is withdrawn as unlike-grain. Arm 2's `β̂` is quotable |
+| **Two powered designs disagree on Gate C-2** | §4: FAIL by 2.12 pp at the season grain, PASS by 0.05 pp pooled | **Closed by ruling (document 47 R-2).** Both grains cleared C-3, so both are reported and wording (b) — "a year, not a trait" — is adopted. Document 43 §7's decision rule amended to match |
 | Document 44 §6's "conditioning eats the +0.140" | §5: +0.127 on the like-for-like 126 entities | **Corrected.** Round 1's −0.077 was the floor, on 58 entities, and was flagged as such when published |
 | `β` held fixed in the residual power simulation | Document 43 §6 | **Disclosed, quantified as small.** Part A's `β̂` vs round 2's arm 2: max \|Δβ\| 0.0079 |
 | `is_interception_worthy` is a charter's judgement | Document 09's register, standing | **Open**, now with A-3's bound on one form of it |

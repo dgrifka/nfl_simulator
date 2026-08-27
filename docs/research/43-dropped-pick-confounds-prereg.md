@@ -291,6 +291,9 @@ answer and the number's use is descriptive.
 this order: defence-season × QB-season first; defence-pooled only if the
 first fails C-3. If both fail C-3 the study is **unresolvable**, and says so.
 
+*Amended by document 47 R-2: when both grains clear C-3, both are reported
+and the wording must be consistent with both.*
+
 ## 8. Kill and rollback
 
 Nothing ships into the simulator on any outcome, so there is no flag and no
