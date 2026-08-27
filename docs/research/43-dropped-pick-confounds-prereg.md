@@ -172,6 +172,10 @@ probability scale by `σ_p ≈ σ_logit × p̄(1 − p̄)` at `p̄ = 0.485`, agr
 arm 3's within **1.0 pp** on the 89% upper bound. If it does not, both numbers
 are reported and the disagreement is a finding of its own.
 
+*Amended 2026-08-27 by document 47 R-1: the comparison is like-grain only —
+arm 2's defence-season `σ_d` against arm 3's defence-season × QB-season
+`σ_d`. The pooled grain is a different quantity and is not cross-checked.*
+
 **Secondary, for continuity with document 32:** the odd/even-week split-half r
 of raw conversion (should reproduce ≈ +0.140) and of the conditioned residual,
 plus season-to-season correlation of shrunk defence effects (32 teams × 3
