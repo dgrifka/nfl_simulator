@@ -44,6 +44,7 @@ from nfl_simulator.style import (
     darken,
     lighten,
     reads_on,
+    relative_luminance,
     separated,
 )
 
@@ -62,6 +63,7 @@ __all__ = [
     "colour_distance",
     "load_team_table",
     "pair_colors",
+    "readable_colours",
     "resolve_pair",
     "team_colors",
     "team_logo",
@@ -119,14 +121,64 @@ def _row(team_abbr: str) -> dict | None:
     return matches.to_dicts()[0] if matches.height else None
 
 
+# How many times a colour that both of a club's own hues fail to clear may be
+# darkened before the loop gives up. On a light surface each step gains contrast,
+# and black on the cream is 20:1, so two is usually enough and eight cannot loop.
+CONTRAST_DARKEN_STEPS = 8
+
+
+def _darkened_until_it_reads(colour: str) -> str:
+    """Blend toward black until the colour clears the floor on the surface.
+
+    Darker rather than lighter because the surface is cream: a colour that fails
+    3:1 on it fails by being too close to it, and every step toward white makes
+    that worse. See :func:`style.darken`, which the clash ladder reaches for on
+    the same reasoning.
+    """
+    candidate = colour
+    for _ in range(CONTRAST_DARKEN_STEPS):
+        if reads_on(candidate):
+            return candidate
+        candidate = darken(candidate, CLASH_DARKEN)
+    return candidate
+
+
+def readable_colours(primary: str, secondary: str) -> tuple[str, str]:
+    """The club's two colours, ordered so the first one can actually be read.
+
+    **A club colour under 3:1 on the surface is not a club colour a figure can
+    use.** New Orleans' old gold is 1.78:1 on the cream, and until this rule the
+    Saints were drawn in it everywhere — a box heading, a bar, a legend entry, a
+    net-luck line the reader had to hunt for. The clash ladder could not fix it,
+    because that ladder gates only the colour it *moves* and the Saints' gold was
+    the incumbent in all 31 matchups they host.
+
+    So the floor is applied one level up, where a club's identity is chosen
+    rather than a pair's. The secondary comes first when the primary fails, and
+    the primary is kept as the second slot — a club that has to give up its
+    first colour keeps it as the one the ladder may substitute in.
+    """
+    if reads_on(primary):
+        return primary, secondary
+    if reads_on(secondary):
+        return secondary, primary
+    darker, lighter = sorted((primary, secondary), key=relative_luminance)
+    return _darkened_until_it_reads(darker), lighter
+
+
 def team_colors(team_abbr: str) -> tuple[str, str]:
-    """``(primary, secondary)`` for a team, or the grey fallback for an unknown one."""
+    """``(primary, secondary)`` for a team, or the grey fallback for an unknown one.
+
+    Ordered by :func:`readable_colours`, so every caller downstream — the ledger
+    card's boxes, the waterfall's bars, a legend, the clash ladder itself —
+    inherits the contrast floor without asking for it.
+    """
     row = _row(team_abbr)
     if row is None:
         return FALLBACK_COLORS
     primary = row.get("team_color") or FALLBACK_COLORS[0]
     secondary = row.get("team_color2") or FALLBACK_COLORS[1]
-    return primary, secondary
+    return readable_colours(primary, secondary)
 
 
 def team_name(team_abbr: str) -> str:
@@ -182,9 +234,11 @@ def resolve_pair(home_team: str, away_team: str) -> tuple[str, str, str]:
     vision — with nowhere to go that was still a club's own colour.
 
     Only the colour being *substituted* is checked for contrast against the
-    surface. New Orleans' ``#D3BC8D`` reads at 1.78:1 on the cream and cannot be
-    fixed by moving anybody else, so gating the incumbent would make every game
-    the Saints host unresolvable rather than merely low-contrast.
+    surface, because gating the incumbent here would make a matchup unresolvable
+    over a colour this rule is not allowed to move. The incumbent is gated one
+    level up instead: :func:`readable_colours` has already put a readable colour
+    first, so New Orleans arrives here in black rather than in ``#D3BC8D`` at
+    1.78:1, and no matchup starts from a colour the surface swallows.
     """
     home, home_second = team_colors(home_team)
     away, away_second = team_colors(away_team)

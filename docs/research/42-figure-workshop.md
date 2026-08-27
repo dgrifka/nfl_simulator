@@ -297,10 +297,15 @@ partition of the rows can make a per-team column sum to a zero-sum net — the n
 is "my gross luck minus yours" and spans both tables. Whether to add a per-team
 subtotal, or to reword further, is the maintainer's call.
 
-**D-2 — New Orleans' primary is below the contrast floor (open, disclosed).**
-`#D3BC8D` at 1.78:1 on `PALETTE["bg"]`. Not fixable by the pair rule; fixing it
-means repainting a club in every figure it appears in, which is out of this
-round's scope. Reported by `research/60_matchup_colours.py` on every run.
+**D-2 — New Orleans' primary is below the contrast floor (closed, round 3).**
+`#D3BC8D` at 1.78:1 on `PALETTE["bg"]`. Closed by a contrast floor in
+`teams.readable_colours`, one level above the pair rule: a club whose primary
+fails 3:1 on the surface wears its secondary everywhere, so the Saints are drawn
+in `#101820` in every figure rather than repainted per matchup. The sweep count
+went **31 matchups under 3:1 → 0**, `unresolved` stayed **0**, and the
+`primaries` rung moved 738 → 732 as the Saints' new black met the league's other
+blacks. `research/60_matchup_colours.py` now prints the count on every run
+whether or not it fires; a missing line and a zero look the same on a console.
 
 **D-3 — the callout states a share on a game the product refuses to call
 (open).** `MIN deserved to win 55% of simulations` sits beside a "too close to

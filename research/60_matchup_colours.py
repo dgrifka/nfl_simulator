@@ -32,6 +32,7 @@ import polars as pl
 
 from nfl_simulator import paths
 from nfl_simulator.style import (
+    CONTRAST_MIN,
     CVD_FLOOR,
     CVD_KINDS,
     CVD_TARGET,
@@ -112,13 +113,16 @@ def main() -> None:
     print(
         f"  normal-vision separation: min {frame['normal'].min():.1f} (hard floor {NORMAL_FLOOR:g})"
     )
-    low = frame.filter(pl.col("home_contrast") < 3.0)
-    if low.height:
-        clubs_low = sorted({row["home_team"] for row in low.to_dicts()})
-        print(
-            f"  home colours under 3:1 on the cream: {', '.join(clubs_low)} "
-            f"({low.height} matchups) — the incumbent is not gated, see `resolve_pair`"
-        )
+    # Printed whether or not it fires, because "no line" and "zero" are the same
+    # sight on a console and only one of them is a check. `readable_colours` puts
+    # a readable colour first before the ladder ever runs, so both counts are
+    # meant to stay zero; before it, New Orleans' gold was 31 of them.
+    low = frame.filter(
+        (pl.col("home_contrast") < CONTRAST_MIN) | (pl.col("away_contrast") < CONTRAST_MIN)
+    )
+    clubs_low = sorted({row["home_team"] for row in low.to_dicts()}) if low.height else []
+    named = f" ({', '.join(clubs_low)})" if clubs_low else ""
+    print(f"  colours under {CONTRAST_MIN:g}:1 contrast on the cream: {low.height}{named}")
 
     print("\n  Fallbacks that fired, by matchup:")
     for rule in FALLBACKS:

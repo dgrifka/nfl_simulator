@@ -19,11 +19,13 @@ from PIL import Image
 
 from nfl_simulator import teams as teams_module
 from nfl_simulator.style import (
+    CONTRAST_MIN,
     CVD_FLOOR,
     CVD_KINDS,
     NORMAL_FLOOR,
     PALETTE,
     contrast_ratio,
+    relative_luminance,
     separated,
     separations,
 )
@@ -49,6 +51,7 @@ ROWS = [
     ("TB", "Tampa Bay Buccaneers", "Buccaneers", "#A71930", "#322F2B", "tb"),
     ("OAK", "Oakland Raiders", "Raiders", "#000000", "#A5ACAF", "lv"),
     ("NYJ", "New York Jets", "Jets", "#003F2D", "#000000", "nyj"),
+    ("NO", "New Orleans Saints", "Saints", "#D3BC8D", "#101820", "no"),
 ]
 
 
@@ -85,6 +88,41 @@ def synthetic_logo(path, *, near_white=(250, 250, 250), mark=(20, 40, 200)) -> N
 
 def test_team_colors_returns_the_primary_and_secondary_nflverse_carries(table):
     assert team_colors("DET") == ("#0076B6", "#B0B7BC")
+
+
+def test_a_club_whose_primary_cannot_be_read_on_the_cream_wears_its_secondary(table):
+    """New Orleans' old gold is 1.78:1 on the surface. Every figure the Saints
+    appeared in drew them in a colour a reader has to hunt for."""
+    row = table.filter(pl.col("team_abbr") == "NO").to_dicts()[0]
+    primary, secondary = row["team_color"], row["team_color2"]
+    assert contrast_ratio(primary, PALETTE["bg"]) < CONTRAST_MIN, "the fixture's premise"
+    assert team_colors("NO") == (secondary, primary)
+    assert contrast_ratio(team_colors("NO")[0], PALETTE["bg"]) >= CONTRAST_MIN
+
+
+def test_a_club_whose_primary_reads_on_the_cream_keeps_it(table):
+    """The floor moves one club. It must not quietly reorder the other 31."""
+    assert team_colors("GB") == ("#203731", "#FFB612")
+    assert team_colors("KC") == ("#E31837", "#FFB612")
+
+
+def test_a_club_whose_two_colours_both_fail_is_darkened_until_it_reads(monkeypatch):
+    """Nobody in the league is this club, and the rule still has to answer for
+    it: swapping to a second unreadable colour is not a fix."""
+    frame = pl.DataFrame(
+        {
+            "team_abbr": ["CRM"],
+            "team_name": ["Cream City"],
+            "team_nick": ["Cream"],
+            "team_color": ["#F2E9D8"],
+            "team_color2": ["#FFFFFF"],
+            "team_logo_espn": ["https://example.invalid/crm.png"],
+        }
+    )
+    monkeypatch.setattr(teams_module, "load_team_table", lambda **_: frame)
+    drawn, _second = team_colors("CRM")
+    assert contrast_ratio(drawn, PALETTE["bg"]) >= CONTRAST_MIN
+    assert relative_luminance(drawn) < relative_luminance("#F2E9D8"), "darkened, not swapped"
 
 
 def test_an_unknown_abbreviation_falls_back_to_grey_rather_than_raising(table):
