@@ -82,12 +82,17 @@ change an instrument.
 
 | Entity design | Null bound (90th pct) = threshold | Power at 5% | **at 12.5%** | at 25% | at 50% | Resolvable? |
 |---|---|---|---|---|---|---|
-| Residual, defence-season × QB-season (no floor) | **5.920 pp** | 0.200 | **0.893** | 1.000 | 1.000 | **Yes** |
+| Residual, defence-season × QB-season (no floor) | **5.920 pp** | 0.200 | **0.892** | 1.000 | 1.000 | **Yes** |
 | Residual, defence pooled × QB-season (no floor) | **5.060 pp** | 0.303 | **0.953** | 1.000 | 1.000 | **Yes** |
 | Residual, QB-season `σ_q` (no floor) | **6.889 pp** | 0.200 | **0.780** | 1.000 | 1.000 | **No** |
 
 For comparison, round 1 (with the floor): 9.41 pp / 0.362; 8.09 pp / 0.555;
 — / 0.578.
+
+Powers are the fraction of 400 simulated datasets whose upper bound cleared the
+threshold, printed to three places as the script prints them. The first row's
+0.892 is **357 of 400** exactly (0.8925); every other cell is exact at three
+places.
 
 Filled 2026-08-27 from `research/63_dropped_pick_power_r2.py` →
 `research/outputs/63_dropped_pick_power_r2.json`, **before**
@@ -112,7 +117,7 @@ just over half of it. `DATASETS` stayed 400, as this section requires.
 **Both gate designs clear Gate C-3, and the expectation below was beaten in the
 direction it hedged against.** The pre-committed text predicted the pooled grain
 would be "the one most likely to resolve" and that the season grain "may still
-miss 0.80". The season grain reached **0.893** — resolvable — so the study's
+miss 0.80". The season grain reached **0.892** — resolvable — so the study's
 primary design, the one document 43 §7's decision rule reaches for first, is the
 one that answers. The `σ_q` row is the only one that stays under the bar, at
 0.780, and it is a nuisance parameter with no pass rule attached to it.
@@ -145,3 +150,45 @@ diagnostic beside the red-zone and late-down gaps, never a ledger row.
 | `DRAWS` / `TUNE` / `CHAINS` / `TARGET_ACCEPT` | 2,000 / 2,000 / 4 / 0.9 (A-2) | `64` |
 | Second-toucher channel | `pass_defense_1_player_id != interception_player_id` | document 17; `64` |
 | Everything else | as document 43 §10 | |
+
+## 7. Outcome
+
+Appended 2026-08-27, after the run. §§1–3 and §5–6 were not edited; §4 carries
+only the Part A fill this section's own instruction required. Full record:
+`docs/research/46-dropped-pick-round2.md`; results file
+`docs/research/results-2026-08-27-exp2.md`; log
+`docs/research/log-2026-08-27-dropped-picks.md` under "Round 2".
+
+| Gate | Statistic | Verdict |
+|---|---|---|
+| C-3, defence-season × QB-season | Power at 12.5% relative **0.892** (round 1: 0.362) | **PASS** — A-1 resolved the study |
+| C-3, defence pooled × QB-season | Power at 12.5% relative **0.953** (round 1: 0.555) | **PASS** |
+| C-3, QB-season `σ_q` | Power at 12.5% relative **0.780** (round 1: 0.578) | **FAIL** |
+| C-1, arm 2 sampler | 0 divergences, max `r_hat` **1.0070** (`sigma_q`), min ess_bulk 587, min ess_tail 522, **0 of 429** parameters over a bar | **PASS** — A-2 closed round 1's failure |
+| C-1, arm 2b sampler | 0 divergences, max `r_hat` 1.0074, min ess_bulk 467, min ess_tail 415, **0 of 427** over a bar | **PASS** |
+| C-1, grid self-checks | Crossed edge mass 1.5e-03 and 3.8e-03 | **PASS** |
+| C-1, arm 2 / arm 3 cross-check | `σ_d` 89% upper bound: arm 2 **9.08 pp** vs arm 3 **8.04 pp** (gap **1.04 pp**) and **5.01 pp** pooled (gap **4.07 pp**), tolerance 1.0 pp | **FAIL** on both — reported per document 43 §5, not worked around |
+| C-2, defence-season × QB-season | 89% upper bound **8.04 pp** vs threshold 5.92 pp | **FAIL** by 2.12 pp — **reportable**, C-3 passed |
+| C-2, defence pooled × QB-season | 89% upper bound **5.01 pp** vs threshold 5.06 pp | **PASS** by 0.05 pp — **reportable**, C-3 passed |
+| C-2, QB-season `σ_q` | 89% upper bound **7.99 pp** vs threshold 6.89 pp | FAIL — not reportable, C-3 failed |
+| D-1, worthy-rate spreads | Not re-run (§3); document 44 §3 stands | — |
+| A-3, hindsight probe | `p(worthy \| INT, deflected)` **0.717** vs clean **0.888**, gap **−17.1 pp**; 14.0% of charted INTs not worthy | Reported — the flag is a judgement of the throw; selection defensible |
+
+**§0's reading, as committed: the third row** — C-3 passes, C-2 fails on the
+design the decision rule reads first. *"Some defences finish more of their
+chances, repeatably: ball-hawking is skill... avenue (3) is dead on the
+evidence."* Document 46 §7 carries the licensed wording, **and flags that the
+word "repeatably" is contradicted by the pooled design (C-2 pass, C-3 0.953) and
+by the +0.065 season-to-season correlation** — a fork the decision rule does not
+resolve because it never consults the pooled row once the first design clears
+C-3. Two wordings are offered there; the choice is the maintainer's.
+
+**Two questions are open and both are the maintainer's:** the Gate C-1 cross-check
+failure (document 46 §4a — the pooled comparison is grain-mismatched by
+construction, and fixing that is a change to document 43 §5's committed text),
+and which §7 wording the game page carries.
+
+**Commits.** `4cfaa66` this amendment · `b645105` Part A, the power table and its
+thresholds · `824cc72` Part B, the fits · Part C, the record, results file and
+queue. Branch `docs/dropped-pick-confounds`, unmerged; the maintainer merges.
+`git diff main -- src/` is empty; 502 tests pass.
