@@ -85,6 +85,14 @@ POOLED_SWING_TOLERANCE = 0.10
 
 REFERENCE_LEVELS = {"pass_location": "middle", "down": 1.0}
 
+# Round 4's posterior mean of `sigma_d` at this seed on this frame, to full
+# precision from `dropped_pick_summary.json`. The refactor round 5 needed — `fit`
+# taking a frame and a seed so the week-out folds can reuse it — must not move
+# the default run by a floating-point hair, and this is the tripwire that says
+# so. Round 4's document 50 quotes it to four places as 0.2544.
+ROUND4_SIGMA_D_MEAN = 0.25437862651398274
+ROUND4_REPRODUCTION_TOLERANCE = 1e-6
+
 
 def _labels(frame: pl.DataFrame, keys: list[str]) -> list[str]:
     """The level labels in `_power._codes` order, so a code indexes this list."""
@@ -169,14 +177,40 @@ def swing_table_check(worthy: pl.DataFrame) -> dict:
     return table, report
 
 
-def fit(frame) -> tuple[object, dict]:
-    """Arm 2 at A-2's spec, without `w_g`. One fit, ~2 minutes."""
+def fit(
+    frame,
+    seed: int = RANDOM_SEED,
+    *,
+    draws: int = DRAWS,
+    tune: int = TUNE,
+    chains: int = CHAINS,
+    label: str = "the full frame",
+    stop_on_c1: bool = True,
+) -> tuple[object, dict]:
+    """Arm 2 at A-2's spec, without `w_g`, on whatever rows `frame` carries.
+
+    Round 5 (document 52 §5's gate G-1) needs eighteen of these — the same model
+    at the same spec, one week-of-season masked out of each — so the fit takes a
+    frame and a seed rather than reading module state. Handoff constraint 3: only
+    the row mask changes, so `draws`, `tune`, `chains` and `target_accept` keep
+    A-2's values and the caller passes a fold seed.
+
+    Returns the trace and the sampler-health summary — Gate C-1's bars over every
+    parameter, which is V-6 on the default run and the per-fold gate G-1 prints.
+
+    ``stop_on_c1=False`` hands the gate to the caller and is not a way around it.
+    A caller fitting eighteen folds needs all eighteen C-1 lines before it stops,
+    and needs the traces on disk so a ruling costs no refit — the same reasoning
+    round 4 recorded for writing this script's artifacts before enforcing V-8.
+    The bars are unchanged and the caller must enforce them.
+    """
     print(
         f"\n=== the fit — document 43 §5 arm 2, A-2's spec, no game effect ===\n"
-        f"  {frame.model.height:,} throws, {frame.design_matrix.shape[1]} covariates, "
+        f"  {label}: {frame.model.height:,} throws, "
+        f"{frame.design_matrix.shape[1]} covariates, "
         f"{frame.n_defence_seasons} defence-seasons, {frame.n_qb_seasons} QB-seasons\n"
-        f"  {CHAINS} x {DRAWS} draws after {TUNE} tuning, target_accept "
-        f"{TARGET_ACCEPT}, seed {RANDOM_SEED}"
+        f"  {chains} x {draws} draws after {tune} tuning, target_accept "
+        f"{TARGET_ACCEPT}, seed {seed}"
     )
     model = _power.build_conversion_model(
         frame.design_matrix,
@@ -188,36 +222,49 @@ def fit(frame) -> tuple[object, dict]:
     )
     with model:
         idata = pm.sample(
-            draws=DRAWS,
-            tune=TUNE,
-            chains=CHAINS,
-            random_seed=RANDOM_SEED,
+            draws=draws,
+            tune=tune,
+            chains=chains,
+            random_seed=seed,
             progressbar=False,
             nuts_sampler="nutpie",
             nuts={"target_accept": TARGET_ACCEPT},
         )
 
-    print("\n=== V-6 — Gate C-1's sampler bars, every parameter ===")
+    print(f"\n=== Gate C-1's sampler bars, every parameter ({label}) ===")
     health = _confounds.sampler_health(idata, ["alpha", "beta", "sigma_d", "sigma_q", "z_d", "z_q"])
     print(f"  C-1: {'PASS' if health['pass'] else 'FAIL'}")
-    if not health["pass"]:
+    if not health["pass"] and stop_on_c1:
         raise SystemExit(
-            "V-6 failed — the fit's sampler did not clear Gate C-1. Handoff "
-            "constraint 8: stop and ask."
+            f"the sampler did not clear Gate C-1 on {label}. On the default run "
+            "that is V-6; on a week-out fold it is round 5's handoff constraint "
+            "6. Either way: stop and ask."
         )
     return idata, health
 
 
-def name_the_levels(idata, frame) -> tuple[object, list[str], list[str]]:
+def name_the_levels(
+    idata,
+    frame,
+    *,
+    defence_levels: list[str] | None = None,
+    qb_levels: list[str] | None = None,
+) -> tuple[object, list[str], list[str]]:
     """Give `u_d` and `v_q` their level names, the way the FG trace names kickers.
 
     `61.build_conversion_model` dimensions them by integer position because Part
     A of round 2 never needed the labels. The read side does — it looks a
     defence-season up by name — so the coordinates are attached here, in the
     same `_codes` order the codes were built in.
+
+    A week-out fold passes its level lists in: its own rows are a subset, so
+    reading the labels off the masked frame would name level *k* after whichever
+    defence-season happens to sit at position *k* in the subset. Round 5's folds
+    are coded against the full frame's levels precisely so `u_d` keeps one
+    meaning across all eighteen fits.
     """
-    defence_levels = _labels(frame.model, ["season", "defteam"])
-    qb_levels = _labels(frame.model, ["season", "passer_player_id"])
+    defence_levels = defence_levels or _labels(frame.model, ["season", "defteam"])
+    qb_levels = qb_levels or _labels(frame.model, ["season", "passer_player_id"])
     if len(defence_levels) != frame.n_defence_seasons or len(qb_levels) != frame.n_qb_seasons:
         raise SystemExit("level labels do not line up with the fitted level counts.")
 
@@ -332,6 +379,81 @@ def v8_report(idata, frame, defence_levels: list[str]) -> dict:
     return report
 
 
+def build_summary(
+    idata,
+    frame,
+    table,
+    *,
+    defence_levels: list[str],
+    qb_levels: list[str],
+    seed: int,
+    scale_frame=None,
+    extra: dict | None = None,
+) -> dict:
+    """The read side's constants, as `DroppedPickModel.from_posterior` needs them.
+
+    Lifted out of :func:`main` in round 5 so a week-out fold writes the same
+    object the default run does. Two arguments earn their keep:
+
+    * ``scale_frame`` — the rows the standardisation constants describe. A fold's
+      design matrix is built against the *full* frame's mean and SD (document 52
+      §5's G-1 masks rows, not the covariate scale), so the constants stored with
+      a fold must be the full frame's or the read side would centre a throw on a
+      scale the fit never used. Round 3's fourth surprise, in a new place.
+    * ``extra`` — the gate reports, which differ between the default run (V-6 and
+      V-8) and a fold (C-1 alone).
+    """
+    posterior = idata["posterior"]
+    scale_frame = frame.model if scale_frame is None else scale_frame
+    standardisation = {
+        column: {
+            "mean": float(scale_frame[column].cast(pl.Float64).mean()),
+            "sd": float(scale_frame[column].cast(pl.Float64).std()),
+        }
+        for column in _power.STANDARDISED
+    }
+    beta_means = posterior["beta"].values.mean(axis=(0, 1))
+    summary = {
+        "document": "49 — the dropped-pick variant ledger",
+        "fitted_by": "research/67_dropped_pick_model.py",
+        "model": (
+            "document 43 §5 arm 2 (logit p = alpha + X beta + u_d + v_q), amendment "
+            "A-2's sampler spec, no game effect w_g (document 49 §2)"
+        ),
+        "read_side_note": (
+            "p_i excludes v_q by design (document 49 §2): the QB-season term is "
+            "fitted so u_d is estimated free of it, and never read."
+        ),
+        "fit_seed": seed,
+        "draws": DRAWS,
+        "tune": TUNE,
+        "chains": CHAINS,
+        "target_accept": TARGET_ACCEPT,
+        "n_posterior_draws": int(posterior["alpha"].values.size),
+        "rows": int(frame.model.height),
+        "worthy_rows": int(frame.worthy.height),
+        "n_defence_seasons": int(frame.n_defence_seasons),
+        "n_qb_seasons": int(frame.n_qb_seasons),
+        "guards": frame.guards,
+        "covariate_order": list(frame.feature_names),
+        "standardisation": standardisation,
+        "standardisation_from_rows": int(scale_frame.height),
+        "reference_levels": REFERENCE_LEVELS,
+        "standardised_covariates": list(_power.STANDARDISED),
+        "defence_season_levels": defence_levels,
+        "qb_season_levels": qb_levels,
+        "swing_table": table.to_dict(),
+        "beta_means": {
+            name: float(value) for name, value in zip(frame.feature_names, beta_means, strict=True)
+        },
+        "alpha_mean": float(posterior["alpha"].values.mean()),
+        "sigma_d_mean": float(posterior["sigma_d"].values.mean()),
+        "sigma_q_mean": float(posterior["sigma_q"].values.mean()),
+    }
+    summary.update(extra or {})
+    return summary
+
+
 def main() -> None:
     paths.ensure_data_dirs()
     print("=== Round 4 Part A — the dropped-pick fit (document 49 §5) ===")
@@ -350,61 +472,45 @@ def main() -> None:
 
     table, table_report = swing_table_check(worthy_with_epa(frame))
 
-    idata, health = fit(frame)
+    idata, health = fit(frame, RANDOM_SEED, label="the full 2,969-row frame")
     idata, defence_levels, qb_levels = name_the_levels(idata, frame)
     v8 = v8_report(idata, frame, defence_levels)
+
+    # Round 5's refactor tripwire. `fit` now takes a frame and a seed so document
+    # 52 §5's eighteen week-out folds can reuse it; the price of that is a
+    # promise that the default run is the run round 4 recorded. This is the
+    # promise, checked rather than asserted.
+    sigma_d = float(idata["posterior"]["sigma_d"].values.mean())
+    gap = abs(sigma_d - ROUND4_SIGMA_D_MEAN)
+    print("\n=== round-4 reproduction — the refactor changed no number ===")
+    print(
+        f"  sigma_d posterior mean {sigma_d:.12f} against round 4's "
+        f"{ROUND4_SIGMA_D_MEAN:.12f}\n"
+        f"  |gap| {gap:.2e}, tolerance {ROUND4_REPRODUCTION_TOLERANCE:.0e}  -> "
+        f"{'PASS' if gap <= ROUND4_REPRODUCTION_TOLERANCE else 'FAIL'}"
+    )
+    if gap > ROUND4_REPRODUCTION_TOLERANCE:
+        raise SystemExit(
+            "the default run no longer reproduces round 4's fit. Round 5's Part B "
+            "refactor was supposed to change nothing here; stop and report."
+        )
 
     trace_path = paths.RESEARCH_OUTPUT_DIR / TRACE_NAME
     idata.to_netcdf(trace_path)
 
-    posterior = idata["posterior"]
-    standardisation = {
-        column: {
-            "mean": float(frame.model[column].cast(pl.Float64).mean()),
-            "sd": float(frame.model[column].cast(pl.Float64).std()),
-        }
-        for column in _power.STANDARDISED
-    }
-    beta_means = posterior["beta"].values.mean(axis=(0, 1))
-    summary = {
-        "document": "49 — the dropped-pick variant ledger",
-        "fitted_by": "research/67_dropped_pick_model.py",
-        "model": (
-            "document 43 §5 arm 2 (logit p = alpha + X beta + u_d + v_q), amendment "
-            "A-2's sampler spec, no game effect w_g (document 49 §2)"
-        ),
-        "read_side_note": (
-            "p_i excludes v_q by design (document 49 §2): the QB-season term is "
-            "fitted so u_d is estimated free of it, and never read."
-        ),
-        "fit_seed": RANDOM_SEED,
-        "draws": DRAWS,
-        "tune": TUNE,
-        "chains": CHAINS,
-        "target_accept": TARGET_ACCEPT,
-        "n_posterior_draws": int(posterior["alpha"].values.size),
-        "rows": int(frame.model.height),
-        "worthy_rows": int(frame.worthy.height),
-        "n_defence_seasons": int(frame.n_defence_seasons),
-        "n_qb_seasons": int(frame.n_qb_seasons),
-        "guards": frame.guards,
-        "covariate_order": list(frame.feature_names),
-        "standardisation": standardisation,
-        "reference_levels": REFERENCE_LEVELS,
-        "standardised_covariates": list(_power.STANDARDISED),
-        "defence_season_levels": defence_levels,
-        "qb_season_levels": qb_levels,
-        "swing_table": table.to_dict(),
-        "swing_table_check": table_report,
-        "gate_v6_sampler": health,
-        "gate_v8_posterior_spread": v8,
-        "beta_means": {
-            name: float(value) for name, value in zip(frame.feature_names, beta_means, strict=True)
+    summary = build_summary(
+        idata,
+        frame,
+        table,
+        defence_levels=defence_levels,
+        qb_levels=qb_levels,
+        seed=RANDOM_SEED,
+        extra={
+            "swing_table_check": table_report,
+            "gate_v6_sampler": health,
+            "gate_v8_posterior_spread": v8,
         },
-        "alpha_mean": float(posterior["alpha"].values.mean()),
-        "sigma_d_mean": float(posterior["sigma_d"].values.mean()),
-        "sigma_q_mean": float(posterior["sigma_q"].values.mean()),
-    }
+    )
     summary_path = paths.RESEARCH_OUTPUT_DIR / SUMMARY_NAME
     summary_path.write_text(json.dumps(summary, indent=2, default=str))
 
@@ -416,20 +522,28 @@ def main() -> None:
         f"{summary['n_posterior_draws']:,} posterior draws"
     )
 
-    # The artifacts are written before the gate is enforced on purpose. They are
+    # The artifacts are written before the gate is reported on purpose. They are
     # gitignored and regenerable, and a stop-and-ask that costs a refit to
-    # resolve is a stop-and-ask nobody re-reads: the summary now carries the
-    # breach, so the maintainer's ruling can be applied without fitting again.
+    # resolve is a stop-and-ask nobody re-reads: the summary carries the breach,
+    # so a ruling needs no refit.
+    #
+    # **Ruling R-3 (document 52 §5), 2026-08-27.** Round 4 stopped here, because
+    # V-8's breach was unruled. It is ruled now: the 2022 NYG breach of 1.1 pp on
+    # one of ten lines is immaterial and the bound stands unamended. The gate's
+    # text is not edited and its verdict is not re-tolerated — V-8 still reads
+    # FAIL, here and in the summary JSON — so what changes is only that the
+    # script no longer exits on a breach the owner has ruled on.
     if not v8["pass"]:
         breached = {
             reading: entry["breaches"]
             for reading, entry in v8["readings"].items()
             if entry["breaches"]
         }
-        raise SystemExit(
-            f"V-8 breached: {breached}. Handoff constraint 8's stop-and-ask — "
-            "stop and report rather than widening the bound. The trace and "
-            "summary above are written, so a ruling needs no refit."
+        print(
+            f"\n  V-8 FAIL stands on the record: {breached}. Ruling R-3 "
+            "(document 52 §5) declares it immaterial — document 50 §2 carries the\n"
+            "  reasoning and document 49 §10 the ruling. The bound is unamended; "
+            "this is not a re-tolerancing."
         )
     print("Next: research/68_dropped_pick_variant_audit.py for V-1 and document 49 §7.")
 

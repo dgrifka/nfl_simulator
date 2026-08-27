@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 
@@ -519,9 +520,35 @@ def named_games(v13: pl.DataFrame, variant: pl.DataFrame, ledger: pl.DataFrame) 
 # --------------------------------------------------------------------------
 
 
-def main() -> None:
-    paths.ensure_data_dirs()
+# --------------------------------------------------------------------------
+# the pieces rounds 5+ reuse
+# --------------------------------------------------------------------------
 
+
+@dataclass(frozen=True)
+class AuditContext:
+    """Everything a variant pass needs, loaded once.
+
+    Round 5's gates (document 52 §5) run two more audits — the week-out folds in
+    `research/69` and the flat-swing sensitivity in `research/70` — and both must
+    read the *same* play-by-play frame, the same baselines and the same
+    `points_per_epa` slope as round 4's, or their numbers would not be
+    comparable with document 50's. Loading that once, here, is what makes the
+    comparison legitimate rather than approximately legitimate.
+    """
+
+    pbp: pl.DataFrame
+    baselines: dict
+    fg_model: object
+    slope: float
+    margins: dict
+    shipped: pl.DataFrame
+    ftn_by_game: dict
+
+
+def load_context(*, with_ftn: bool = True) -> AuditContext:
+    """Round 4's `main` prologue, callable."""
+    paths.ensure_data_dirs()
     columns = list(dict.fromkeys([*_read_side.SIM_COLUMNS, "defteam", *PBP_COVARIATE_COLUMNS]))
     pbp = load_pbp(PBP_SEASONS, columns=columns)
     fg_model, _ = _read_side.load_model("trace_fg_refit.nc", "fg_refit_summary.json")
@@ -532,13 +559,126 @@ def main() -> None:
     }
     games = build_game_table(pbp)
     slope = points_per_epa(games.drop_nulls("margin"))
-    margins = dict(zip(games["game_id"], games["margin"], strict=True))
+    ftn_by_game = {}
+    if with_ftn:
+        ftn = load_ftn(FTN_SEASONS)
+        ftn_by_game = {
+            (key[0] if isinstance(key, tuple) else key): group
+            for key, group in ftn.group_by("nflverse_game_id")
+        }
+    return AuditContext(
+        pbp=pbp,
+        baselines=baselines,
+        fg_model=fg_model,
+        slope=slope,
+        margins=dict(zip(games["game_id"], games["margin"], strict=True)),
+        shipped=pl.read_parquet(paths.RESEARCH_OUTPUT_DIR / V13_ARTIFACT),
+        ftn_by_game=ftn_by_game,
+    )
 
-    shipped = pl.read_parquet(paths.RESEARCH_OUTPUT_DIR / V13_ARTIFACT)
+
+def v13_pass(ctx: AuditContext) -> tuple[pl.DataFrame, pl.DataFrame, dict]:
+    """The v1.3 arm and V-1 against the shipped artifact.
+
+    Round 5's handoff constraint 1 puts this line at the end of *every* audit
+    run: a round that touches the variant has to prove, each time, that v1.3 did
+    not move. It is a gate, not a diagnostic — 0.00e+00 or stop.
+    """
+    table, ledger = simulate_all(ctx.pbp, ctx.margins, ctx.baselines, ctx.fg_model, ctx.slope)
+    return table, ledger, v1_replay(ctx.shipped, table)
+
+
+def variant_pass(
+    ctx: AuditContext,
+    model,
+    *,
+    models_by_week: dict | None = None,
+    label: str = "variant",
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """The 2022-2025 variant arm, at v1.3's settings, with one model or eighteen.
+
+    ``models_by_week`` is document 52 §5's G-1: each game is scored by the fit
+    that never saw its week of season, so the pass runs once per week with that
+    week's model. ``model`` alone is round 4's in-sample arm.
+    """
+    if models_by_week is None:
+        table, ledger = simulate_all(
+            ctx.pbp,
+            ctx.margins,
+            ctx.baselines,
+            ctx.fg_model,
+            ctx.slope,
+            dropped_pick_model=model,
+            ftn_by_game=ctx.ftn_by_game,
+            seasons=FTN_SEASONS,
+        )
+        print(f"\n  {label}: {table.height:,} games over {FTN_SEASONS[0]}-{FTN_SEASONS[-1]}")
+        return table, ledger
+
+    tables, ledgers = [], []
+    for week, fold_model in sorted(models_by_week.items()):
+        rows = ctx.pbp.filter((pl.col("season").is_in(FTN_SEASONS)) & (pl.col("week") == week))
+        if not rows.height:
+            continue
+        table, ledger = simulate_all(
+            rows,
+            ctx.margins,
+            ctx.baselines,
+            ctx.fg_model,
+            ctx.slope,
+            dropped_pick_model=fold_model,
+            ftn_by_game=ctx.ftn_by_game,
+        )
+        tables.append(table)
+        ledgers.append(ledger)
+    table = pl.concat(tables)
+    print(
+        f"\n  {label}: {table.height:,} games over {FTN_SEASONS[0]}-{FTN_SEASONS[-1]}, "
+        f"each scored by the fit that excluded its week"
+    )
+    return table, pl.concat(ledgers)
+
+
+def audit(
+    v13: pl.DataFrame,
+    variant: pl.DataFrame,
+    ledger: pl.DataFrame,
+    *,
+    named: bool = True,
+) -> dict:
+    """Document 49 §7's descriptive audit, callable on any variant arm."""
+    report = {
+        "coverage": coverage(variant),
+        "flips": flips(v13, variant),
+        "movement": movement(v13, variant),
+        "largest_movers": largest_movers(v13, variant, ledger),
+    }
+    if named:
+        report["named_games"] = named_games(v13, variant, ledger)
+    return report
+
+
+def round_trip_identity(variant: pl.DataFrame, slope: float) -> float:
+    """V-2 on a variant arm: the ledger sums to the margin shift, or it does not."""
+    return float(
+        (
+            variant["deserved_margin"]
+            - (variant["actual_margin"] - variant["total_luck_epa"] * slope)
+        )
+        .abs()
+        .max()
+    )
+
+
+# --------------------------------------------------------------------------
+
+
+def main() -> None:
+    ctx = load_context()
+    slope = ctx.slope
 
     # ---- V-1, first and unconditional -------------------------------------
-    v13_table, v13_ledger = simulate_all(pbp, margins, baselines, fg_model, slope)
-    v1 = v1_replay(shipped, v13_table)
+    v13_table, v13_ledger, v1 = v13_pass(ctx)
 
     # ---- the model, and the round trip -------------------------------------
     model = DroppedPickModel.from_posterior(
@@ -555,26 +695,8 @@ def main() -> None:
         )
 
     # ---- the variant pass, 2022-2025 --------------------------------------
-    ftn = load_ftn(FTN_SEASONS)
-    ftn_by_game = {
-        (key[0] if isinstance(key, tuple) else key): group
-        for key, group in ftn.group_by("nflverse_game_id")
-    }
-    variant_table, variant_ledger = simulate_all(
-        pbp,
-        margins,
-        baselines,
-        fg_model,
-        slope,
-        dropped_pick_model=model,
-        ftn_by_game=ftn_by_game,
-        seasons=FTN_SEASONS,
-    )
+    variant_table, variant_ledger = variant_pass(ctx, model, label="variant pass")
     charted = v13_table.filter(pl.col("game_id").is_in(variant_table["game_id"].to_list()))
-    print(
-        f"\n  variant pass: {variant_table.height:,} games over "
-        f"{FTN_SEASONS[0]}-{FTN_SEASONS[-1]}, against the same games' v1.3 rows"
-    )
 
     results = {
         "reported_as": (
@@ -591,21 +713,10 @@ def main() -> None:
         "gate_v1_default_off": v1,
         "read_side_round_trip": round_trip,
         "gate_v8_passed_on_this_fit": bool(summary["gate_v8_posterior_spread"]["pass"]),
-        "coverage": coverage(variant_table),
-        "flips": flips(charted, variant_table),
-        "movement": movement(charted, variant_table),
     }
-    results["largest_movers"] = largest_movers(charted, variant_table, variant_ledger)
-    results["named_games"] = named_games(charted, variant_table, variant_ledger)
+    results.update(audit(charted, variant_table, variant_ledger))
 
-    identity = float(
-        (
-            variant_table["deserved_margin"]
-            - (variant_table["actual_margin"] - variant_table["total_luck_epa"] * slope)
-        )
-        .abs()
-        .max()
-    )
+    identity = round_trip_identity(variant_table, slope)
     results["gate_v2_round_trip_max_residual"] = identity
     print(
         f"\n  V-2 on every variant game: max |deserved − (actual − luck × slope)| = {identity:.2e}"
