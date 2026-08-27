@@ -280,7 +280,9 @@ def pill_colour(bucket: str) -> str:
     return PALETTE[PILL_COLOURS.get(bucket, "text_muted")]
 
 
-def draw_header(ax, verdict: GameVerdict, heading: str, *, caption: str | None = None):
+def draw_header(
+    ax, verdict: GameVerdict, heading: str, *, caption: str | None = None, left_points: float = 0.0
+):
     """The title block every per-game figure wears: heading, rule, subtitle, pill.
 
     Drawn in the band above ``ax`` rather than in a separate strip axes. A strip
@@ -290,15 +292,23 @@ def draw_header(ax, verdict: GameVerdict, heading: str, *, caption: str | None =
     would stretch across the growth. Everything here is anchored to ``ax``, so
     the sidebar moves the header with the plot it belongs to.
 
+    ``left_points`` moves the heading, the rule and the subtitle left of the
+    axes. The waterfall's row labels are sentences, so its axes starts a third of
+    the way across the figure; a title anchored to it left a hole where the title
+    should be. The pill does not move — it belongs to the plot's right edge,
+    which is where the figure's right edge is.
+
     Returns ``(heading_text, pill_text)`` so a caller can measure them.
     """
+    left_px = left_points / 72.0 * ax.figure.dpi
+    plot_width = ax.get_window_extent().width
 
     def at(y_points, text, **kwargs):
         return ax.annotate(
             text,
             xy=(0, 1),
             xycoords="axes fraction",
-            xytext=(0, y_points),
+            xytext=(left_points, y_points),
             textcoords="offset points",
             va="bottom",
             **kwargs,
@@ -320,7 +330,7 @@ def draw_header(ax, verdict: GameVerdict, heading: str, *, caption: str | None =
         0, RULE_OFFSET / 72, ax.figure.dpi_scale_trans
     )
     ax.plot(
-        [0, 1],
+        [left_px / plot_width if plot_width else 0.0, 1],
         [1, 1],
         transform=lifted,
         color=PALETTE["grid"],
@@ -363,7 +373,7 @@ def draw_header(ax, verdict: GameVerdict, heading: str, *, caption: str | None =
         # pill is the only way to know how much room is actually left, since
         # both the pill's text and the figure's width vary per game.
         pill_width = pill_text.get_window_extent(_renderer(ax.figure)).width
-        room = ax.get_window_extent().width - pill_width - CAPTION_PILL_GAP
+        room = plot_width - left_px - pill_width - CAPTION_PILL_GAP
         _wrap_to_width(ax.figure, caption_text, room)
 
     return heading_text, pill_text
@@ -859,6 +869,10 @@ class LuckBar:
     points: float
     play_id: float | None = None
     n_events: int = 1
+    # The team the event is charged to, so the row can wear that club's mark.
+    # ``None`` on the folded row: a sum of several teams' slivers is nobody's
+    # event, and stamping one club on it would say it was.
+    team: str | None = None
 
 
 def _fumble_phrase(event_class: str) -> str:
@@ -868,56 +882,71 @@ def _fumble_phrase(event_class: str) -> str:
     return PLAY_WORDS.get(key, f"a {key.replace('_', ' ')}")
 
 
+def event_phrase(row: dict) -> str:
+    """The event itself, in plain words and without the team it is charged to.
+
+    `"42-yd field goal"`, `"fumble on a punt"`. The team is dropped because the
+    ledger card puts each event in its own team's table, where a prefix would
+    repeat the heading on every row; :func:`plain_label` puts it back for the
+    figures whose rows are not grouped.
+
+    ``kick_distance`` is optional and is never invented: the ledger stores a
+    five-yard class, and printing the class midpoint as if it were the distance
+    would be making up a number, so the class is printed instead.
+    """
+    component = str(row["component"])
+    if component == "field_goal":
+        distance = row.get("kick_distance")
+        where = f"{float(distance):.0f}-yd" if distance is not None else str(row["event_class"])
+        return f"{where} field goal"
+    if component == "extra_point":
+        return "extra point"
+    if component == "fumble":
+        return f"fumble on {_fumble_phrase(row['event_class'])}"
+    # An unfamiliar component still gets a row rather than a crash: the ledger
+    # is allowed to grow a fourth kind of event before this function knows it.
+    name = COMPONENT_NAMES.get(component, component.replace("_", " "))
+    event_class = str(row["event_class"])
+    return name if event_class == name else f"{event_class} {name}"
+
+
+def outcome_phrase(row: dict) -> str:
+    """What actually happened: `"made"`, `"missed"`, `"retained"`, `"recovered by DET"`.
+
+    Empty when the ledger row does not carry its branch — :func:`ledger.with_actual`
+    recovers ``actual`` from the identity where it can, and where it cannot the
+    outcome is unknown and is left unsaid rather than guessed at.
+    """
+    branch = row.get("actual")
+    if branch is None:
+        return ""
+    made = bool(round(float(branch)))
+    component = str(row["component"])
+    if component in ("field_goal", "extra_point"):
+        return "made" if made else "missed"
+    if component == "fumble":
+        # Asymmetric on purpose. A fumble the fumbling team recovered is
+        # "retained" — "DET fumble, recovered by DET" says the same thing twice
+        # and reads as a mistake. A fumble it lost names who got it, because
+        # that is the fact a reader wants and the ledger does not record it.
+        if made:
+            return "retained"
+        opponent = row.get("opponent")
+        return f"recovered by {opponent}" if opponent else "lost"
+    return ""
+
+
 def plain_label(row: dict) -> str:
     """One luck event in plain words: `"GB 42-yd field goal, made"`.
 
     The ledger's own vocabulary is the simulator's — `"40-44 yd field goal — GB"`,
     `"run/aborted fumble — DET"` — and it is exactly right for auditing a ledger
     and exactly wrong on a figure somebody reads once. This is the same row said
-    the way it would be said out loud.
-
-    Three keys are optional and none of them is invented when absent. ``actual``
-    is the branch that happened (:func:`ledger.with_actual` recovers it from the
-    identity), ``opponent`` is the other team in the game, and ``kick_distance``
-    is the kick's real yardage — the ledger stores a five-yard class, and a
-    label that printed the class midpoint as if it were the distance would be
-    making up a number. Without ``actual`` the label simply stops before the
-    outcome clause rather than guessing at it.
+    the way it would be said out loud: the team, the event, and what happened.
     """
-    team = row["charged_team"]
-    component = str(row["component"])
-    branch = row.get("actual")
-    made = None if branch is None else bool(round(float(branch)))
-
-    if component == "field_goal":
-        distance = row.get("kick_distance")
-        where = f"{float(distance):.0f}-yd" if distance is not None else str(row["event_class"])
-        outcome = "" if made is None else f", {'made' if made else 'missed'}"
-        return f"{team} {where} field goal{outcome}"
-
-    if component == "extra_point":
-        outcome = "" if made is None else f", {'made' if made else 'missed'}"
-        return f"{team} extra point{outcome}"
-
-    if component == "fumble":
-        head = f"{team} fumble on {_fumble_phrase(row['event_class'])}"
-        if made is None:
-            return head
-        # Asymmetric on purpose. A fumble the fumbling team recovered is
-        # "retained" — "DET fumble, recovered by DET" says the same thing twice
-        # and reads as a mistake. A fumble it lost names who got it, because
-        # that is the fact a reader wants and the ledger does not record it.
-        if made:
-            return f"{head}, retained"
-        opponent = row.get("opponent")
-        return f"{head}, recovered by {opponent}" if opponent else f"{head}, lost"
-
-    # An unfamiliar component still gets a row rather than a crash: the ledger
-    # is allowed to grow a fourth kind of event before this function knows it.
-    name = COMPONENT_NAMES.get(component, component.replace("_", " "))
-    event_class = str(row["event_class"])
-    head = name if event_class == name else f"{event_class} {name}"
-    return f"{team} {head}"
+    outcome = outcome_phrase(row)
+    head = f"{row['charged_team']} {event_phrase(row)}"
+    return f"{head}, {outcome}" if outcome else head
 
 
 def luck_bars(
@@ -943,6 +972,7 @@ def luck_bars(
             label=plain_label(row),
             points=-float(row["luck_epa"]) * points_per_epa,
             play_id=float(row["play_id"]),
+            team=row.get("charged_team"),
         )
         for row in rows
     ]
@@ -1020,6 +1050,94 @@ def _stamp_logo(ax, logo, x: float, y: float) -> None:
         zorder=6,
     )
     ax.add_artist(box)
+
+
+def _left_edge_points(ax) -> float:
+    """How far left of the axes the figure's content already runs, in points.
+
+    Negative. A waterfall's row labels are sentences drawn outside the axes, and
+    ``bbox_inches="tight"`` crops the saved PNG to include them — so the visual
+    left margin of the image is the leftmost label, not the axes and not the
+    figure's own x=0. Measuring it is the only way to put a title on it.
+    """
+    labels = [label for label in ax.get_yticklabels() if label.get_text()]
+    if not labels:
+        return 0.0
+    renderer = _renderer(ax.figure)
+    leftmost = min(label.get_window_extent(renderer).x0 for label in labels)
+    return (leftmost - ax.get_window_extent().x0) * 72.0 / ax.figure.dpi
+
+
+def _stamp_row_logos(ax, bars, rows_y, logos) -> None:
+    """A club's mark immediately left of each row's own label.
+
+    Left of *its own* label rather than at a shared column: the labels are right
+    aligned on the axis and vary in length, so a fixed column would leave a short
+    row's mark stranded halfway across the figure.
+    """
+    from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+    renderer = _renderer(ax.figure)
+    box = ax.get_window_extent()
+    labels = ax.get_yticklabels()
+    for y, bar in zip(rows_y[1:-1], bars, strict=True):
+        logo = logos.get(bar.team)
+        if logo is None:
+            continue
+        left = labels[int(round(y))].get_window_extent(renderer).x0
+        ax.add_artist(
+            AnnotationBbox(
+                OffsetImage(
+                    logo, zoom=logo_zoom(logo, ax.figure, max_width_in=0.20, max_height_in=0.14)
+                ),
+                ((left - box.x0) / box.width - 0.012, y),
+                xycoords=("axes fraction", "data"),
+                frameon=False,
+                annotation_clip=False,
+                box_alignment=(1.0, 0.5),
+                zorder=6,
+            )
+        )
+
+
+def _draw_ledger_arrow(ax, verdict: GameVerdict, rows_y, x_rail: float) -> None:
+    """The same span the distribution draws, run down the waterfall's right side.
+
+    Head at the **actual** end, because that is the direction luck pushed the
+    game; the label is the distribution's, word for word, so the two figures say
+    the same sentence about the same game.
+    """
+    gap = verdict.actual_margin - verdict.deserved_margin
+    toward = verdict.home_team if gap > 0 else verdict.away_team
+    top, bottom = float(rows_y[0]), float(rows_y[-1])
+    for y, x_end in ((top, verdict.actual_margin), (bottom, verdict.deserved_margin)):
+        ax.plot([x_end, x_rail], [y, y], color=PALETTE["grid"], linewidth=0.8, zorder=1)
+    ax.annotate(
+        "",
+        xy=(x_rail, top),
+        xytext=(x_rail, bottom),
+        arrowprops={
+            "arrowstyle": "->",
+            "color": PALETTE["text_muted"],
+            "linewidth": 1.1,
+            "shrinkA": 0.0,
+            "shrinkB": 0.0,
+        },
+        annotation_clip=False,
+        zorder=5,
+    )
+    ax.text(
+        x_rail,
+        (top + bottom) / 2.0,
+        f"luck moved the margin {abs(gap):.1f} points toward {toward}",
+        rotation=90,
+        rotation_mode="anchor",
+        ha="center",
+        va="bottom",
+        fontsize=8.5,
+        color=PALETTE["text_muted"],
+        zorder=5,
+    )
 
 
 # Verbatim, and the first thing a reader of the waterfall needs. A waterfall
@@ -1102,7 +1220,12 @@ def plot_luck_ledger(
                     abs(bar.points),
                     left=min(begin, end),
                     height=0.62,
-                    color=home_colour if bar.points > 0 else away_colour,
+                    # By the team the break *helped*, not by the direction
+                    # neutralising it moves the margin. GB missing a field goal
+                    # moves the margin toward GB, and is DET's lucky break; drawn
+                    # the first way a reader who knows the game reads it
+                    # backwards, which is exactly what happened in round 1.
+                    color=home_colour if bar.points < 0 else away_colour,
                     zorder=2,
                 )
                 ax.annotate(
@@ -1166,19 +1289,13 @@ def plot_luck_ledger(
             # Only the directions the game actually has. A key for a colour that
             # appears nowhere sends a reader hunting the figure for it.
             handles = []
-            if any(bar.points < 0 for bar in bars):
-                handles.append(
-                    Patch(
-                        facecolor=away_colour,
-                        label=f"moves the margin toward {verdict.away_team}",
-                    )
-                )
             if any(bar.points > 0 for bar in bars):
                 handles.append(
-                    Patch(
-                        facecolor=home_colour,
-                        label=f"moves the margin toward {verdict.home_team}",
-                    )
+                    Patch(facecolor=away_colour, label=f"luck that helped {verdict.away_team}")
+                )
+            if any(bar.points < 0 for bar in bars):
+                handles.append(
+                    Patch(facecolor=home_colour, label=f"luck that helped {verdict.home_team}")
                 )
             ax.legend(
                 handles=handles,
@@ -1201,18 +1318,28 @@ def plot_luck_ledger(
             # The end bars' club marks hang outside their own ends, so a game
             # with logos needs more room at both edges than one without.
             pad = max((0.20 if logos else 0.12) * (high - low), 0.5)
-            ax.set_xlim(low - pad, high + pad)
+            # The luck arrow runs down a rail outside the bars, and its label is
+            # rotated against that rail, so the frame reserves a lane for both.
+            rail_room = max(0.18 * (high - low), 0.8)
+            x_rail = high + pad * 0.9
+            ax.set_xlim(low - pad, high + pad + rail_room)
 
             ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
             ax.set_axisbelow(True)
             ax.set_xlabel(
-                f"margin, {verdict.home_team} perspective", fontsize=9, color=PALETTE["text_muted"]
+                f"final margin ({verdict.home_team} \u2212 {verdict.away_team})",
+                fontsize=9,
+                color=PALETTE["text_muted"],
             )
+            _draw_ledger_arrow(ax, verdict, rows_y, x_rail)
+            _stamp_row_logos(ax, bars, rows_y, logos)
 
         # A waterfall's height grows with its row count, so anything placed in
         # axes fractions drifts further from the plot the more events a game had.
         # These are offsets in points, which hold still.
-        draw_header(ax, verdict, "Luck Ledger", caption=HOW_TO_READ)
+        draw_header(
+            ax, verdict, "Luck Ledger", caption=HOW_TO_READ, left_points=_left_edge_points(ax)
+        )
 
         footer = [
             "The bars are a sum, not a sequence: their order does not change where the "
@@ -1233,6 +1360,516 @@ def plot_luck_ledger(
             fontsize=8,
             color=PALETTE["text_muted"],
         )
+        return fig, ax
+
+
+# --------------------------------------------------------------------------
+# the luck ledger card — the share image
+# --------------------------------------------------------------------------
+
+# Top 5 per team, the baseball ledger's own number. Past it the rows are folded
+# into one that carries their exact sum, so the card never quietly drops luck.
+LEDGER_TOP_ROWS = 5
+
+# The one line that makes the Points column readable. Without it a red "-3.2"
+# beside a missed field goal is ambiguous: it could as easily mean the kick cost
+# the *other* team three points.
+SIGN_CONVENTION = "Points are what the scoreboard gave the team beyond what the play deserved."
+
+# Portrait, and tall enough for two full tables. The height is not a taste: a
+# team with more than five luck events spends six rows, two teams spend twelve,
+# and the first draft at 12 inches drew the home team's accent bar straight
+# through the away team's folded row.
+LEDGER_CARD_SIZE_IN = (8.0, 13.0)
+
+# The card's vertical grid, in inches from the bottom. Named because the two
+# table sections have to be a fixed distance apart, and that distance follows
+# from the row height rather than from a guess.
+LEDGER_TITLE_Y = 12.62
+LEDGER_HEADER_Y = 12.15
+LEDGER_BOXES_Y = 11.42
+LEDGER_BOX_HEIGHT = 2.15
+LEDGER_SWINGS_Y = 8.90
+LEDGER_SECTION_Y = (8.00, 4.10)
+
+
+@dataclass(frozen=True)
+class LuckRow:
+    """One event as the card's table prints it, signed toward one team."""
+
+    event: str
+    outcome: str
+    points: float
+    label: str
+
+
+@dataclass(frozen=True)
+class TeamLuck:
+    """One team's side of the ledger: what it netted, and what it netted it on."""
+
+    team: str
+    net_points: float
+    rows: list[LuckRow]
+
+    @property
+    def n_events(self) -> int:
+        return len(self.rows)
+
+
+def team_ledgers(verdict: GameVerdict, rows, *, points_per_epa: float) -> tuple[TeamLuck, TeamLuck]:
+    """The two sides of the ledger, away first, as the card reads them.
+
+    **Luck is zero-sum.** There is one scoreboard, so a point it gave one team
+    beyond what the play deserved is a point it took from the other. The two net
+    figures are therefore the same number with opposite signs, and that number is
+    the gap between the actual margin and the deserved one — the quantity the
+    waterfall walks across, stated as a property of a team rather than of a
+    margin.
+
+    A **row** is signed toward the team it is charged to, which is why GB missing
+    a field goal prints red in GB's table: the scoreboard gave GB fewer points
+    than the kick deserved. ``luck_epa`` is signed to the home team's margin
+    throughout the ledger, so the sign flips for the away team's rows and not
+    for the home team's.
+    """
+    signed = [(row["charged_team"], float(row["luck_epa"]) * points_per_epa) for row in rows]
+    net_home = sum(points for _team, points in signed)
+
+    ledgers = []
+    for team in (verdict.away_team, verdict.home_team):
+        sign = 1.0 if team == verdict.home_team else -1.0
+        own = [
+            LuckRow(
+                event=event_phrase(row),
+                outcome=outcome_phrase(row),
+                points=toward_home * sign,
+                label=plain_label(row),
+            )
+            for row, (charged, toward_home) in zip(rows, signed, strict=True)
+            if charged == team
+        ]
+        own.sort(key=lambda entry: abs(entry.points), reverse=True)
+        ledgers.append(TeamLuck(team=team, net_points=net_home * sign, rows=own))
+    return ledgers[0], ledgers[1]
+
+
+def table_rows(luck: TeamLuck, *, top: int = LEDGER_TOP_ROWS) -> list[LuckRow]:
+    """The rows the card prints, with everything past ``top`` folded into one.
+
+    Folding is not dropping: the folded row carries the exact sum of what it
+    replaces, so a reader adding the column still lands on the headline.
+    """
+    if len(luck.rows) <= top:
+        return list(luck.rows)
+    kept, rest = luck.rows[:top], luck.rows[top:]
+    return [
+        *kept,
+        LuckRow(
+            event=f"and {len(rest)} more",
+            outcome="",
+            points=sum(entry.points for entry in rest),
+            label="",
+        ),
+    ]
+
+
+def card_header_lines(verdict: GameVerdict) -> list[str]:
+    """The two muted lines under the card's title: the matchup, then the facts."""
+    matchup = f"{verdict.away_team} @ {verdict.home_team}"
+    date = verdict.date_line().strip("()")
+    if date:
+        matchup = f"{matchup}  \u2022  {date}"
+    if verdict.home_score is not None and verdict.away_score is not None:
+        final = (
+            f"Final: {verdict.away_team} {verdict.away_score:.0f}, "
+            f"{verdict.home_team} {verdict.home_score:.0f}"
+        )
+    else:
+        final = verdict.score_line()
+    return [matchup, f"{final}  |  DTW: {verdict.headline()}"]
+
+
+def _luck_colour(points: float) -> str:
+    """Green for luck a team received, red for luck it paid, ink for neither."""
+    if points > 0:
+        return PALETTE["good"]
+    if points < 0:
+        return PALETTE["bad"]
+    return PALETTE["text_muted"]
+
+
+def _rounded(ax, xy, width, height, *, facecolor, edgecolor="none", pad=0.06, zorder=1):
+    from matplotlib.patches import FancyBboxPatch
+
+    patch = FancyBboxPatch(
+        xy,
+        width,
+        height,
+        boxstyle=f"round,pad={pad}",
+        facecolor=facecolor,
+        edgecolor=edgecolor,
+        linewidth=0.8,
+        zorder=zorder,
+    )
+    ax.add_patch(patch)
+    return patch
+
+
+def _card_logo(ax, logo, x, y, *, max_width_in, max_height_in):
+    if logo is None:
+        return
+    from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+    ax.add_artist(
+        AnnotationBbox(
+            OffsetImage(
+                logo,
+                zoom=logo_zoom(
+                    logo, ax.figure, max_width_in=max_width_in, max_height_in=max_height_in
+                ),
+            ),
+            (x, y),
+            frameon=False,
+            annotation_clip=False,
+            box_alignment=(0.5, 0.5),
+            zorder=4,
+        )
+    )
+
+
+def _draw_team_box(ax, luck: TeamLuck, names, *, x_centre, y_top, colour, logo, detail):
+    """One club's summary panel: mark, name, its net luck, and one muted line."""
+    width, height = 3.10, LEDGER_BOX_HEIGHT
+    left = x_centre - width / 2.0
+    _rounded(
+        ax,
+        (left, y_top - height),
+        width,
+        height,
+        facecolor=PALETTE["row_alt"],
+        edgecolor=PALETTE["grid"],
+        pad=0.10,
+        zorder=1,
+    )
+    # The accent bar names the club before the reader has read anything.
+    _rounded(ax, (left, y_top - 0.10), width, 0.08, facecolor=colour, pad=0.02, zorder=2)
+
+    _card_logo(ax, logo, x_centre, y_top - 0.52, max_width_in=1.05, max_height_in=0.52)
+    ax.text(
+        x_centre,
+        y_top - 0.95,
+        team_or_abbr(luck.team, names),
+        fontsize=13,
+        fontweight="bold",
+        ha="center",
+        va="top",
+        color=colour,
+        zorder=3,
+    )
+    ax.text(
+        x_centre,
+        y_top - 1.30,
+        f"{luck.net_points:+.1f} points of luck",
+        fontsize=19,
+        fontweight="bold",
+        ha="center",
+        va="top",
+        color=_luck_colour(luck.net_points),
+        zorder=3,
+    )
+    ax.plot(
+        [x_centre - 1.15, x_centre + 1.15],
+        [y_top - 1.68, y_top - 1.68],
+        color=PALETTE["grid"],
+        linewidth=0.6,
+        zorder=2,
+    )
+    ax.text(
+        x_centre,
+        y_top - 1.80,
+        detail,
+        fontsize=9.5,
+        ha="center",
+        va="top",
+        color=PALETTE["text_muted"],
+        zorder=3,
+    )
+
+
+def team_or_abbr(team: str, names: dict | None) -> str:
+    """The club's full name if the caller supplied one, else its abbreviation.
+
+    Names come from `teams.team_name`, and this module never looks one up — it
+    is a presentation layer with no data dependency of its own, exactly as the
+    colours and the marks are handed to it.
+    """
+    return (names or {}).get(team, team)
+
+
+LEDGER_ROW_HEIGHT = 0.44
+
+
+def _draw_team_table(ax, luck: TeamLuck, names, *, y_top, colour, logo, columns):
+    """One club's table: accent bar, header, column names, then striped rows."""
+    _rounded(ax, (0.55, y_top - 0.08), 6.90, 0.08, facecolor=colour, pad=0.02, zorder=2)
+    _card_logo(ax, logo, 0.92, y_top - 0.36, max_width_in=0.40, max_height_in=0.26)
+    ax.text(
+        1.25,
+        y_top - 0.36,
+        team_or_abbr(luck.team, names),
+        fontsize=12,
+        fontweight="bold",
+        ha="left",
+        va="center",
+        color=colour,
+        zorder=3,
+    )
+    # Not the event count — the box above already carries it, and a card that
+    # prints the same fact twice reads as a mistake.
+    ax.text(
+        7.45,
+        y_top - 0.36,
+        "biggest first",
+        fontsize=9,
+        ha="right",
+        va="center",
+        color=PALETTE["text_muted"],
+        zorder=3,
+    )
+
+    header_y = y_top - 0.76
+    for key, label, align in columns:
+        ax.text(
+            key,
+            header_y,
+            label,
+            fontsize=9.5,
+            fontweight="bold",
+            ha=align,
+            va="center",
+            color=PALETTE["text"],
+            zorder=3,
+        )
+    ax.plot(
+        [0.55, 7.45],
+        [header_y - 0.20, header_y - 0.20],
+        color=PALETTE["grid"],
+        linewidth=0.8,
+        zorder=2,
+    )
+
+    for index, row in enumerate(table_rows(luck)):
+        y = header_y - 0.48 - index * LEDGER_ROW_HEIGHT
+        _rounded(
+            ax,
+            (0.55, y - LEDGER_ROW_HEIGHT / 2 + 0.06),
+            6.90,
+            LEDGER_ROW_HEIGHT - 0.12,
+            facecolor=PALETTE["row_alt"] if index % 2 == 0 else PALETTE["bg"],
+            edgecolor=PALETTE["grid"],
+            pad=0.04,
+            zorder=1,
+        )
+        ax.text(
+            columns[0][0],
+            y,
+            row.event,
+            fontsize=10,
+            ha=columns[0][2],
+            va="center",
+            color=PALETTE["text"],
+            zorder=3,
+        )
+        ax.text(
+            columns[1][0],
+            y,
+            row.outcome or "\u2014",
+            fontsize=10,
+            ha=columns[1][2],
+            va="center",
+            color=PALETTE["text_muted"],
+            zorder=3,
+        )
+        # A tenth of a point printed as "+0.0" reads as a rounding failure
+        # rather than as a small number — the waterfall's own rule, kept.
+        ax.text(
+            columns[2][0],
+            y,
+            f"{row.points:+.2f}" if abs(row.points) < 0.1 else f"{row.points:+.1f}",
+            fontsize=12,
+            fontweight="bold",
+            ha=columns[2][2],
+            va="center",
+            color=_luck_colour(row.points),
+            zorder=3,
+        )
+
+
+def plot_luck_ledger_card(
+    verdict: GameVerdict,
+    rows,
+    *,
+    points_per_epa: float,
+    colors: tuple[str, str] | None = None,
+    logos: dict | None = None,
+    names: dict | None = None,
+):
+    """The luck ledger as a portrait share image, in the baseball card's shape.
+
+    The waterfall answers "how did the margin get from there to here", which is
+    an article's question. This answers the one a reader scrolling past actually
+    asks — *who got the breaks, and on what* — and answers it in two numbers and
+    ten rows.
+
+    The ledger is checked against the verdict before anything is drawn, exactly
+    as the waterfall checks it: a decomposition printed under a headline it does
+    not explain is worse than no decomposition at all.
+
+    ``colors`` and ``logos`` are the game's, supplied by the caller rather than
+    looked up here. Returns ``(figure, axes)``.
+    """
+    home_colour, away_colour = colors or (HOME_HUE, AWAY_HUE)
+    logos = logos or {}
+    away, home = team_ledgers(verdict, rows, points_per_epa=points_per_epa)
+
+    gap = verdict.actual_margin - verdict.deserved_margin
+    drift = abs(home.net_points - gap)
+    if drift > 1e-6:
+        raise ValueError(
+            f"the ledger does not reconcile with {verdict.game_id}: its rows give the home "
+            f"team {home.net_points:+.4f} points of luck but the verdict gives it {gap:+.4f} "
+            f"({drift:.2e} apart). Stop rather than draw it."
+        )
+
+    width_in, height_in = LEDGER_CARD_SIZE_IN
+    with mpl.rc_context(STYLE | {"figure.dpi": CARD_DPI}):
+        fig = plt.figure(figsize=(width_in, height_in))
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.set_xlim(0, width_in)
+        ax.set_ylim(0, height_in)
+        ax.axis("off")
+
+        ax.text(
+            4.0,
+            LEDGER_TITLE_Y,
+            "Luck Ledger",
+            fontsize=30,
+            fontweight="bold",
+            ha="center",
+            va="top",
+            color=PALETTE["text"],
+            fontfamily=heading_font(),
+        )
+        header_y = LEDGER_HEADER_Y
+        for line, size in zip(card_header_lines(verdict), (14, 11), strict=True):
+            ax.text(
+                4.0,
+                header_y,
+                line,
+                fontsize=size,
+                ha="center",
+                va="top",
+                color=PALETTE["text_muted"],
+            )
+            header_y -= 0.30
+        ax.plot([0.55, 7.45], [LEDGER_BOXES_Y + 0.20] * 2, color=PALETTE["grid"], linewidth=0.8)
+
+        # The luck winner's box carries the two margins, because that team is the
+        # one the scoreboard flattered and the gap is what it was flattered by.
+        # The other box carries its own event count instead: the same line on
+        # both would print the game's one fact twice.
+        winner = home if home.net_points >= away.net_points else away
+        margins = (
+            f"Actual margin {verdict.actual_margin:+.0f} \u2192 "
+            f"deserved {verdict.deserved_margin:+.1f}"
+        )
+        for luck, x_centre, colour in (
+            (away, 2.05, away_colour),
+            (home, 5.95, home_colour),
+        ):
+            _draw_team_box(
+                ax,
+                luck,
+                names,
+                x_centre=x_centre,
+                y_top=LEDGER_BOXES_Y,
+                colour=colour,
+                logo=logos.get(luck.team),
+                detail=margins if luck is winner else f"{luck.n_events} luck events",
+            )
+        # In the lane between the two boxes, at their own vertical middle.
+        ax.text(
+            4.0,
+            LEDGER_BOXES_Y - LEDGER_BOX_HEIGHT / 2,
+            "vs",
+            fontsize=16,
+            ha="center",
+            va="center",
+            style="italic",
+            color=PALETTE["text_muted"],
+        )
+
+        ax.plot([0.55, 7.45], [LEDGER_SWINGS_Y + 0.23] * 2, color=PALETTE["grid"], linewidth=0.8)
+        ax.text(
+            4.0,
+            LEDGER_SWINGS_Y,
+            "Biggest luck swings",
+            fontsize=17,
+            fontweight="bold",
+            ha="center",
+            va="top",
+            color=PALETTE["text"],
+            fontfamily=heading_font(),
+        )
+        ax.text(
+            4.0,
+            LEDGER_SWINGS_Y - 0.34,
+            f"Top {LEDGER_TOP_ROWS} per team",
+            fontsize=10,
+            ha="center",
+            va="top",
+            color=PALETTE["text_muted"],
+        )
+        ax.text(
+            4.0,
+            LEDGER_SWINGS_Y - 0.58,
+            SIGN_CONVENTION,
+            fontsize=9,
+            ha="center",
+            va="top",
+            style="italic",
+            color=PALETTE["text_muted"],
+        )
+
+        if not rows:
+            ax.text(
+                4.0,
+                4.60,
+                "This game had no luck events to re-price.\nThe deserved margin is the actual one.",
+                fontsize=14,
+                ha="center",
+                va="center",
+                color=PALETTE["text_muted"],
+            )
+            return fig, ax
+
+        columns = (
+            (1.00, "Event", "left"),
+            (4.55, "What happened", "center"),
+            (7.40, "Points", "right"),
+        )
+        for luck, y_top, colour in zip(
+            (away, home), LEDGER_SECTION_Y, (away_colour, home_colour), strict=True
+        ):
+            _draw_team_table(
+                ax,
+                luck,
+                names,
+                y_top=y_top,
+                colour=colour,
+                logo=logos.get(luck.team),
+                columns=columns,
+            )
         return fig, ax
 
 

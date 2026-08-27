@@ -39,10 +39,11 @@ from nfl_simulator.plots import (
     plot_bootstrap_distribution,
     plot_game_card,
     plot_luck_ledger,
+    plot_luck_ledger_card,
     verdict_from_row,
 )
 from nfl_simulator.style import finalize
-from nfl_simulator.teams import pair_colors, team_logo
+from nfl_simulator.teams import pair_colors, team_logo, team_name
 
 GAMES_ARTIFACT = "dtw_games_v13.parquet"
 LEDGER_ARTIFACT = "dtw_ledger_v13.parquet"
@@ -57,7 +58,11 @@ POSTERIOR_DRAWS = 200
 COIN_DRAWS = 800
 REPLAY_TOLERANCE = 1e-9
 
-SUFFIXES = ("dtw", "luck_ledger", "card")
+# `luck_ledger` is the portrait share image; `waterfall` is the same ledger as
+# an article figure. Round 1 shipped the waterfall under the `luck_ledger` name
+# and the maintainer needed help reading it — a waterfall is a chart type most people have
+# not been taught, which is fine in an article and wrong on a timeline.
+SUFFIXES = ("dtw", "luck_ledger", "card", "waterfall")
 
 # The distribution's shipped reading, chosen by looking at the eight variants
 # `research/59_dtw_variants.py` renders (document 42 §1). Three-point bins pool
@@ -271,7 +276,7 @@ def kick_distances(game_id: str) -> dict:
 
 
 def render_game(game_id: str, out_dir: Path | None = None) -> list[Path]:
-    """Write this game's three PNGs and return their paths, in ``SUFFIXES`` order.
+    """Write this game's four PNGs and return their paths, in ``SUFFIXES`` order.
 
     The overtime sidebar is attached to the two wide figures whenever the game
     went to overtime, because document 16's refusal is a fact about *those*
@@ -289,7 +294,9 @@ def render_game(game_id: str, out_dir: Path | None = None) -> list[Path]:
     ledger = sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
     rows = prepare_rows(ledger, verdict, kick_distances(game_id))
     colours = pair_colors(verdict.home_team, verdict.away_team)
-    logos = {team: team_logo(team) for team in (verdict.home_team, verdict.away_team)}
+    sides = (verdict.home_team, verdict.away_team)
+    logos = {team: team_logo(team) for team in sides}
+    names = {team: team_name(team) for team in sides}
     toss = sources.toss(verdict) if verdict.went_to_overtime else None
 
     written = []
@@ -300,6 +307,15 @@ def render_game(game_id: str, out_dir: Path | None = None) -> list[Path]:
             )
             attach_overtime_sidebar(fig, ax, verdict, toss)
         elif suffix == "luck_ledger":
+            fig, _ax = plot_luck_ledger_card(
+                verdict,
+                rows,
+                points_per_epa=sources.slope,
+                colors=colours,
+                logos=logos,
+                names=names,
+            )
+        elif suffix == "waterfall":
             fig, ax = plot_luck_ledger(
                 verdict, rows, points_per_epa=sources.slope, colors=colours, logos=logos
             )
@@ -312,7 +328,7 @@ def render_game(game_id: str, out_dir: Path | None = None) -> list[Path]:
                 out_dir / figure_filename(verdict, suffix),
                 # The card's square shape is the point of it, and `tight` would
                 # crop it to whatever its content happened to fill.
-                bbox_inches=None if suffix == "card" else "tight",
+                bbox_inches=None if suffix in ("card", "luck_ledger") else "tight",
             )
         )
     return written

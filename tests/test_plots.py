@@ -15,6 +15,7 @@ presents it.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 import matplotlib
 import numpy as np
@@ -47,7 +48,10 @@ from nfl_simulator.plots import (  # noqa: E402
     plot_bootstrap_distribution,
     plot_game_card,
     plot_luck_ledger,
+    plot_luck_ledger_card,
     running_totals,
+    table_rows,
+    team_ledgers,
 )
 from nfl_simulator.style import (  # noqa: E402
     CLASH_DISTANCE,
@@ -569,7 +573,7 @@ def test_the_legend_names_only_the_directions_the_game_actually_has():
         verdict(actual_margin=8.0, deserved_margin=8.0 - gap), rows, points_per_epa=PPE
     )
     labels = [t.get_text() for t in ax.get_legend().get_texts()]
-    assert labels == ["moves the margin toward DET"]
+    assert labels == ["luck that helped MIN"]
 
 
 # --------------------------------------------------------------------------
@@ -1375,7 +1379,300 @@ def test_the_annotated_figure_reserves_a_clear_band_above_its_tallest_bar():
     fig.canvas.draw()
     tallest = max(patch.get_height() for patch in ax.patches)
     callout = next(t for t in ax.texts if "deserved to win" in t.get_text())
-    floor = ax.transData.inverted().transform(
-        (0, callout.get_window_extent().y0)
-    )[1]
+    floor = ax.transData.inverted().transform((0, callout.get_window_extent().y0))[1]
     assert floor > tallest, "the callout sits on a bar"
+
+
+# --------------------------------------------------------------------------
+# the luck ledger card — figure workshop round 2, Part B
+# --------------------------------------------------------------------------
+
+
+def card_row(
+    luck_epa: float,
+    *,
+    component: str = "field_goal",
+    event_class: str = "40-44 yd",
+    charged_team: str = "GB",
+    play_id: float = 1.0,
+    actual: float = 0.0,
+    opponent: str = "DET",
+    kick_distance: float | None = None,
+) -> dict:
+    """A committed ledger row with the three keys `render.prepare_rows` adds."""
+    return {
+        "play_id": play_id,
+        "component": component,
+        "event_class": event_class,
+        "charged_team": charged_team,
+        "luck_epa": luck_epa,
+        "actual": actual,
+        "opponent": opponent,
+        "kick_distance": kick_distance,
+    }
+
+
+def gb_det_rows() -> list[dict]:
+    """Seven events: five charged to GB, two to DET, none of them tiny."""
+    return [
+        card_row(3.8, play_id=1.0, kick_distance=41.0),
+        card_row(3.7, play_id=2.0, kick_distance=42.0),
+        card_row(3.6, play_id=3.0, kick_distance=38.0),
+        card_row(3.4, play_id=4.0, component="fumble", event_class="punt/live"),
+        card_row(2.9, play_id=5.0, component="fumble", event_class="pass/live"),
+        card_row(-3.1, play_id=6.0, charged_team="DET", opponent="GB", kick_distance=55.0),
+        card_row(
+            -0.6, play_id=7.0, charged_team="DET", opponent="GB", kick_distance=39.0, actual=1.0
+        ),
+    ]
+
+
+def reconciling(rows, game=None) -> GameVerdict:
+    """The verdict those rows actually add up to."""
+    game = game or branded()
+    return replace(
+        game, deserved_margin=game.actual_margin - sum(r["luck_epa"] for r in rows) * PPE
+    )
+
+
+def ledger_card(rows=None, game=None, **kwargs):
+    rows = gb_det_rows() if rows is None else rows
+    return plot_luck_ledger_card(reconciling(rows, game), rows, points_per_epa=PPE, **kwargs)
+
+
+# --- the arithmetic -------------------------------------------------------
+
+
+def test_the_two_headline_numbers_are_one_number_with_two_signs():
+    """Luck is zero-sum: a point the scoreboard gave one team it took from the
+    other, so the two nets are the gap between the two margins, mirrored."""
+    rows = gb_det_rows()
+    game = reconciling(rows)
+    away, home = team_ledgers(game, rows, points_per_epa=PPE)
+    assert away.team == "GB"
+    assert home.team == "DET"
+    assert away.net_points + home.net_points == pytest.approx(0.0, abs=1e-9)
+    assert abs(home.net_points) == pytest.approx(abs(game.actual_margin - game.deserved_margin))
+
+
+def test_the_team_the_scoreboard_flattered_is_the_one_with_the_positive_luck():
+    """DET won by 8 and deserved less; every point of that gap is DET's luck."""
+    away, home = team_ledgers(reconciling(gb_det_rows()), gb_det_rows(), points_per_epa=PPE)
+    assert home.net_points > 0
+    assert away.net_points < 0
+
+
+def test_a_row_is_signed_toward_the_team_whose_table_it_sits_in():
+    """A missed field goal is points GB did not get, so GB's table prints it red."""
+    away, _home = team_ledgers(reconciling(gb_det_rows()), gb_det_rows(), points_per_epa=PPE)
+    missed = next(row for row in away.rows if row.event == "41-yd field goal")
+    assert missed.points == pytest.approx(-3.8 * PPE)
+    assert missed.outcome == "missed"
+
+
+def test_each_team_s_table_holds_its_own_events_biggest_first():
+    away, home = team_ledgers(reconciling(gb_det_rows()), gb_det_rows(), points_per_epa=PPE)
+    assert [row.event for row in home.rows] == ["55-yd field goal", "39-yd field goal"]
+    assert away.n_events == 5
+    sizes = [abs(row.points) for row in away.rows]
+    assert sizes == sorted(sizes, reverse=True)
+
+
+def test_a_row_label_is_the_plain_words_the_rest_of_the_product_prints():
+    away, _home = team_ledgers(reconciling(gb_det_rows()), gb_det_rows(), points_per_epa=PPE)
+    assert away.rows[0].label == plain_label(gb_det_rows()[0])
+
+
+def test_a_table_shows_five_rows_and_folds_whatever_is_left_into_one():
+    rows = gb_det_rows() + [
+        card_row(1.1, play_id=8.0, kick_distance=44.0),
+        card_row(0.9, play_id=9.0, kick_distance=47.0),
+    ]
+    away, _home = team_ledgers(reconciling(rows), rows, points_per_epa=PPE)
+    shown = table_rows(away)
+    assert len(shown) == 6
+    assert shown[-1].event == "and 2 more"
+    assert shown[-1].points == pytest.approx(sum(row.points for row in away.rows[5:]))
+
+
+def test_a_team_with_five_or_fewer_events_has_nothing_to_fold():
+    away, home = team_ledgers(reconciling(gb_det_rows()), gb_det_rows(), points_per_epa=PPE)
+    assert len(table_rows(away)) == 5
+    assert len(table_rows(home)) == 2
+
+
+# --- the figure -----------------------------------------------------------
+
+
+def test_the_card_is_portrait_because_it_is_a_share_image():
+    fig, _ax = ledger_card()
+    assert fig.get_figheight() > fig.get_figwidth()
+
+
+def test_the_luck_winner_s_headline_is_green_and_the_loser_s_red():
+    fig, ax = ledger_card()
+    headlines = [t for t in ax.texts if t.get_text().endswith("points of luck")]
+    assert len(headlines) == 2
+    colours = {matplotlib.colors.to_hex(t.get_color()) for t in headlines}
+    assert colours == {PALETTE["good"].lower(), PALETTE["bad"].lower()}
+    green = next(
+        t for t in headlines if matplotlib.colors.to_hex(t.get_color()) == PALETTE["good"].lower()
+    )
+    red = next(
+        t for t in headlines if matplotlib.colors.to_hex(t.get_color()) == PALETTE["bad"].lower()
+    )
+    assert green.get_text().startswith("+")
+    assert red.get_text().startswith("-")
+
+
+def test_the_card_states_the_sign_convention_its_points_column_uses():
+    fig, _ax = ledger_card()
+    assert (
+        "Points are what the scoreboard gave the team beyond what the play deserved."
+        in figure_text(fig)
+    )
+
+
+def test_the_luck_winner_s_box_carries_the_two_margins():
+    fig, _ax = ledger_card()
+    game = reconciling(gb_det_rows())
+    assert f"Actual margin +8 \u2192 deserved {game.deserved_margin:+.1f}" in figure_text(fig)
+
+
+def test_the_other_box_counts_that_team_s_own_luck_events():
+    fig, _ax = ledger_card()
+    assert "5 luck events" in figure_text(fig)
+
+
+def test_the_card_carries_the_header_the_baseball_ledger_carries():
+    fig, _ax = ledger_card()
+    text = figure_text(fig)
+    assert "Luck Ledger" in text
+    assert "GB @ DET" in text
+    assert "Final: GB 23, DET 31" in text
+    assert "DTW: GB 95% / DET 5%" in text
+
+
+def test_the_card_names_its_rows_in_plain_words():
+    fig, _ax = ledger_card()
+    text = figure_text(fig)
+    assert "41-yd field goal" in text
+    assert "recovered by DET" in text
+    assert "missed" in text
+
+
+def test_the_card_refuses_a_ledger_that_does_not_reconcile():
+    """A decomposition under a headline it does not explain is worse than none."""
+    with pytest.raises(ValueError, match="reconcile"):
+        plot_luck_ledger_card(branded(), gb_det_rows(), points_per_epa=PPE)
+
+
+def test_a_game_with_no_luck_events_is_a_sentence_rather_than_two_empty_tables():
+    game = replace(branded(), deserved_margin=branded().actual_margin)
+    fig, _ax = plot_luck_ledger_card(game, [], points_per_epa=PPE)
+    assert "no luck events" in figure_text(fig).lower()
+
+
+def test_a_team_with_fewer_than_five_events_renders_without_error():
+    rows = gb_det_rows()[:3]
+    fig, _ax = plot_luck_ledger_card(reconciling(rows), rows, points_per_epa=PPE)
+    assert "41-yd field goal" in figure_text(fig)
+
+
+# --------------------------------------------------------------------------
+# the waterfall, re-read — round 2, Part B
+# --------------------------------------------------------------------------
+
+
+def test_a_bar_wears_the_colour_of_the_team_the_lucky_break_helped():
+    """Round 1: GB missing a field goal was drawn in GB's colour, because
+    neutralising it moves the margin toward GB. It is DET's lucky break, and a
+    reader who knows that reads the old figure backwards."""
+    rows = [ledger_row(3.42, charged_team="GB", play_id=1.0)]
+    game = replace(branded(), deserved_margin=8.0 - 3.42 * PPE)
+    _fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE, colors=(DET_BLUE, GB_GREEN))
+    assert matplotlib.colors.to_hex(ax.patches[1].get_facecolor()) == DET_BLUE.lower()
+
+
+def test_the_waterfall_legend_says_who_the_luck_helped():
+    rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
+    game = replace(branded(), deserved_margin=8.0 - (3.42 - 0.80) * PPE)
+    _fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    labels = {t.get_text() for t in ax.get_legend().get_texts()}
+    assert labels == {"luck that helped GB", "luck that helped DET"}
+
+
+def test_the_waterfall_carries_the_same_luck_arrow_the_distribution_does():
+    _fig, ax = waterfall()
+    label = next(t for t in ax.texts if t.get_text().startswith("luck moved the margin"))
+    assert label.get_text() == "luck moved the margin 16.3 points toward DET"
+
+
+def test_the_waterfall_title_starts_at_the_figure_margin_not_at_the_axes():
+    """The row labels are sentences, so the axes starts a third of the way in
+    and the title went with it, leaving a hole where the title should be."""
+    fig, ax = waterfall()
+    fig.canvas.draw()
+    heading = next(t for t in fig.findobj(matplotlib.text.Text) if t.get_text() == "Luck Ledger")
+    assert heading.get_window_extent().x0 < ax.get_window_extent().x0
+
+
+def test_a_row_carries_its_club_s_mark_beside_its_label():
+    """Two end bars and one event row, each marked."""
+    logos = {"GB": synthetic_mark(), "DET": synthetic_mark((200, 30, 30))}
+    _fig, ax = waterfall(logos=logos)
+    assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 3
+
+
+def test_a_folded_row_has_no_club_to_mark():
+    """ "4 events under 0.1 pt" is not one team's event, so it gets no mark."""
+    rows = [ledger_row(3.42, charged_team="GB", play_id=1.0)] + [
+        ledger_row(0.02, charged_team="GB", play_id=float(index)) for index in (2, 3)
+    ]
+    game = replace(branded(), deserved_margin=8.0 - (3.42 + 0.04) * PPE)
+    _fig, ax = plot_luck_ledger(
+        game, rows, points_per_epa=PPE, logos={"GB": synthetic_mark(), "DET": synthetic_mark()}
+    )
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    assert any("events under" in label for label in labels)
+    assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 3
+
+
+def test_the_two_tables_never_run_into_each_other():
+    """`GB_DET_23-31--95-5_luck_ledger.png`: a nine-event team fills six rows,
+    and the home team's accent bar was drawn straight through the last of them."""
+    rows = gb_det_rows() + [
+        card_row(1.1, play_id=8.0, kick_distance=44.0),
+        card_row(0.9, play_id=9.0, kick_distance=47.0),
+    ]
+    _fig, ax = plot_luck_ledger_card(reconciling(rows), rows, points_per_epa=PPE)
+    wide = [patch.get_bbox() for patch in ax.patches if patch.get_bbox().width > 5.0]
+    accents = [box for box in wide if box.height < 0.2]
+    row_rects = [box for box in wide if box.height >= 0.2]
+    assert len(accents) == 2, "one accent bar per team section"
+    assert len(row_rects) >= 8
+    for accent in accents:
+        straddling = [box for box in row_rects if box.y0 < accent.y1 and box.y1 > accent.y0]
+        assert not straddling, "a table row runs through a section's accent bar"
+    assert min(box.y0 for box in row_rects) > 0.0, "the last row runs off the card"
+
+
+def test_the_vs_between_the_two_boxes_is_not_buried_under_them():
+    fig, ax = plot_luck_ledger_card(reconciling(gb_det_rows()), gb_det_rows(), points_per_epa=PPE)
+    fig.canvas.draw()
+    versus = next(t for t in ax.texts if t.get_text() == "vs").get_window_extent()
+    boxes = [p.get_window_extent() for p in ax.patches if p.get_window_extent().width > 200]
+    assert boxes
+    assert not any(box.overlaps(versus) for box in boxes)
+
+
+def test_a_row_worth_less_than_a_tenth_of_a_point_is_not_printed_as_zero():
+    """ "+0.0" reads as a rounding failure rather than as a small number."""
+    rows = [
+        card_row(0.02, play_id=1.0, component="extra_point", event_class="xp", actual=1.0),
+        card_row(3.0, play_id=2.0, kick_distance=41.0),
+    ]
+    fig, _ax = plot_luck_ledger_card(reconciling(rows), rows, points_per_epa=PPE)
+    text = figure_text(fig)
+    assert "+0.0 " not in text and not text.endswith("+0.0")
+    assert "-0.02" in text

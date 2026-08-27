@@ -1,4 +1,4 @@
-"""Rendering one game to three PNGs.
+"""Rendering one game to four PNGs.
 
 Nothing here reads a committed artifact or a network. `render_game` itself is
 exercised by `research/58_brand_figures.py`, which has the artifacts; what is
@@ -27,6 +27,7 @@ from nfl_simulator.plots import (
     plot_bootstrap_distribution,
     plot_game_card,
     plot_luck_ledger,
+    plot_luck_ledger_card,
 )
 from nfl_simulator.render import SUFFIXES, figure_filename, prepare_rows
 from nfl_simulator.style import PALETTE, finalize
@@ -79,12 +80,19 @@ def test_the_filename_follows_the_baseball_pattern(game):
 
 def test_every_suffix_names_a_different_file(game):
     names = {figure_filename(game, suffix) for suffix in SUFFIXES}
-    assert len(names) == len(SUFFIXES) == 3
+    assert len(names) == len(SUFFIXES) == 4
     assert names == {
         "GB_DET_23-31--95-5_dtw.png",
         "GB_DET_23-31--95-5_luck_ledger.png",
         "GB_DET_23-31--95-5_card.png",
+        "GB_DET_23-31--95-5_waterfall.png",
     }
+
+
+def test_the_share_ledger_and_the_article_waterfall_are_different_figures():
+    """Round 1 shipped the waterfall under the `luck_ledger` name, and the maintainer
+    needed help reading it. The share image is the card; the waterfall stays."""
+    assert SUFFIXES == ("dtw", "luck_ledger", "card", "waterfall")
 
 
 def test_the_shares_in_the_filename_sum_to_a_hundred(game):
@@ -149,18 +157,21 @@ def figures(game):
     colours = ("#0076B6", "#203731")
     return {
         "dtw": plot_bootstrap_distribution(reconciling, colors=colours)[0],
-        "luck_ledger": plot_luck_ledger(reconciling, rows, points_per_epa=PPE, colors=colours)[0],
+        "luck_ledger": plot_luck_ledger_card(reconciling, rows, points_per_epa=PPE, colors=colours)[
+            0
+        ],
         "card": plot_game_card(reconciling, colors=colours)[0],
+        "waterfall": plot_luck_ledger(reconciling, rows, points_per_epa=PPE, colors=colours)[0],
     }
 
 
-@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card"])
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
 def test_every_saved_figure_lands_on_the_house_cream(game, tmp_path, suffix):
     path = finalize(figures(game)[suffix], tmp_path / f"{suffix}.png")
     assert Image.open(path).convert("RGB").getpixel((2, 2)) == CREAM
 
 
-@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card"])
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
 def test_every_saved_figure_carries_its_data_credit(game, tmp_path, suffix):
     """nflverse asks for credit, so no figure leaves this module without it."""
     path = finalize(figures(game)[suffix], tmp_path / f"{suffix}.png")
