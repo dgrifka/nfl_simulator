@@ -25,6 +25,7 @@ so a game with no luck events returns its own result exactly.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -37,6 +38,12 @@ from nfl_simulator.components import (
     FumbleBaseline,
     fg_attempt_mask,
     xp_attempt_mask,
+)
+from nfl_simulator.dropped_picks import (
+    FIRST_CHARTED_SEASON,
+    DroppedPickModel,
+    event_class_for,
+    worthy_throw_frame,
 )
 from nfl_simulator.fg_model import FieldGoalModel, Weather, sanitize_weather
 from nfl_simulator.ledger import Ledger, LedgerEntry
@@ -93,6 +100,11 @@ class SimulationResult:
     margin_draws: np.ndarray
     ledger: Ledger
     total_luck_epa: float
+    # Which adjudication produced these numbers. `"v1.3"` is the shipped ledger;
+    # `"v1.3+dp"` says at least one dropped-pick row is in it (document 49 §5).
+    # The label describes the ledger, not the code path: a 2022+ game whose
+    # charting held no interceptable throw is v1.3, because its numbers are.
+    variant: str = "v1.3"
 
 
 def points_per_epa(games: pl.DataFrame) -> float:
@@ -303,6 +315,66 @@ def extra_point_events(
     return events
 
 
+def dropped_pick_events(
+    plays: pl.DataFrame,
+    ftn: pl.DataFrame | None,
+    model: DroppedPickModel | None,
+    n_draws: int,
+    rng: np.random.Generator,
+) -> list[LuckEvent]:
+    """The **variant** component: interceptable throws, at the defence's rate.
+
+    Document 49, and nothing about it is v1.3. It fires only when a caller hands
+    in both a fitted model and a charting frame, which is why every v1.3 number
+    in the repo is reproduced by this function returning an empty list.
+
+    The branch is **escape**, and the offence is charged: ``actual`` is 1 when
+    the throw got away, ``expected`` is the posterior probability that it would,
+    and ``swing`` is what escaping was worth against being picked. Signs follow
+    `fumble_events` exactly — ``actual`` is the good branch for the charged team,
+    ``swing`` is its EPA value times the home sign — so a positive ``luck_epa``
+    still means good fortune for the home team no matter who threw the ball.
+
+    Coverage is a warning, never an error (document 49 §6, V-4). A pre-2022 game
+    asked for the variant gets v1.3, because FTN charting does not reach it; a
+    2022+ game whose charting has no worthy throws gets v1.3 too, because there
+    was nothing interceptable to adjudicate.
+    """
+    if model is None or ftn is None:
+        return []
+
+    season = int(plays["season"][0])
+    if season < FIRST_CHARTED_SEASON:
+        warnings.warn(
+            f"{plays['game_id'][0]} is a {season} game and FTN charting starts in "
+            f"{FIRST_CHARTED_SEASON}; the dropped-pick variant cannot be built for it "
+            "and the v1.3 adjudication is returned unchanged.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return []
+
+    events = []
+    for row in worthy_throw_frame(plays, ftn).iter_rows(named=True):
+        catch = model.catch_probability(row["defence_season"], row)
+        home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
+        swing = abs(model.swing_for(row["yardline_100"], row["down"]))
+        events.append(
+            LuckEvent(
+                play_id=float(row["play_id"]),
+                component="dropped_pick",
+                event_class=event_class_for(row["yardline_100"], row["down"]),
+                charged_team=row["posteam"],
+                # The escape branch. `1 - catch` rather than a second model
+                # call, so the two branches cannot drift apart by a draw.
+                actual=0.0 if row["interception"] else 1.0,
+                expected_draws=_resample(1.0 - catch, n_draws, rng),
+                swing=swing * home_sign,
+            )
+        )
+    return events
+
+
 def _resample(draws: np.ndarray, n_draws: int, rng: np.random.Generator) -> np.ndarray:
     """Match a posterior to the bootstrap's draw count.
 
@@ -369,6 +441,8 @@ def simulate_game(
     fg_model: FieldGoalModel | None,
     points_per_epa: float,
     xp_baseline: ExtraPointBaseline | None = None,
+    dropped_pick_model: DroppedPickModel | None = None,
+    ftn: pl.DataFrame | None = None,
     n_posterior_draws: int = DEFAULT_POSTERIOR_DRAWS,
     n_coin_draws: int = DEFAULT_COIN_DRAWS,
     seed: int = DEFAULT_SEED,
@@ -396,6 +470,13 @@ def simulate_game(
     events += extra_point_events(
         plays, xp_baseline, fg_model, n_posterior_draws, rng, include_blocked=include_blocked
     )
+    # Last, and after the shared random stream has been drawn from by every v1.3
+    # builder. Appending rather than interleaving is what keeps `None` byte-for-
+    # byte identical to v1.3: the draws the fumble and kicking coins consume do
+    # not move when the variant is switched on.
+    dropped_picks = dropped_pick_events(plays, ftn, dropped_pick_model, n_posterior_draws, rng)
+    events += dropped_picks
+    variant = "v1.3+dp" if dropped_picks else "v1.3"
 
     ledger = Ledger(tuple(event.to_entry() for event in events))
     total_luck_epa = ledger.total_luck_epa()
@@ -414,6 +495,7 @@ def simulate_game(
             margin_draws=np.full(1, actual_margin),
             ledger=ledger,
             total_luck_epa=total_luck_epa,
+            variant=variant,
         )
 
     margins, dtw_per_draw = bootstrap_margins(
@@ -432,4 +514,5 @@ def simulate_game(
         margin_draws=margins.ravel(),
         ledger=ledger,
         total_luck_epa=total_luck_epa,
+        variant=variant,
     )
