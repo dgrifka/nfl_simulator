@@ -504,7 +504,8 @@ def test_the_waterfall_draws_one_bar_per_row_plus_the_two_anchors():
     fig, ax = plot_luck_ledger(
         verdict(actual_margin=8.0, deserved_margin=8.0 - gap), rows, points_per_epa=PPE
     )
-    assert len(ax.patches) == 4
+    # The two side-of-zero tints are patches too, and are not bars.
+    assert len([p for p in ax.patches if p.get_gid() != "side-span"]) == 4
 
 
 def test_the_waterfall_names_both_ends_with_their_margins():
@@ -1107,18 +1108,33 @@ def test_the_verdict_pill_never_comes_down_onto_the_how_to_read_caption():
 def test_the_waterfall_end_bars_are_a_neutral_rather_than_a_team_colour():
     """The two ends are totals, not luck, so they never wear a side's colour."""
     fig, ax = waterfall(colors=("#0076B6", "#203731"))
-    ends = [p.get_facecolor()[:3] for p in ax.patches[:1]] + [
-        p.get_facecolor()[:3] for p in ax.patches[-1:]
-    ]
-    assert set(ends) == {matplotlib.colors.to_rgb(PALETTE["anchor"])}
+    bars = [p for p in ax.patches if p.get_gid() != "side-span"]
+    ends = {matplotlib.colors.to_hex(bars[0].get_facecolor())} | {
+        matplotlib.colors.to_hex(bars[-1].get_facecolor())
+    }
+    assert ends.isdisjoint({"#0076b6", "#203731"})
+
+
+def test_the_two_ends_are_ink_when_ink_is_legible_against_both_clubs():
+    fig, ax = waterfall(colors=("#E31837", "#4F2683"))
+    bars = [p for p in ax.patches if p.get_gid() != "side-span"]
+    assert matplotlib.colors.to_hex(bars[0].get_facecolor()) == matplotlib.colors.to_hex(
+        PALETTE["text"]
+    )
 
 
 def test_a_team_whose_primary_is_black_is_still_told_apart_from_the_totals():
     """`LV_KC_9-48--0-100_luck_ledger.png`: the Raiders' #000000 event bars and
     the waterfall's totals were the same colour, and the figure could not say
-    which bar was a total."""
+    which bar was a total.
+
+    Round 4 asked for the ends in ink, and ink is 0.18 from that same black.
+    The ends therefore step to the neutral on a matchup where ink would clash,
+    by the rule document 42 §3 already owns — so this defect stays closed.
+    """
     fig, ax = waterfall(colors=("#E31837", "#000000"))
-    faces = {matplotlib.colors.to_hex(p.get_facecolor()) for p in ax.patches}
+    bars = [p for p in ax.patches if p.get_gid() != "side-span"]
+    faces = {matplotlib.colors.to_hex(p.get_facecolor()) for p in bars}
     anchor = matplotlib.colors.to_hex(PALETTE["anchor"])
     assert anchor in faces
     assert all(colour_distance(colour, anchor) >= CLASH_DISTANCE for colour in faces - {anchor})
@@ -1805,6 +1821,13 @@ def test_a_team_with_fewer_than_five_events_renders_without_error():
 # --------------------------------------------------------------------------
 
 
+def _row_marks(ax) -> list:
+    """The marks on the rows and the two ends — not the two side headers'."""
+    return [
+        a for a in ax.artists if isinstance(a, AnnotationBbox) and a.get_gid() != "side-header-logo"
+    ]
+
+
 def test_a_bar_wears_the_colour_of_the_team_the_lucky_break_helped():
     """Round 1: GB missing a field goal was drawn in GB's colour, because
     neutralising it moves the margin toward GB. It is DET's lucky break, and a
@@ -1834,7 +1857,7 @@ def test_the_waterfall_title_starts_at_the_figure_margin_not_at_the_axes():
     and the title went with it, leaving a hole where the title should be."""
     fig, ax = waterfall()
     fig.canvas.draw()
-    heading = next(t for t in fig.findobj(matplotlib.text.Text) if t.get_text() == "Luck Ledger")
+    heading = next(t for t in fig.findobj(matplotlib.text.Text) if t.get_text() == "Luck Waterfall")
     assert heading.get_window_extent().x0 < ax.get_window_extent().x0
 
 
@@ -1842,7 +1865,7 @@ def test_a_row_carries_its_club_s_mark_beside_its_label():
     """Two end bars and one event row, each marked."""
     logos = {"GB": synthetic_mark(), "DET": synthetic_mark((200, 30, 30))}
     _fig, ax = waterfall(logos=logos)
-    assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 3
+    assert len(_row_marks(ax)) == 3
 
 
 def test_a_folded_row_has_no_club_to_mark():
@@ -1856,7 +1879,7 @@ def test_a_folded_row_has_no_club_to_mark():
     )
     labels = [t.get_text() for t in ax.get_yticklabels()]
     assert any("events under" in label for label in labels)
-    assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 3
+    assert len(_row_marks(ax)) == 3
 
 
 def test_the_two_tables_never_run_into_each_other():
@@ -2311,3 +2334,174 @@ def test_a_kick_row_never_wraps_onto_a_second_line_on_the_card():
     fig, ax = ledger_card(rows)
     events = [t.get_text() for t in ax.texts if "field goal" in t.get_text()]
     assert events and all("\n" not in event for event in events)
+
+
+# --------------------------------------------------------------------------
+# the waterfall reads without arithmetic — figure round 4, Part D
+# --------------------------------------------------------------------------
+
+
+def _renderer_for(fig):
+    fig.canvas.draw()
+    return fig.canvas.get_renderer()
+
+
+def _spans_of(ax) -> list:
+    return [p for p in ax.patches if p.get_gid() == "side-span"]
+
+
+def _bars_of(ax) -> list:
+    return [p for p in ax.patches if p.get_gid() != "side-span"]
+
+
+VALUE_LABEL = re.compile(r"^[+-]\d+\.\d+$")
+
+
+def _value_labels(ax) -> list:
+    return [t for t in ax.texts if VALUE_LABEL.fullmatch(t.get_text())]
+
+
+def det_min_rows() -> list[dict]:
+    """`2025_17_DET_MIN`'s ten bars, including the three that fold into one.
+
+    The D-4 game: a -0.3 bar and a folded -0.01 bar, both narrower than their
+    own labels, both of them printing through the zero rule in round 3.
+    """
+    points = [-2.7, -2.7, -1.9, -1.8, -1.8, -1.0, -0.8, 0.7, -0.3]
+    rows = [
+        card_row(-value / PPE, play_id=float(index), charged_team="DET", opponent="MIN")
+        for index, value in enumerate(points, start=1)
+    ]
+    rows += [
+        card_row(0.0033 / PPE, play_id=float(20 + index), charged_team="MIN", opponent="DET")
+        for index in range(3)
+    ]
+    return rows
+
+
+def det_min_waterfall(**kwargs):
+    rows = det_min_rows()
+    game = branded(game_id="2025_17_DET_MIN", home_team="MIN", away_team="DET", actual_margin=13.0)
+    return waterfall(reconciling(rows, game), rows, **kwargs)
+
+
+# --- the name ------------------------------------------------------------
+
+
+def test_the_waterfall_is_called_a_waterfall():
+    """Round 4: two figures called "Luck Ledger" is one name too few."""
+    fig, ax = waterfall()
+    heading = next(t for t in ax.texts if t.get_text().startswith("Luck"))
+    assert heading.get_text() == "Luck Waterfall"
+
+
+def test_the_share_card_keeps_the_luck_ledger_name():
+    """The card's layout is frozen, and its title is part of it."""
+    fig, _ax = ledger_card()
+    assert "Luck Ledger" in figure_text(fig)
+
+
+# --- the two sides of zero ------------------------------------------------
+
+
+def test_each_side_of_zero_is_shaded_in_the_club_that_wins_there():
+    fig, ax = waterfall(colors=(DET_BLUE, GB_GREEN))
+    spans = _spans_of(ax)
+    assert len(spans) == 2
+    left, right = sorted(spans, key=lambda p: p.get_window_extent(_renderer_for(fig)).x0)
+    assert matplotlib.colors.to_hex(left.get_facecolor()).upper() == GB_GREEN.upper()
+    assert matplotlib.colors.to_hex(right.get_facecolor()).upper() == DET_BLUE.upper()
+    assert all(span.get_alpha() == pytest.approx(0.06) for span in spans)
+
+
+def test_each_side_says_which_club_wins_there():
+    fig, ax = waterfall()
+    text = figure_text(fig)
+    assert "GB wins" in text and "DET wins" in text
+
+
+def test_each_side_header_wears_its_club_s_mark():
+    fig, ax = waterfall(logos={"DET": synthetic_mark(), "GB": synthetic_mark((10, 90, 20))})
+    headers = [a for a in ax.artists if getattr(a, "get_gid", lambda: None)() == "side-header-logo"]
+    assert len(headers) == 2
+
+
+# --- the two ends ---------------------------------------------------------
+
+
+def test_the_two_end_bars_never_wear_either_club_s_colour():
+    fig, ax = waterfall(colors=(DET_BLUE, GB_GREEN))
+    bars = _bars_of(ax)
+    ends = {
+        matplotlib.colors.to_hex(bars[0].get_facecolor()),
+        matplotlib.colors.to_hex(bars[-1].get_facecolor()),
+    }
+    assert len(ends) == 1
+    assert ends.isdisjoint({DET_BLUE.lower(), GB_GREEN.lower()})
+
+
+def test_the_two_end_bars_are_taller_than_every_event_bar():
+    """Ink alone cannot separate a total from a black club's bar, so height does."""
+    rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
+    gap = (3.42 - 0.80) * PPE
+    fig, ax = plot_luck_ledger(
+        verdict(actual_margin=8.0, deserved_margin=8.0 - gap), rows, points_per_epa=PPE
+    )
+    bars = _bars_of(ax)
+    events = [p.get_height() for p in bars[1:-1]]
+    assert bars[0].get_height() == pytest.approx(bars[-1].get_height())
+    assert bars[0].get_height() == pytest.approx(max(events) * 1.4)
+
+
+def test_the_ends_name_the_team_they_favour_instead_of_a_sign():
+    fig, ax = waterfall()
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    assert labels[0] == "Actual: DET by 8"
+    assert labels[-1] == "Deserved: GB by 8.3"
+
+
+def test_a_dead_level_deserved_margin_reads_as_even():
+    game = branded(deserved_margin=0.0)
+    fig, ax = waterfall(game)
+    assert [t.get_text() for t in ax.get_yticklabels()][-1] == "Deserved: even"
+
+
+# --- the value labels -----------------------------------------------------
+
+
+def test_a_value_label_sits_on_the_side_of_the_team_the_break_helped():
+    """A bar that helped DET puts its number on DET's side of the zero line."""
+    rows = [ledger_row(3.42, play_id=1.0)]
+    game = branded(deserved_margin=8.0 - 3.42 * PPE)
+    fig, ax = waterfall(game, rows)
+    fig.canvas.draw()
+    label = _value_labels(ax)[0]
+    bar = _bars_of(ax)[1]
+    # -2.9 points: the break helped DET, whose wins are right of zero, so the
+    # number goes to the right of the bar rather than trailing its left end.
+    assert label.xy[0] == pytest.approx(bar.get_x() + bar.get_width())
+    assert label.get_position()[0] > 0, "the offset runs toward DET's side"
+
+
+def test_every_value_label_carries_a_surface_so_a_rule_cannot_strike_it_through():
+    """D-4: `-0.3` printed through the dashed zero rule on `2025_17_DET_MIN`."""
+    fig, ax = det_min_waterfall()
+    labels = _value_labels(ax)
+    assert labels
+    assert all(label.get_bbox_patch() is not None for label in labels)
+
+
+def test_a_sub_half_point_bar_hangs_its_label_off_a_leader():
+    fig, ax = det_min_waterfall()
+    fig.canvas.draw()
+    leaders = [t for t in _value_labels(ax) if t.arrow_patch is not None]
+    assert {t.get_text() for t in leaders} == {"-0.3", "-0.01"}
+
+
+def test_no_two_value_labels_print_through_each_other_on_det_min():
+    fig, ax = det_min_waterfall()
+    fig.canvas.draw()
+    boxes = [t.get_window_extent() for t in _value_labels(ax)]
+    for index, box in enumerate(boxes):
+        for other in boxes[index + 1 :]:
+            assert not box.overlaps(other)

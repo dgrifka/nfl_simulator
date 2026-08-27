@@ -36,7 +36,13 @@ import numpy as np
 from matplotlib.patches import Patch
 from matplotlib.text import Annotation, Text
 
-from nfl_simulator.style import PALETTE, heading_font, rc_style
+from nfl_simulator.style import (
+    CLASH_DISTANCE,
+    PALETTE,
+    colour_distance,
+    heading_font,
+    rc_style,
+)
 
 # Document 10 Gate V-3's convention: a game whose verdict never changes across
 # the bootstrap. Its interval is a point, and reporting one is misleading.
@@ -1470,6 +1476,24 @@ def _draw_ledger_arrow(ax, verdict: GameVerdict, rows_y, x_rail: float) -> None:
     )
 
 
+# How much taller the two totals are than a luck event's bar. Round 4: ink
+# alone cannot separate a total from Las Vegas's #000000 — the two are 0.18
+# apart on the clash scale, under the 0.20 floor — so the ends carry a second,
+# non-colour channel. Height is the one that survives a black club, a very dark
+# green one, and a greyscale print.
+ANCHOR_HEIGHT = 1.4
+
+# Below this a bar is narrower than its own label, so the label is pushed clear
+# of the bar and joined to it by a leader. Document 42's D-4: on
+# `2025_17_DET_MIN` a -0.3 bar's label sat against the bar's edge and printed
+# through the dashed zero rule beside it.
+LEADER_FLOOR = 0.5
+
+# The side-of-zero tints. Faint enough to be a background and not a fill: the
+# bars are the data, and a wash that competes with them would say the halves of
+# the axis matter more than the events on it.
+SIDE_TINT_ALPHA = 0.06
+
 # Verbatim, and the first thing a reader of the waterfall needs. A waterfall
 # is a chart type most people have not been taught; three sentences is cheaper
 # than losing them.
@@ -1477,6 +1501,104 @@ HOW_TO_READ = (
     "Start at the actual margin. Each bar is one luck event re-priced at its "
     "expectation. The last bar is the margin the game deserved."
 )
+
+
+def anchor_colour(home_colour: str, away_colour: str) -> str:
+    """Ink for the two totals, stepping to the neutral when ink is a club's colour.
+
+    Round 4 asked for the ends in ink, so that Actual and Deserved read as the
+    figure's two anchors rather than as two more events. On most matchups that
+    is exactly right. On three of the round's five example games it is not: ink
+    is 0.18 from the Jets' and the Raiders' ``#000000`` and 0.15 from Green
+    Bay's ``#203731``, both inside document 42 §3's 0.20 clash floor, and
+    `NYJ_SF`'s totals came out the same colour as its luck bars — the defect
+    document 42 §6 closed in round 2.
+
+    So the ink is stepped by the clash rule the module already owns rather than
+    by taste: a game whose clubs leave ink legible gets ink, and one that does
+    not gets the neutral the ends wore before. The two totals are also 1.4x the
+    height of every event bar and named `Actual:` / `Deserved:` in their row
+    labels, so the reading never rests on the colour alone either way.
+    """
+    ink = PALETTE["text"]
+    if all(colour_distance(ink, colour) >= CLASH_DISTANCE for colour in (home_colour, away_colour)):
+        return ink
+    return PALETTE["anchor"]
+
+
+def anchor_label(kind: str, margin: float, verdict: GameVerdict) -> str:
+    """`"Actual: DET by 8"`, `"Deserved: GB by 8.3"`, `"Deserved: even"`.
+
+    Round 4: `Actual +8` asks a reader to hold the axis's subtraction in their
+    head and work out whose +8 it is. Naming the team does the arithmetic for
+    them, which is the whole brief for this figure.
+
+    The actual margin prints whole because it is a scoreboard and the deserved
+    one to a tenth because it is an estimate — the same rule
+    :func:`margin_sentence` already states.
+    """
+    if abs(margin) < 0.05:
+        return f"{kind}: even"
+    size = f"{abs(margin):.0f}" if kind == "Actual" else f"{abs(margin):.1f}"
+    return f"{kind}: {_favoured(margin, verdict)} by {size}"
+
+
+def _draw_side_tints(ax, verdict: GameVerdict, home_colour: str, away_colour: str, logos) -> None:
+    """Whose half of the axis is whose, said in a wash and in two words.
+
+    A margin axis has a meaning either side of zero that the axis label states
+    as a subtraction — `final margin (DET − GB)` — and that a reader has to
+    unpack before any bar means anything. Two faint tints and two corner labels
+    say it directly, so the figure can be read from the top down without ever
+    parsing the subtraction.
+    """
+    from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+    low, high = ax.get_xlim()
+    for span_low, span_high, colour in ((low, 0.0, away_colour), (0.0, high, home_colour)):
+        if span_high <= span_low:
+            continue
+        patch = ax.axvspan(span_low, span_high, facecolor=colour, alpha=SIDE_TINT_ALPHA, zorder=0)
+        patch.set_gid("side-span")
+
+    # The gap clears the club's mark, which is anchored at the corner itself.
+    for x, team, align, gap in (
+        (0.015, verdict.away_team, "left", 26),
+        (0.985, verdict.home_team, "right", -26),
+    ):
+        ax.annotate(
+            f"{team} wins",
+            xy=(x, 1.0),
+            xycoords="axes fraction",
+            xytext=(gap, -8),
+            textcoords="offset points",
+            ha=align,
+            va="top",
+            fontsize=9,
+            fontweight="bold",
+            color=PALETTE["text_muted"],
+            zorder=5,
+        )
+        logo = logos.get(team)
+        if logo is None:
+            continue
+        box = AnnotationBbox(
+            OffsetImage(
+                logo, zoom=logo_zoom(logo, ax.figure, max_width_in=0.22, max_height_in=0.15)
+            ),
+            (x, 1.0),
+            xybox=(0, -8),
+            xycoords="axes fraction",
+            boxcoords="offset points",
+            frameon=False,
+            annotation_clip=False,
+            # Anchored by its outer edge, so the mark sits inside the frame
+            # rather than half of it hanging over the figure's own edge.
+            box_alignment=(0.0 if align == "left" else 1.0, 1.0),
+            zorder=5,
+        )
+        box.set_gid("side-header-logo")
+        ax.add_artist(box)
 
 
 def plot_luck_ledger(
@@ -1502,6 +1624,7 @@ def plot_luck_ledger(
     Returns ``(figure, axes)``.
     """
     home_colour, away_colour = colors or (HOME_HUE, AWAY_HUE)
+    ends_colour = anchor_colour(home_colour, away_colour)
     logos = logos or {}
     bars = luck_bars(rows, points_per_epa=points_per_epa, floor=floor, chronological=chronological)
     gap = verdict.deserved_margin - verdict.actual_margin
@@ -1514,7 +1637,9 @@ def plot_luck_ledger(
         )
 
     with mpl.rc_context(STYLE):
-        fig, ax = plt.subplots(figsize=(7.6, 1.9 + 0.34 * (len(bars) + 2)))
+        # One row's worth of extra height pays for the band the two side headers
+        # sit in, so adding them does not squeeze the rows.
+        fig, ax = plt.subplots(figsize=(7.6, 1.9 + 0.34 * (len(bars) + 3)))
 
         if not bars:
             ax.text(
@@ -1538,8 +1663,8 @@ def plot_luck_ledger(
                 rows_y[0],
                 abs(verdict.actual_margin),
                 left=min(0.0, verdict.actual_margin),
-                height=0.62,
-                color=PALETTE["anchor"],
+                height=0.62 * ANCHOR_HEIGHT,
+                color=ends_colour,
                 zorder=2,
             )
             for y, bar, (begin, end) in zip(rows_y[1:-1], bars, spans, strict=True):
@@ -1556,25 +1681,53 @@ def plot_luck_ledger(
                     color=home_colour if bar.points < 0 else away_colour,
                     zorder=2,
                 )
+                # The number goes at the bar's **tip** — the end away from the
+                # running total the next bar picks up — so it lands on the side
+                # of zero belonging to the team the break helped. A bar that
+                # helped the home team runs leftward as it is neutralised, and
+                # its number therefore sits to its right, over the home team's
+                # half of the axis. Round 3 put every number at the running
+                # total instead, which put a DET-helping bar's value on GB's
+                # side and made the reader check the colour to know whose it was.
+                helped_home = bar.points < 0
+                small = abs(bar.points) < LEADER_FLOOR
                 ax.annotate(
                     # A folded row can land under half a tenth, and "-0.0" reads
                     # as a rounding failure rather than as a small number.
                     f"{bar.points:+.2f}" if abs(bar.points) < 0.1 else f"{bar.points:+.1f}",
-                    xy=(end, y),
-                    xytext=(6 if bar.points > 0 else -6, 0),
+                    xy=(begin, y),
+                    # D-4: a bar under half a point is narrower than its own
+                    # label, so the label is pushed clear of it and joined back
+                    # by a leader. Without the push it sat against the bar's
+                    # edge and, on `2025_17_DET_MIN`, through the zero rule.
+                    xytext=((22 if small else 6) * (1 if helped_home else -1), 0),
                     textcoords="offset points",
-                    ha="left" if bar.points > 0 else "right",
+                    ha="left" if helped_home else "right",
                     va="center",
                     fontsize=8,
                     color=PALETTE["text_muted"],
+                    # The shield is what stops the dashed zero rule striking the
+                    # number through when the running total sits close to zero.
+                    bbox=_shielded(),
+                    arrowprops=(
+                        {
+                            "arrowstyle": "-",
+                            "color": PALETTE["grid"],
+                            "linewidth": 0.8,
+                            "shrinkA": 1.0,
+                            "shrinkB": 1.0,
+                        }
+                        if small
+                        else None
+                    ),
                     zorder=5,
                 )
             ax.barh(
                 rows_y[-1],
                 abs(verdict.deserved_margin),
                 left=min(0.0, verdict.deserved_margin),
-                height=0.62,
-                color=PALETTE["anchor"],
+                height=0.62 * ANCHOR_HEIGHT,
+                color=ends_colour,
                 zorder=2,
             )
 
@@ -1607,12 +1760,15 @@ def plot_luck_ledger(
 
             ax.set_yticks(rows_y)
             ax.set_yticklabels(
-                [f"Actual {verdict.actual_margin:+.0f}"]
+                [anchor_label("Actual", verdict.actual_margin, verdict)]
                 + [bar.label for bar in bars]
-                + [f"Deserved {verdict.deserved_margin:+.1f}"],
+                + [anchor_label("Deserved", verdict.deserved_margin, verdict)],
                 fontsize=9,
             )
-            ax.invert_yaxis()
+            # Inverted by hand rather than by `invert_yaxis`, because the band
+            # the two side headers live in has to be reserved above the first
+            # row and an auto-scaled limit has no room in it.
+            ax.set_ylim(float(rows_y[-1]) + 0.9, float(rows_y[0]) - 1.3)
             ax.axvline(0.0, color=PALETTE["text_muted"], linewidth=1.0, dashes=(2, 3), zorder=1)
             # Only the directions the game actually has. A key for a colour that
             # appears nowhere sends a reader hunting the figure for it.
@@ -1651,6 +1807,7 @@ def plot_luck_ledger(
             rail_room = max(0.18 * (high - low), 0.8)
             x_rail = high + pad * 0.9
             ax.set_xlim(low - pad, high + pad + rail_room)
+            _draw_side_tints(ax, verdict, home_colour, away_colour, logos)
 
             ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
             ax.set_axisbelow(True)
@@ -1666,7 +1823,7 @@ def plot_luck_ledger(
         # axes fractions drifts further from the plot the more events a game had.
         # These are offsets in points, which hold still.
         draw_header(
-            ax, verdict, "Luck Ledger", caption=HOW_TO_READ, left_points=_left_edge_points(ax)
+            ax, verdict, "Luck Waterfall", caption=HOW_TO_READ, left_points=_left_edge_points(ax)
         )
 
         footer = [
