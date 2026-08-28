@@ -172,8 +172,17 @@ class GameVerdict:
             return f"{self.home_team} {home_share}% / {self.away_team} {away_share}%"
         return f"{self.away_team} {away_share}% / {self.home_team} {home_share}%"
 
-    def interval_note(self) -> str:
-        """The interval, with the two facts that stop it being read as a plain 89%."""
+    def interval_note(self, *, coverage: bool = True) -> str:
+        """The interval, with the two facts that stop it being read as a plain 89%.
+
+        ``coverage=False`` drops document 10's measured-coverage sentence and
+        keeps the interval. Round 4 took that sentence off the share card for a
+        reason that survives round 5's return of the margin plot to the share
+        image: beside the share the figure is about, a second percentage reads
+        as a competing answer rather than as a note on the first. The sentence
+        is not dropped from the product — the article figure still carries
+        it, for a reader who has already asked for the methodology.
+        """
         if self.is_degenerate:
             return (
                 "Every re-flip lands the same way, so the interval collapses to a point. "
@@ -185,11 +194,16 @@ class GameVerdict:
         # headline that names the away team would attribute the home team's
         # bounds to the away team's number, so it is mirrored to match.
         share_low, share_high = (low, high) if favoured == self.home_team else (1 - high, 1 - low)
-        return (
+        interval = (
             f"The {NOMINAL_COVERAGE} interval on {favoured}'s share runs "
-            f"{share_low * 100:.0f}–{share_high * 100:.0f}%. Document 10 measured that "
-            f"interval's coverage at {MEASURED_COVERAGE} on games with something to "
-            "adjudicate, so it runs about two points wide."
+            f"{share_low * 100:.0f}–{share_high * 100:.0f}%."
+        )
+        if not coverage:
+            return interval
+        return (
+            f"{interval} Document 10 measured that interval's coverage at "
+            f"{MEASURED_COVERAGE} on games with something to adjudicate, so it "
+            "runs about two points wide."
         )
 
     def score_line(self) -> str:
@@ -476,6 +490,48 @@ def _lift_colliding_label(fig, first: Annotation, second: Annotation) -> None:
     lifted.xyann = (4, 3)
 
 
+# The gap a rule label keeps from a corner label, in points. A bare
+# non-overlap is not enough: on `2025_17_DET_MIN` the flipped `Actual: MIN by
+# 13` stopped a pixel short of `MIN wins`, and a box edge against a capital M
+# reads as a clipped letter.
+CORNER_CLEARANCE = 8.0
+
+
+def _clear_corner_labels(fig, label: Annotation, corners: Sequence[Text]) -> None:
+    """Move a rule label out from under the corner label it landed on.
+
+    The two corner labels are the axis's key — `GB wins` over one half of it,
+    `DET wins` over the other — and they sit in the band the two rule labels
+    have hung in since document 37. A rule at either extreme of the axis puts
+    its label straight through one of them; `2021_14_LV_KC`, whose actual margin
+    is 39 on an axis that stops at 51, is the case that found this.
+
+    The label is flipped to the other side of its own rule first. That is the
+    cheaper move: it keeps the label on the row it belongs to and beside the
+    rule it names. A rule so close to a frame edge that the flip does not clear
+    the corner either is lifted above the top spine instead — where
+    :func:`_lift_colliding_label` already sends a label with nowhere else to be.
+    """
+    renderer = _renderer(fig)
+    clearance = CORNER_CLEARANCE / 72.0 * fig.dpi
+
+    def collides() -> bool:
+        box = label.get_window_extent(renderer)
+        return any(
+            box.overlaps(corner.get_window_extent(renderer).padded(clearance)) for corner in corners
+        )
+
+    if not collides():
+        return
+    label.set_horizontalalignment("right")
+    label.xyann = (-4, label.xyann[1])
+    if not collides():
+        return
+    label.set_horizontalalignment("left")
+    label.set_verticalalignment("bottom")
+    label.xyann = (4, 3)
+
+
 def _rule(
     ax, x: float, label: str, *, color: str, dashes, weight: float, boxed: bool = False
 ) -> Annotation:
@@ -496,7 +552,7 @@ def _rule(
         zorder=4,
         clip_on=False,
     )
-    return ax.annotate(
+    annotation = ax.annotate(
         label,
         xy=(x, 1.0),
         xycoords=ax.get_xaxis_transform(),
@@ -518,6 +574,13 @@ def _rule(
             else None
         ),
     )
+    # Round 5 made these labels read `Actual: DET by 8`, which is also how a
+    # verdict with no scoreboard on file opens its own subtitle. A gid is the
+    # only way left to tell the figure's two rules from the header's words. The
+    # zero rule carries no label and is not one of them.
+    if label:
+        annotation.set_gid("rule-label")
+    return annotation
 
 
 # Where the three annotations that share the top of the plot sit, in axes
@@ -694,6 +757,93 @@ def _draw_logo_legend(ax, entries, *, template: str = "{team} wins") -> None:
         )
 
 
+# How far under the axis the two direction labels sit, in points: clear of the
+# tick labels, and close enough to them to read as a key to the numbers rather
+# than as a caption under the figure.
+WINS_BY_OFFSET = -30
+
+
+def _clamp_into_axes(fig, label: Annotation) -> None:
+    """Pull a label back inside the plot when its anchor pushed it out.
+
+    The two direction labels are anchored to zero, which is where they mean the
+    most. A one-sided game puts zero hard against a frame edge, and the label
+    hanging off that side runs into the y axis or off the figure — measured on
+    `2021_14_LV_KC`, whose margins are all one team's.
+    """
+    box = label.get_window_extent(_renderer(fig))
+    frame = label.axes.get_window_extent()
+    shift = 0.0
+    if box.x0 < frame.x0:
+        shift = frame.x0 - box.x0
+    elif box.x1 > frame.x1:
+        shift = frame.x1 - box.x1
+    if shift:
+        x_points, y_points = label.xyann
+        label.xyann = (x_points + shift / fig.dpi * 72.0, y_points)
+
+
+def _part_labels(fig, left: Annotation, right: Annotation) -> None:
+    """Push the right-hand label clear of the left-hand one.
+
+    The two direction labels are both anchored to zero, so a game whose margins
+    all fall one side of it has both of them at the same pinned edge — and the
+    clamp that saved the first from the y axis walked it into the second.
+    `2021_14_LV_KC` printed `← LV wins by` and `KC wins by →` on top of
+    each other.
+    """
+    renderer = _renderer(fig)
+    gap = CORNER_CLEARANCE / 72.0 * fig.dpi
+    overlap = left.get_window_extent(renderer).x1 + gap - right.get_window_extent(renderer).x0
+    if overlap > 0:
+        x_points, y_points = right.xyann
+        right.xyann = (x_points + overlap / fig.dpi * 72.0, y_points)
+
+
+def _draw_wins_by_labels(fig, ax, verdict: GameVerdict, home_colour: str, away_colour: str) -> list:
+    """`← GB wins by` and `DET wins by →`, flanking the zero they are measured from.
+
+    The axis title was `final margin (DET − GB)` and the ticks were signed, so
+    the size of a win was only readable through a subtraction the reader had to
+    perform. With the ticks unsigned there is nothing left to subtract: each
+    half of the axis is one club's winning margin, and these two labels say
+    whose is whose and which way it grows.
+
+    They are anchored to zero rather than centred in their own halves so that
+    each arrow reads off the line the numbers count up from — `0` is one tick
+    above, between them.
+    """
+    low, high = ax.get_xlim()
+    zero = min(max(0.0, low), high)
+    labels = []
+    for colour, empty, text, align, gap in (
+        (away_colour, low >= 0.0, f"\u2190 {verdict.away_team} wins by", "right", -6),
+        (home_colour, high <= 0.0, f"{verdict.home_team} wins by \u2192", "left", 6),
+    ):
+        if empty:
+            continue
+        labels.append(
+            ax.annotate(
+                text,
+                xy=(zero, 0.0),
+                xycoords=ax.get_xaxis_transform(),
+                xytext=(gap, WINS_BY_OFFSET),
+                textcoords="offset points",
+                ha=align,
+                va="top",
+                fontsize=9,
+                fontweight="bold",
+                color=colour,
+                annotation_clip=False,
+            )
+        )
+    for label in labels:
+        _clamp_into_axes(fig, label)
+    if len(labels) == 2:
+        _part_labels(fig, *labels)
+    return labels
+
+
 def plot_bootstrap_distribution(
     verdict: GameVerdict,
     *,
@@ -702,13 +852,27 @@ def plot_bootstrap_distribution(
     logos: dict | None = None,
     callout: bool = False,
     arrow: bool = False,
-    legend_logos: bool = False,
+    coverage: bool = True,
 ):
     """Deserved margin across the bootstrap, with the actual margin marked.
 
     The x axis is the home team's margin, so everything right of zero is a home
     win and everything left of it is an away win. The two fills are the two
     teams; the share of the distribution on each side *is* the DTW% in the title.
+
+    **Round 5: the axis is read, not computed.** The ticks are unsigned, the
+    axis title is gone, and in its place two direction labels flank zero —
+    `← GB wins by` on one side and `DET wins by →` on the other, each in its own
+    club's colour. Each half of the axis carries that club's faint tint and its
+    name and mark in the corner above it, reusing the waterfall's
+    :func:`_draw_side_tints`; the two rule labels name a team rather than
+    carrying a sign, reusing its :func:`anchor_label`. There is no legend row:
+    the tints and the corner labels are the key, and a second one under the plot
+    would have named the same two clubs twice.
+
+    ``coverage=False`` drops document 10's measured-coverage sentence from the
+    footnote — see :meth:`GameVerdict.interval_note`. The share image passes it;
+    the article figure does not.
 
     Bins are one point of margin wide and aligned to the integer grid. A
     neutralised margin is a sum of a handful of EPA swings, so the distribution
@@ -788,35 +952,16 @@ def plot_bootstrap_distribution(
             # shown a shape and left to guess what its height means.
             ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(4, min_n_ticks=3))
             ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))
-            # Only the sides that have bars, for the reason the waterfall's
-            # legend gives: a key for a colour that appears nowhere sends a
-            # reader hunting the figure for it. A degenerate game has one.
-            sides = []
-            if any(edge < 0 for edge in left):
-                sides.append((verdict.away_team, away_colour))
-            if any(edge >= 0 for edge in left):
-                sides.append((verdict.home_team, home_colour))
-            if legend_logos:
-                _draw_logo_legend(ax, [(team, logos.get(team)) for team, _ in sides])
-            else:
-                ax.legend(
-                    handles=[
-                        Patch(facecolor=colour, label=f"{team} wins") for team, colour in sides
-                    ],
-                    loc="upper center",
-                    bbox_to_anchor=(0.5, -0.20),
-                    ncol=2,
-                    frameon=False,
-                    fontsize=9,
-                    handlelength=1.1,
-                    handleheight=0.9,
-                )
+            # No legend row. Round 5: the two half-plane tints and the two
+            # corner labels below name the same two clubs, and a legend under
+            # the plot said it a second time — in the row the two direction
+            # labels now occupy.
 
         _rule(ax, 0.0, "", color=PALETTE["text_muted"], dashes=(2, 3), weight=1.0)
         deserved_label = _rule(
             ax,
             verdict.deserved_margin,
-            f"Deserved {verdict.deserved_margin:+.1f}",
+            anchor_label("Deserved", verdict.deserved_margin, verdict),
             color=PALETTE["text_muted"],
             dashes=(5, 3),
             weight=1.6,
@@ -825,23 +970,31 @@ def plot_bootstrap_distribution(
         actual_label = _rule(
             ax,
             verdict.actual_margin,
-            f"Actual {verdict.actual_margin:+.0f}",
+            anchor_label("Actual", verdict.actual_margin, verdict),
             color=PALETTE["text"],
             dashes=(1, 0),
             weight=2.0,
             boxed=True,
         )
 
+        # Pinned before anything is measured against it. The bars and the three
+        # rules above are what set the limits — the rules are drawn with
+        # `clip_on=False` and still count toward the autoscale, which is why the
+        # zero line is always in frame — and a span added under an unresolved
+        # autoscale moves the limits the span itself was measured from.
+        ax.set_xlim(*ax.get_xlim())
+        corners = _draw_side_tints(ax, verdict, home_colour, away_colour, logos, shield=True)
+
         ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
         ax.set_axisbelow(True)
-        # "margin, DET perspective" asks the reader to hold a convention. The
-        # subtraction says the same thing and can be read straight off: right of
-        # zero is a DET win because DET's score is the one being subtracted from.
-        ax.set_xlabel(
-            f"final margin ({verdict.home_team} \u2212 {verdict.away_team})",
-            fontsize=9,
-            color=PALETTE["text_muted"],
+        # Unsigned ticks, and no axis title. `final margin (DET − GB)` is a
+        # subtraction the reader had to perform before `-15` meant anything;
+        # `15` under `← GB wins by` is the same fact with the arithmetic done.
+        ax.xaxis.set_major_formatter(
+            mpl.ticker.FuncFormatter(lambda value, _pos: f"{abs(value):g}")
         )
+        ax.set_xlabel("")
+        _draw_wins_by_labels(fig, ax, verdict, home_colour, away_colour)
 
         # The count is the number of re-adjudications actually drawn — 200
         # posterior draws x 800 coin draws on the shipped settings — not the
@@ -855,7 +1008,7 @@ def plot_bootstrap_distribution(
         caveat = ax.text(
             0,
             -0.42,
-            verdict.interval_note(),
+            verdict.interval_note(coverage=coverage),
             transform=ax.transAxes,
             fontsize=8,
             color=PALETTE["text_muted"],
@@ -873,6 +1026,10 @@ def plot_bootstrap_distribution(
         # say the ledger is one event short on purpose.
         if verdict.went_to_overtime:
             caveat.set_text(f"{caveat.get_text()}\n{OVERTIME_FOOTER}")
+        # Corners first, then each other: a label moved off a corner can land on
+        # the other rule's label, and the lift is the move that always works.
+        for rule_label in (deserved_label, actual_label):
+            _clear_corner_labels(fig, rule_label, corners)
         _lift_colliding_label(fig, deserved_label, actual_label)
 
         if callout:
@@ -1543,7 +1700,9 @@ def anchor_label(kind: str, margin: float, verdict: GameVerdict) -> str:
     return f"{kind}: {_favoured(margin, verdict)} by {size}"
 
 
-def _draw_side_tints(ax, verdict: GameVerdict, home_colour: str, away_colour: str, logos) -> None:
+def _draw_side_tints(
+    ax, verdict: GameVerdict, home_colour: str, away_colour: str, logos, *, shield: bool = False
+) -> list[Annotation]:
     """Whose half of the axis is whose, said in a wash and in two words.
 
     A margin axis has a meaning either side of zero that the axis label states
@@ -1551,6 +1710,15 @@ def _draw_side_tints(ax, verdict: GameVerdict, home_colour: str, away_colour: st
     unpack before any bar means anything. Two faint tints and two corner labels
     say it directly, so the figure can be read from the top down without ever
     parsing the subtraction.
+
+    ``shield`` backs each corner label in the module's cream, which the
+    distribution needs and the waterfall does not: the distribution's three
+    rules run the full height of the plot and cross this band, and on
+    `2018_05_GB_DET` the solid actual rule at +8 printed straight through
+    `DET wins`. It is document 42 D-4's device, applied to the same failure.
+
+    Returns the two corner labels, so a caller with its own furniture up there
+    can measure against them — see :func:`_clear_corner_labels`.
     """
     from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 
@@ -1562,11 +1730,12 @@ def _draw_side_tints(ax, verdict: GameVerdict, home_colour: str, away_colour: st
         patch.set_gid("side-span")
 
     # The gap clears the club's mark, which is anchored at the corner itself.
+    corners = []
     for x, team, align, gap in (
         (0.015, verdict.away_team, "left", 26),
         (0.985, verdict.home_team, "right", -26),
     ):
-        ax.annotate(
+        corner = ax.annotate(
             f"{team} wins",
             xy=(x, 1.0),
             xycoords="axes fraction",
@@ -1578,7 +1747,9 @@ def _draw_side_tints(ax, verdict: GameVerdict, home_colour: str, away_colour: st
             fontweight="bold",
             color=PALETTE["text_muted"],
             zorder=5,
+            bbox=_shielded() if shield else None,
         )
+        corners.append(corner)
         logo = logos.get(team)
         if logo is None:
             continue
@@ -1599,6 +1770,7 @@ def _draw_side_tints(ax, verdict: GameVerdict, home_colour: str, away_colour: st
         )
         box.set_gid("side-header-logo")
         ax.add_artist(box)
+    return corners
 
 
 def plot_luck_ledger(

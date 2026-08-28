@@ -39,7 +39,6 @@ from nfl_simulator.plots import (
     plot_game_card,
     plot_luck_ledger,
     plot_luck_ledger_card,
-    plot_team_points_distribution,
     verdict_from_row,
 )
 from nfl_simulator.style import finalize
@@ -73,16 +72,14 @@ ARTICLE_SUFFIX = "dtw_article"
 # The distribution's shipped reading, chosen by looking at the eight variants
 # `research/59_dtw_variants.py` renders (document 42 §1). Three-point bins pool
 # the reachable margins without smoothing between them; the callout states the
-# verdict in a sentence; the arrow says what luck moved and toward whom; and the
-# clubs' marks carry identity in place of two coloured swatches.
-DTW_FIGURE = {"bin_width": 3.0, "callout": True, "arrow": True, "legend_logos": True}
-
-# Round 4: the share image is the two teams' deserved points rather than the
-# margin. Same three-point bins, same callout, same marks in the legend — and no
-# luck arrow, because an arrow measures a distance along a margin axis and this
-# axis is a scoreboard. The margin histogram is not retired: it is what
-# `ARTICLE_SUFFIX` draws, where the overtime panel already lives.
-TEAM_POINTS_FIGURE = {"bin_width": 3.0, "callout": True, "legend_logos": True}
+# verdict in a sentence; and the arrow says what luck moved and toward whom.
+# Round 5 dropped the legend switch: the axis's own tints and corner labels are
+# the key now, on every figure this function draws.
+#
+# The share image and the article figure are the same figure at this reading and
+# differ in one thing — `coverage`, below — so the two call sites pass it
+# explicitly rather than leaving the difference to a default.
+DTW_FIGURE = {"bin_width": 3.0, "callout": True, "arrow": True}
 
 
 # --------------------------------------------------------------------------
@@ -371,22 +368,15 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
     written = []
     for suffix in SUFFIXES:
         if suffix == "dtw":
-            # The scoreline figure when the scoreboard is on file, which it is
-            # for every game with a schedule row. A game without one still gets
-            # a share image: the margin histogram it got before round 4.
-            if result.home_point_draws is not None:
-                fig, _ax = plot_team_points_distribution(
-                    verdict,
-                    result.home_point_draws,
-                    result.away_point_draws,
-                    colors=colours,
-                    logos=logos,
-                    **TEAM_POINTS_FIGURE,
-                )
-            else:
-                fig, _ax = plot_bootstrap_distribution(
-                    verdict, colors=colours, logos=logos, **DTW_FIGURE
-                )
+            # The margin distribution, with round 5's unsigned "wins by" axis.
+            # Round 4's per-team scoreline figure is withdrawn from the render
+            # path — `plot_team_points_distribution` is correct arithmetic and
+            # stays in the module, but a margin swing is not a per-team points
+            # swing, and drawing it as one put `GB 44 - DET 35` on a share
+            # image. Nothing renders it.
+            fig, _ax = plot_bootstrap_distribution(
+                verdict, colors=colours, logos=logos, coverage=False, **DTW_FIGURE
+            )
         elif suffix == "luck_ledger":
             fig, _ax = plot_luck_ledger_card(
                 verdict,
@@ -413,7 +403,11 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
         )
 
     if article and toss is not None:
-        fig, ax = plot_bootstrap_distribution(verdict, colors=colours, logos=logos, **DTW_FIGURE)
+        # The one difference from the share image: document 10's measured
+        # coverage, for a reader who has already asked for the methodology.
+        fig, ax = plot_bootstrap_distribution(
+            verdict, colors=colours, logos=logos, coverage=True, **DTW_FIGURE
+        )
         attach_overtime_sidebar(fig, ax, verdict, toss)
         written.append(finalize(fig, out_dir / figure_filename(verdict, ARTICLE_SUFFIX)))
     return written

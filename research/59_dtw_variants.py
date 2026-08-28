@@ -47,7 +47,7 @@ VARIANTS = {
     "V1": {"bin_width": 1.0, "callout": True},
     "V2": {"bin_width": 3.0, "callout": True},
     "V3": {"bin_width": 3.0, "callout": True, "arrow": True},
-    "V4": {"bin_width": 3.0, "callout": True, "arrow": True, "legend_logos": True},
+    "V4": {"bin_width": 3.0, "callout": True, "arrow": True},
 }
 
 

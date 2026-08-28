@@ -10,7 +10,6 @@ house cream with its data credit on it.
 
 from __future__ import annotations
 
-import re
 from dataclasses import replace
 
 import matplotlib
@@ -23,6 +22,7 @@ import pytest
 from PIL import Image
 
 from nfl_simulator.plots import (
+    MEASURED_COVERAGE,
     OVERTIME_FOOTER,
     GameVerdict,
     OvertimeToss,
@@ -31,7 +31,6 @@ from nfl_simulator.plots import (
     plot_game_card,
     plot_luck_ledger,
     plot_luck_ledger_card,
-    plot_team_points_distribution,
 )
 from nfl_simulator.render import (
     ARTICLE_SUFFIX,
@@ -188,15 +187,11 @@ def figures(game):
         game, deserved_margin=game.actual_margin - sum(r["luck_epa"] for r in rows) * PPE
     )
     colours = ("#0076B6", "#203731")
-    # Round 4: the `dtw` share image is the two teams' deserved points. The two
-    # draw arrays have to be this verdict's own margin draws split in two, which
-    # is what the figure checks before it draws anything.
-    away_draws = np.full(len(reconciling.margin_draws), float(reconciling.away_score))
-    home_draws = away_draws + np.asarray(reconciling.margin_draws, dtype=float)
+    # Round 5: the `dtw` share image is the margin distribution again, with the
+    # unsigned "wins by" axis. The per-team scoreline figure is withdrawn from
+    # the render path — a margin swing is not a per-team points swing.
     return {
-        "dtw": plot_team_points_distribution(reconciling, home_draws, away_draws, colors=colours)[
-            0
-        ],
+        "dtw": plot_bootstrap_distribution(reconciling, colors=colours, coverage=False)[0],
         "luck_ledger": plot_luck_ledger_card(reconciling, rows, points_per_epa=PPE, colors=colours)[
             0
         ],
@@ -232,21 +227,30 @@ def test_the_two_rule_labels_are_still_clear_on_the_branded_figure(game):
     """The restyle boxed the callouts, which made them wider — the fix still holds."""
     fig, ax = plot_bootstrap_distribution(game)
     fig.canvas.draw()
-    boxes = [
-        text.get_window_extent()
-        for text in ax.texts
-        if re.match(r"^(Actual|Deserved) [+-]", text.get_text())
-    ]
+    boxes = [text.get_window_extent() for text in ax.texts if text.get_gid() == "rule-label"]
     assert len(boxes) == 2
     assert not boxes[0].overlaps(boxes[1])
 
 
-def test_the_share_distribution_is_a_points_axis_and_the_article_one_a_margin(game):
-    """Round 4's swap: the timeline gets a scoreline, the article keeps the margin."""
+def test_the_share_and_the_article_are_the_same_margin_figure(game):
+    """Round 5 withdrew the scoreline swap: both are the "wins by" margin plot."""
     share = figures(game)["dtw"].axes[0]
     article, _ax = plot_bootstrap_distribution(game)
-    assert share.get_xlabel() == "points scored"
-    assert "final margin" in article.axes[0].get_xlabel()
+    for axes in (share, article.axes[0]):
+        assert axes.get_xlabel() == ""
+        assert {"\u2190 GB wins by", "DET wins by \u2192"} <= {
+            text.get_text() for text in axes.texts
+        }
+
+
+def test_the_share_drops_the_coverage_sentence_the_article_keeps(game):
+    """Round 4 §A: a second percentage beside the share reads as a competing one."""
+    share = " ".join(t.get_text() for t in figures(game)["dtw"].findobj(matplotlib.text.Text))
+    article = " ".join(
+        t.get_text() for t in plot_bootstrap_distribution(game)[0].findobj(matplotlib.text.Text)
+    )
+    assert MEASURED_COVERAGE not in share
+    assert MEASURED_COVERAGE in article
 
 
 def test_the_four_share_suffixes_did_not_change(game):
