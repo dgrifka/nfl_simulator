@@ -2797,6 +2797,18 @@ def section_tops(away: TeamLuck, home: TeamLuck) -> tuple[float, float]:
     return top, top - heights[0] - LEDGER_SECTION_GAP
 
 
+def sentence_case(text: str) -> str:
+    """The first character up, and every other character exactly as it was.
+
+    Not ``str.capitalize()``, which lowercases the rest of the string and would
+    turn `Drop · Dissly` into `Drop · dissly` and `Recovered by GB` into
+    `Recovered by gb` — the two things a cell is least allowed to get wrong. A
+    cell that opens on a digit — `41-yd field goal` — has no first letter to
+    lift and comes back unchanged.
+    """
+    return text[:1].upper() + text[1:]
+
+
 def _draw_team_table(ax, luck: TeamLuck, names, *, y_top, colour, logo, columns):
     """One club's table: accent bar, header, column names, then striped rows."""
     _rounded(ax, (0.55, y_top - 0.08), 6.90, 0.08, facecolor=colour, pad=0.02, zorder=2)
@@ -2858,10 +2870,13 @@ def _draw_team_table(ax, luck: TeamLuck, names, *, y_top, colour, logo, columns)
             pad=0.04,
             zorder=1,
         )
+        # Sentence case here rather than in `event_phrase`: these are column
+        # entries and each starts a line of its own, while the same phrase on
+        # the waterfall follows a club's mark and stays lower case.
         ax.text(
             columns[0][0],
             y,
-            row.event,
+            sentence_case(row.event),
             fontsize=10,
             ha=columns[0][2],
             va="center",
@@ -2871,7 +2886,7 @@ def _draw_team_table(ax, luck: TeamLuck, names, *, y_top, colour, logo, columns)
         ax.text(
             columns[1][0],
             y,
-            row.outcome or "\u2014",
+            sentence_case(row.outcome) or "\u2014",
             fontsize=10,
             ha=columns[1][2],
             va="center",

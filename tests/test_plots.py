@@ -1996,8 +1996,9 @@ def test_the_card_names_its_rows_in_plain_words():
     fig, _ax = ledger_card()
     text = figure_text(fig)
     assert "41-yd field goal" in text
-    assert "recovered by DET" in text
-    assert "missed" in text
+    # Sentence case since round 7; the team code inside the phrase is untouched.
+    assert "Recovered by DET" in text
+    assert "Missed" in text
 
 
 def test_the_card_refuses_a_ledger_that_does_not_reconcile():
@@ -2505,8 +2506,8 @@ def test_the_card_prints_the_make_probability_in_its_what_happened_column():
     ]
     fig, ax = ledger_card(rows)
     text = figure_text(fig)
-    assert "missed (88% kick)" in text
-    assert "missed (87% kick)" in text
+    assert "Missed (88% kick)" in text
+    assert "Missed (87% kick)" in text
     assert "41-yd field goal · Crosby" in text
 
 
@@ -3502,3 +3503,108 @@ def test_the_row_ticks_are_not_drawn_beside_a_column_they_no_longer_touch():
     already named, twice, by the mark and the label at the other end of it."""
     _fig, ax = marked_waterfall()
     assert all(tick.tick1line.get_markersize() == 0 for tick in ax.yaxis.get_major_ticks())
+
+
+# --------------------------------------------------------------------------
+# figure round 7, part B — the ledger card's cells are sentences
+# --------------------------------------------------------------------------
+
+# The x of the card's Event and What-happened columns, from `plot_luck_ledger_card`.
+CARD_CELL_COLUMNS = (1.00, 4.55)
+
+
+def card_cells(fig) -> list[str]:
+    """Every Event and What-happened cell drawn on a card, headers excluded."""
+    return [
+        text.get_text()
+        for text in fig.findobj(matplotlib.text.Text)
+        if text.get_text()
+        and round(text.get_fontsize(), 2) == 10.0
+        and round(text.get_position()[0], 2) in CARD_CELL_COLUMNS
+    ]
+
+
+def test_sentence_case_lifts_the_first_letter_and_touches_nothing_else():
+    from nfl_simulator.plots import sentence_case
+
+    assert sentence_case("drop · Dissly") == "Drop · Dissly"
+    assert sentence_case("recovered by LAC") == "Recovered by LAC"
+    assert sentence_case("dropped pick · thrown by Stroud") == "Dropped pick · thrown by Stroud"
+
+
+def test_a_cell_that_opens_on_a_number_is_left_alone():
+    """`41-yd field goal` has no first letter to lift, and `.capitalize()` would
+    also have flattened `Crosby` and `LAC` on the way past."""
+    from nfl_simulator.plots import sentence_case
+
+    assert sentence_case("41-yd field goal · Crosby") == "41-yd field goal · Crosby"
+    assert sentence_case("") == ""
+
+
+def variant_card_rows() -> list[dict]:
+    """One of each kind, charged to `branded()`'s two clubs, so every wording
+    the two columns can print is actually drawn on the card."""
+    return [
+        {
+            **catchable_row(luck_epa=-3.0, play_id=1.0),
+            "charged_team": "GB",
+            "opponent": "DET",
+        },
+        {
+            **pick_row(luck_epa=2.5, play_id=2.0),
+            "charged_team": "DET",
+            "opponent": "GB",
+        },
+        card_row(
+            -1.9,
+            play_id=3.0,
+            charged_team="DET",
+            opponent="GB",
+            component="fumble",
+            event_class="pass/live",
+        ),
+        card_row(
+            1.8, play_id=4.0, charged_team="GB", opponent="DET", kick_distance=41.0, expected=0.88
+        ),
+    ]
+
+
+def variant_card():
+    rows = variant_card_rows()
+    return plot_luck_ledger_card(reconciling(rows), rows, points_per_epa=PPE)
+
+
+def test_every_event_and_outcome_cell_opens_with_a_capital_or_a_digit():
+    fig, _ax = variant_card()
+    cells = card_cells(fig)
+    assert cells, "the card drew no table cells to check"
+    for cell in cells:
+        assert cell == "—" or cell[0].isupper() or cell[0].isdigit(), cell
+
+
+def test_the_card_prints_the_wordings_round_7_settled_on():
+    fig, _ax = variant_card()
+    cells = card_cells(fig)
+    assert "Drop · Dissly" in cells
+    assert "Dropped pick · thrown by Herbert" in cells
+    assert "Escaped (58% catch)" in cells
+    assert "Fumble on a pass" in cells
+    assert "Recovered by GB" in cells
+    assert "Missed (88% kick)" in cells
+
+
+def test_a_player_name_and_a_team_code_are_untouched_by_the_capital():
+    """`str.capitalize()` would have made these `Drop · dissly` and
+    `Recovered by lac`, which is the reason the helper is one character wide."""
+    cells = card_cells(variant_card()[0])
+    assert "Drop · dissly" not in cells
+    assert "Recovered by gb" not in cells
+
+
+def test_the_waterfall_keeps_its_lower_case_grammar_after_a_mark():
+    """The card's cell is a column entry and starts a sentence; a waterfall row
+    is a phrase that follows a club's mark, and it was not asked to change."""
+    rows = variant_card_rows()
+    _fig, ax = plot_luck_ledger(reconciling(rows), rows, points_per_epa=PPE)
+    labels = [label.get_text() for label in ax.get_yticklabels()]
+    assert "GB drop · Dissly (95% catch)" in labels
