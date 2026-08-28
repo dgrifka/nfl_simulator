@@ -593,13 +593,20 @@ def variant_pass(
     model,
     *,
     models_by_week: dict | None = None,
+    weeks_by_fold: dict | None = None,
     label: str = "variant",
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """The 2022-2025 variant arm, at v1.3's settings, with one model or eighteen.
+    """The 2022-2025 variant arm, at v1.3's settings, with one model or nineteen.
 
     ``models_by_week`` is document 52 §5's G-1: each game is scored by the fit
-    that never saw its week of season, so the pass runs once per week with that
-    week's model. ``model`` alone is round 4's in-sample arm.
+    that never saw its week of season, so the pass runs once per fold with that
+    fold's model. ``model`` alone is round 4's in-sample arm.
+
+    ``weeks_by_fold`` maps a fold key to the weeks it held out, and exists for
+    document 54's amendment F-2: the nineteenth fold holds out weeks 19-22
+    together, so a fold key is no longer always a week number. Omit it and each
+    key is read as its own single week, which is what rounds 5's eighteen folds
+    were.
     """
     if models_by_week is None:
         table, ledger = simulate_all(
@@ -616,8 +623,11 @@ def variant_pass(
         return table, ledger
 
     tables, ledgers = [], []
-    for week, fold_model in sorted(models_by_week.items()):
-        rows = ctx.pbp.filter((pl.col("season").is_in(FTN_SEASONS)) & (pl.col("week") == week))
+    for fold, fold_model in models_by_week.items():
+        weeks = (fold,) if weeks_by_fold is None else tuple(weeks_by_fold[fold])
+        rows = ctx.pbp.filter(
+            (pl.col("season").is_in(FTN_SEASONS)) & (pl.col("week").is_in(list(weeks)))
+        )
         if not rows.height:
             continue
         table, ledger = simulate_all(
@@ -632,6 +642,10 @@ def variant_pass(
         tables.append(table)
         ledgers.append(ledger)
     table = pl.concat(tables)
+    if table["game_id"].n_unique() != table.height:
+        raise SystemExit(
+            "a game was scored by more than one fold — the folds overlap. Stop and ask."
+        )
     print(
         f"\n  {label}: {table.height:,} games over {FTN_SEASONS[0]}-{FTN_SEASONS[-1]}, "
         f"each scored by the fit that excluded its week"

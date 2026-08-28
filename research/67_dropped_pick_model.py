@@ -7,8 +7,9 @@ writes the two artifacts the read side loads:
     research/outputs/trace_dropped_pick.nc
     research/outputs/dropped_pick_summary.json
 
-The model is document 43 §5's arm 2, at amendment A-2's sampler spec
-(4 x 2,000 draws after 2,000 tuning, `target_accept` 0.9, nutpie) — imported
+The model is document 43 §5's arm 2, at amendment **F-1**'s sampler spec
+(4 x 4,000 draws after 4,000 tuning, `target_accept` 0.95, nutpie; document 54
+raised it from A-2's 2,000/2,000/0.9 so the week-out folds converge) — imported
 from `research/61_dropped_pick_power.build_conversion_model`, not copied — and
 **without** document 47 §2's game effect `w_g`. Document 49 §2 states why: the
 8.5 pp of unexplained within-game correlation has no team owner, so excluding it
@@ -55,12 +56,22 @@ from nfl_simulator import paths  # noqa: E402
 from nfl_simulator.dropped_picks import build_swing_table  # noqa: E402
 from nfl_simulator.ingest import FTN_SEASONS, load_pbp  # noqa: E402
 
-# Document 49 §5 / amendment A-2, verbatim.
-DRAWS = 2000
-TUNE = 2000
+# Document 54's amendment F-1, verbatim. Round 5 fitted at amendment A-2's
+# 4 x 2,000 after 2,000 tuning, `target_accept` 0.9, and seven of the eighteen
+# week-out folds missed Gate C-1 on the variance components with zero
+# divergences in all eighteen — the chain-length failure A-2 itself was written
+# for. F-1 doubles the chains and raises `target_accept` for **every** fit,
+# folds and the default alike, so G-1's two arms are compared at one spec.
+DRAWS = 4000
+TUNE = 4000
 CHAINS = 4
-TARGET_ACCEPT = 0.9
+TARGET_ACCEPT = 0.95
 RANDOM_SEED = _power.RANDOM_SEED  # 20260827, the study's fit seed
+
+# The spec rounds 1-5 fitted at, kept so the round-4 reproduction tripwire below
+# can say whether it still applies. It does not under F-1, and saying so is
+# better than deleting the check and hoping a reader remembers why.
+A2_SPEC = (2000, 2000, 0.9)
 
 TRACE_NAME = "trace_dropped_pick.nc"
 SUMMARY_NAME = "dropped_pick_summary.json"
@@ -187,13 +198,14 @@ def fit(
     label: str = "the full frame",
     stop_on_c1: bool = True,
 ) -> tuple[object, dict]:
-    """Arm 2 at A-2's spec, without `w_g`, on whatever rows `frame` carries.
+    """Arm 2 at F-1's spec, without `w_g`, on whatever rows `frame` carries.
 
-    Round 5 (document 52 §5's gate G-1) needs eighteen of these — the same model
-    at the same spec, one week-of-season masked out of each — so the fit takes a
-    frame and a seed rather than reading module state. Handoff constraint 3: only
-    the row mask changes, so `draws`, `tune`, `chains` and `target_accept` keep
-    A-2's values and the caller passes a fold seed.
+    Round 6 (document 52 §5's gate G-1, at document 54's fold spec) needs
+    nineteen of these — the same model at the same spec, one week-of-season
+    masked out of each and the postseason as a nineteenth — so the fit takes a
+    frame and a seed rather than reading module state. Only the row mask changes:
+    `draws`, `tune`, `chains` and `target_accept` keep F-1's values for every
+    fold *and* for the default fit, and the caller passes a fold seed.
 
     Returns the trace and the sampler-health summary — Gate C-1's bars over every
     parameter, which is V-6 on the default run and the per-fold gate G-1 prints.
@@ -205,7 +217,7 @@ def fit(
     The bars are unchanged and the caller must enforce them.
     """
     print(
-        f"\n=== the fit — document 43 §5 arm 2, A-2's spec, no game effect ===\n"
+        f"\n=== the fit — document 43 §5 arm 2, F-1's spec, no game effect ===\n"
         f"  {label}: {frame.model.height:,} throws, "
         f"{frame.design_matrix.shape[1]} covariates, "
         f"{frame.n_defence_seasons} defence-seasons, {frame.n_qb_seasons} QB-seasons\n"
@@ -418,7 +430,7 @@ def build_summary(
         "fitted_by": "research/67_dropped_pick_model.py",
         "model": (
             "document 43 §5 arm 2 (logit p = alpha + X beta + u_d + v_q), amendment "
-            "A-2's sampler spec, no game effect w_g (document 49 §2)"
+            "document 54 F-1's sampler spec, no game effect w_g (document 49 §2)"
         ),
         "read_side_note": (
             "p_i excludes v_q by design (document 49 §2): the QB-season term is "
@@ -476,20 +488,36 @@ def main() -> None:
     idata, defence_levels, qb_levels = name_the_levels(idata, frame)
     v8 = v8_report(idata, frame, defence_levels)
 
-    # Round 5's refactor tripwire. `fit` now takes a frame and a seed so document
-    # 52 §5's eighteen week-out folds can reuse it; the price of that is a
-    # promise that the default run is the run round 4 recorded. This is the
-    # promise, checked rather than asserted.
+    # Round 5's refactor tripwire, and what document 54 does to it. The check was
+    # written to prove that making `fit` take a frame and a seed moved no number
+    # at A-2's spec. Amendment F-1 changes the spec on purpose, so the tripwire
+    # is no longer a statement about the refactor — a different sampler spec is
+    # *supposed* to move `sigma_d` by sampler noise. It is therefore enforced
+    # only at A-2's spec and reported otherwise, and F-3's audit reproduction
+    # (research/69) is the check that the re-fit arm is still round 4's arm.
     sigma_d = float(idata["posterior"]["sigma_d"].values.mean())
     gap = abs(sigma_d - ROUND4_SIGMA_D_MEAN)
+    at_a2_spec = (DRAWS, TUNE, TARGET_ACCEPT) == A2_SPEC
     print("\n=== round-4 reproduction — the refactor changed no number ===")
     print(
         f"  sigma_d posterior mean {sigma_d:.12f} against round 4's "
         f"{ROUND4_SIGMA_D_MEAN:.12f}\n"
         f"  |gap| {gap:.2e}, tolerance {ROUND4_REPRODUCTION_TOLERANCE:.0e}  -> "
-        f"{'PASS' if gap <= ROUND4_REPRODUCTION_TOLERANCE else 'FAIL'}"
+        + (
+            f"{'PASS' if gap <= ROUND4_REPRODUCTION_TOLERANCE else 'FAIL'}"
+            if at_a2_spec
+            else "REPORTED ONLY"
+        )
     )
-    if gap > ROUND4_REPRODUCTION_TOLERANCE:
+    if not at_a2_spec:
+        print(
+            f"  the spec is document 54 F-1's ({CHAINS} x {DRAWS:,} after {TUNE:,} "
+            f"tuning, target_accept {TARGET_ACCEPT}), not A-2's "
+            f"({A2_SPEC[0]:,}/{A2_SPEC[1]:,}/{A2_SPEC[2]}), so this gap is sampler\n"
+            "  noise between two specs and is not a gate. Document 54 F-3's audit "
+            "reproduction, in research/69, is the check that applies."
+        )
+    elif gap > ROUND4_REPRODUCTION_TOLERANCE:
         raise SystemExit(
             "the default run no longer reproduces round 4's fit. Round 5's Part B "
             "refactor was supposed to change nothing here; stop and report."
