@@ -2877,7 +2877,7 @@ def test_the_small_receiver_drops_of_one_team_become_one_counted_row():
 
     rows = [drop_row(-0.4, float(i), team="GB") for i in range(1, 6)]
     (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
-    assert grouped.label == "5 smaller receiver drops (GB)"
+    assert grouped.label == "5 smaller GB drops"
     assert grouped.n_events == 5
     assert grouped.points == pytest.approx(5 * 0.4 * PPE)
 
@@ -2890,8 +2890,8 @@ def test_the_two_teams_small_drops_stay_two_rows():
     rows += [drop_row(0.4, float(i), team="DET") for i in range(4, 7)]
     grouped = group_rows(luck_bars(rows, points_per_epa=PPE))
     assert {bar.label for bar in grouped} == {
-        "3 smaller receiver drops (GB)",
-        "3 smaller receiver drops (DET)",
+        "3 smaller GB drops",
+        "3 smaller DET drops",
     }
 
 
@@ -2899,11 +2899,14 @@ def test_the_small_dropped_picks_are_counted_under_their_own_name():
     from nfl_simulator.plots import group_rows
 
     rows = [
-        drop_row(-0.3, float(i), team="DET", component="dropped_pick", expected=0.52)
+        drop_row(-0.3, float(i), team="DET", opponent="GB", component="dropped_pick", expected=0.52)
         for i in range(1, 5)
     ]
     (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
-    assert grouped.label == "4 smaller dropped picks (DET)"
+    # Green Bay dropped them; Detroit is who they are charged to and whose mark
+    # the row wears.
+    assert grouped.label == "4 smaller GB dropped picks"
+    assert grouped.team == "DET"
 
 
 def test_the_strict_components_keep_the_row_they_have_always_had():
@@ -2928,7 +2931,7 @@ def test_grouping_never_loses_a_point_of_luck():
 
 
 def test_a_lone_small_event_is_left_as_itself():
-    """`1 smaller receiver drops (GB)` is a worse row than the event it hides."""
+    """`1 smaller DET drops` is a worse row than the event it hides."""
     from nfl_simulator.plots import group_rows
 
     bars = luck_bars([drop_row(-3.0, 1.0), drop_row(-0.4, 2.0)], points_per_epa=PPE, floor=0.0)
@@ -2978,7 +2981,7 @@ def test_a_dropped_pick_names_the_thrower_and_what_the_ball_did():
     }
     assert event_phrase(row) == "dropped pick · thrown by Goff"
     assert outcome_phrase(row) == "escaped (48% catch)"
-    assert plain_label(row) == "GB dropped pick · thrown by Goff, escaped (48% catch)"
+    assert plain_label(row) == "GB dropped pick · thrown by Goff (48% catch)"
 
 
 def test_a_pick_that_was_caught_says_so_at_the_same_probability():
@@ -3002,9 +3005,9 @@ def test_a_receiver_drop_names_the_receiver_and_the_catch_probability():
         "expected": 0.96,
         "receiver": "Watson",
     }
-    assert event_phrase(row) == "receiver drop · Watson"
+    assert event_phrase(row) == "drop · Watson"
     assert outcome_phrase(row) == "dropped (96% catch)"
-    assert plain_label(row) == "GB receiver drop · Watson, dropped (96% catch)"
+    assert plain_label(row) == "GB drop · Watson (96% catch)"
 
 
 def test_a_catch_is_said_the_same_way_the_drop_is():
@@ -3019,8 +3022,10 @@ def test_a_catch_is_said_the_same_way_the_drop_is():
     assert outcome_phrase(row) == "caught (96% catch)"
 
 
-@pytest.mark.parametrize("component", ["dropped_pick", "receiver_drop"])
-def test_a_play_with_no_name_on_file_is_not_given_one(component):
+@pytest.mark.parametrize(
+    ("component", "noun"), [("dropped_pick", "dropped pick"), ("receiver_drop", "catch")]
+)
+def test_a_play_with_no_name_on_file_is_not_given_one(component, noun):
     row = {
         "component": component,
         "event_class": "1-33 yd, late down",
@@ -3028,7 +3033,7 @@ def test_a_play_with_no_name_on_file_is_not_given_one(component):
         "actual": 1.0,
         "expected": 0.6,
     }
-    assert event_phrase(row) == component.replace("_", " ")
+    assert event_phrase(row) == noun
 
 
 def test_the_card_box_headline_still_sums_every_own_play_event_it_folded():
@@ -3119,20 +3124,23 @@ def test_a_grouped_row_carries_no_interval():
         for i in range(1, 6)
     ]
     (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, interval=True))
-    assert grouped.label == "5 smaller receiver drops (GB)"
+    assert grouped.label == "5 smaller GB drops"
     assert "catch" not in grouped.label and "\u2013" not in grouped.label
 
 
-def test_the_waterfall_labels_carry_the_interval_and_the_card_does_not():
+def test_the_article_form_can_carry_the_interval_and_the_card_never_does():
+    """Round 7 took the spread off the waterfall's default — see
+    `test_the_waterfall_row_labels_carry_the_short_probability_by_default` — and
+    left it reachable. The card has never had room for it either way."""
     rows = [
         drop_row(-2.0, 1.0, team="MIN", expected_low=0.94, expected_high=0.98),
         drop_row(-1.6, 2.0, team="DET", expected_low=0.90, expected_high=0.99),
     ]
     total = sum(r["luck_epa"] for r in rows)
     game = verdict(actual_margin=7.0, deserved_margin=7.0 - total * PPE)
-    waterfall, _ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    article, _ax = plot_luck_ledger(game, rows, points_per_epa=PPE, show_intervals=True)
     card, _cax = plot_luck_ledger_card(game, rows, points_per_epa=PPE)
-    assert "94–98" in flat_text(waterfall)
+    assert "94–98" in flat_text(article)
     assert "94–98" not in flat_text(card)
     assert "96% catch" in flat_text(card)
 
@@ -3216,3 +3224,281 @@ def test_the_overtime_sidebar_names_the_edition_its_toss_number_belongs_to():
     )
     assert "Strict" in line
     assert "share above" not in line
+
+
+# --------------------------------------------------------------------------
+# figure round 7, part A — the waterfall's frame, its labels and its marks
+# --------------------------------------------------------------------------
+
+
+def spread_kick_rows() -> list[dict]:
+    """One kick whose make probability carries an interval, and one fumble."""
+    return [
+        {
+            **card_row(3.8, play_id=1.0, kick_distance=41.0, expected=0.88, kicker="Crosby"),
+            "expected_low": 0.83,
+            "expected_high": 0.92,
+        },
+        card_row(
+            -3.1,
+            play_id=2.0,
+            charged_team="DET",
+            opponent="GB",
+            component="fumble",
+            event_class="pass/live",
+        ),
+    ]
+
+
+# ---- the two anchors read as the frame ------------------------------------
+
+
+def test_the_two_anchor_rows_are_bold_and_the_events_they_frame_are_not():
+    """`Actual:` and `Deserved:` are the question the waterfall answers; every
+    row between them is one step of the answer, and the weight says which."""
+    rows = spread_kick_rows()
+    _fig, ax = waterfall(reconciling(rows), rows)
+    labels = ax.get_yticklabels()
+    assert labels[0].get_fontweight() == "bold"
+    assert labels[-1].get_fontweight() == "bold"
+    assert all(label.get_fontweight() != "bold" for label in labels[1:-1])
+
+
+def test_the_bold_anchors_are_no_bigger_than_the_rows_between_them():
+    """Weight, not size: a larger anchor would re-rank the rows by eye."""
+    rows = spread_kick_rows()
+    _fig, ax = waterfall(reconciling(rows), rows)
+    sizes = {label.get_fontsize() for label in ax.get_yticklabels()}
+    assert len(sizes) == 1
+
+
+# ---- the short probability, with the interval kept behind a flag ----------
+
+
+def test_the_waterfall_row_labels_carry_the_short_probability_by_default():
+    """Round 6 put `(88% kick, 83–92)` on the waterfall and `(88% kick)` on the
+    card. Two forms of one number is one more than a reader can hold."""
+    rows = spread_kick_rows()
+    _fig, ax = waterfall(reconciling(rows), rows)
+    labels = [label.get_text() for label in ax.get_yticklabels()]
+    assert "GB 41-yd field goal · Crosby, missed (88% kick)" in labels
+    assert not any("83–92" in label for label in labels)
+
+
+def test_the_interval_form_is_still_there_for_the_article_figure_to_ask_for():
+    rows = spread_kick_rows()
+    _fig, ax = waterfall(reconciling(rows), rows, show_intervals=True)
+    labels = [label.get_text() for label in ax.get_yticklabels()]
+    assert "GB 41-yd field goal · Crosby, missed (88% kick, 83–92)" in labels
+
+
+# ---- one straight column of marks -----------------------------------------
+
+
+def _renderer_for(fig):
+    fig.canvas.draw()
+    return fig.canvas.get_renderer()
+
+
+ROW_MARK_GAP = 0.012
+
+
+def _row_mark_anchors(ax) -> list[float]:
+    """Each row mark's x, in axes fractions. The two end marks sit in data."""
+    return [
+        artist.xy[0]
+        for artist in ax.artists
+        if isinstance(artist, AnnotationBbox)
+        and artist.get_gid() != "side-header-logo"
+        and artist.xycoords == ("axes fraction", "data")
+    ]
+
+
+def marked_waterfall():
+    rows = spread_kick_rows()
+    return waterfall(
+        reconciling(rows),
+        rows,
+        logos={"GB": synthetic_mark(), "DET": synthetic_mark((200, 30, 30))},
+    )
+
+
+def test_every_row_mark_sits_at_the_same_x():
+    """Round 6 hung each mark off its own label, so a short row's mark stood
+    alone halfway across the figure and the column could not be scanned."""
+    _fig, ax = marked_waterfall()
+    anchors = _row_mark_anchors(ax)
+    assert len(anchors) == 2
+    assert anchors[0] == pytest.approx(anchors[1])
+
+
+def test_the_mark_column_clears_the_longest_row_label():
+    """A fixed column is only right if it is left of every label in it."""
+    fig, ax = marked_waterfall()
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    box = ax.get_window_extent()
+    leftmost = min(
+        label.get_window_extent(renderer).x0 for label in ax.get_yticklabels() if label.get_text()
+    )
+    for anchor in _row_mark_anchors(ax):
+        assert box.x0 + anchor * box.width <= leftmost
+
+
+# ---- whose luck it is, and who did it -------------------------------------
+
+
+def pick_row(actual: float = 1.0, **kwargs) -> dict:
+    """LAC threw it, HOU had the chance at it, and the luck is charged to LAC."""
+    return {
+        "component": "dropped_pick",
+        "event_class": "34-66 yd, early down",
+        "charged_team": "LAC",
+        "opponent": "HOU",
+        "actual": actual,
+        "expected": 0.42,
+        "passer": "Herbert",
+        **kwargs,
+    }
+
+
+def catchable_row(actual: float = 0.0, **kwargs) -> dict:
+    return {
+        "component": "receiver_drop",
+        "event_class": "1-33 yd, late down",
+        "charged_team": "LAC",
+        "opponent": "HOU",
+        "actual": actual,
+        "expected": 0.95,
+        "receiver": "Dissly",
+        **kwargs,
+    }
+
+
+def test_a_dropped_pick_names_the_defence_that_dropped_it():
+    """The mark is Los Angeles's — it is Los Angeles's luck — and the sentence
+    is Houston's, because Houston is who did the thing."""
+    assert event_phrase(pick_row()) == "dropped pick · thrown by Herbert"
+    assert plain_label(pick_row()) == "HOU dropped pick · thrown by Herbert (58% catch)"
+
+
+def test_a_throw_that_was_picked_is_called_an_interception():
+    assert event_phrase(pick_row(actual=0.0)) == "interception · thrown by Herbert"
+    assert plain_label(pick_row(actual=0.0)) == "HOU interception · thrown by Herbert (58% catch)"
+
+
+def test_a_receiver_drop_is_its_own_team_s_sentence():
+    """Here the actor and the charged team are the same club, and the row says
+    so twice over — its mark and its first word."""
+    assert event_phrase(catchable_row()) == "drop · Dissly"
+    assert plain_label(catchable_row()) == "LAC drop · Dissly (95% catch)"
+
+
+def test_a_ball_that_was_caught_is_called_a_catch():
+    assert event_phrase(catchable_row(actual=1.0)) == "catch · Dissly"
+    assert plain_label(catchable_row(actual=1.0)) == "LAC catch · Dissly (95% catch)"
+
+
+def test_a_variant_row_states_its_probability_without_repeating_the_verb():
+    """`HOU dropped pick · thrown by Herbert, escaped (58% catch)` says the
+    branch twice. The noun already carries it, so the label drops the clause."""
+    label = plain_label(pick_row())
+    assert ", escaped" not in label
+    assert label.endswith("(58% catch)")
+
+
+def test_a_variant_row_can_still_carry_its_interval():
+    row = pick_row(expected_low=0.45, expected_high=0.60)
+    assert plain_label(row, interval=True) == (
+        "HOU dropped pick · thrown by Herbert (58% catch, 40–55)"
+    )
+
+
+def test_a_row_with_no_probability_on_file_says_nothing_about_one():
+    row = pick_row()
+    del row["expected"]
+    assert plain_label(row) == "HOU dropped pick · thrown by Herbert"
+
+
+def test_a_dropped_pick_with_no_opponent_on_file_is_charged_where_it_is_known():
+    """The raw ledger has no `opponent` column; `render.prepare_rows` adds it.
+    A row drawn without it names the club it can name rather than `None`."""
+    row = pick_row()
+    del row["opponent"]
+    assert plain_label(row) == "LAC dropped pick · thrown by Herbert (58% catch)"
+
+
+def test_a_fumble_and_a_kick_keep_the_wording_round_6_gave_them():
+    fumble = card_row(
+        -3.1, charged_team="HOU", opponent="LAC", component="fumble", event_class="run/live"
+    )
+    kick = card_row(3.8, kick_distance=41.0, expected=0.88, kicker="Crosby")
+    assert plain_label(fumble) == "HOU fumble on a run, recovered by LAC"
+    assert plain_label(kick) == "GB 41-yd field goal · Crosby, missed (88% kick)"
+
+
+# ---- the folded rows follow the same rule ---------------------------------
+
+
+def test_a_fold_of_dropped_picks_names_the_defence_and_wears_the_offence_s_mark():
+    from nfl_simulator.plots import group_rows
+
+    rows = [pick_row(play_id=float(i), luck_epa=-0.3) for i in range(1, 6)]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert grouped.label == "5 smaller HOU dropped picks"
+    assert grouped.team == "LAC"
+
+
+def test_a_fold_of_drops_names_the_team_that_dropped_them():
+    from nfl_simulator.plots import group_rows
+
+    rows = [catchable_row(play_id=float(i), luck_epa=-0.3) for i in range(1, 3)]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert grouped.label == "2 smaller LAC drops"
+    assert grouped.team == "LAC"
+
+
+def test_every_row_label_starts_at_the_same_x():
+    """The handoff's own sketch: one mark column, then one text column. A right
+    aligned label starts wherever its length puts it, and the mark that was to
+    sit `just left of the label text` then had no one x to sit at."""
+    fig, ax = marked_waterfall()
+    renderer = _renderer_for(fig)
+    starts = {
+        round(label.get_window_extent(renderer).x0, 3)
+        for label in ax.get_yticklabels()
+        if label.get_text()
+    }
+    assert len(starts) == 1
+
+
+def test_the_longest_row_label_still_stops_short_of_the_bars():
+    """Left aligning the column is only safe if the widest row still clears the
+    axis — the rag it creates has to fall on the reader's side, not the plot's."""
+    fig, ax = marked_waterfall()
+    renderer = _renderer_for(fig)
+    ends = [
+        label.get_window_extent(renderer).x1 for label in ax.get_yticklabels() if label.get_text()
+    ]
+    assert max(ends) < ax.get_window_extent().x0
+
+
+def test_the_marks_sit_immediately_outside_that_column():
+    """The gap a mark now carries is the same on every row, whatever the row
+    says — which is the whole difference between a column and a diagonal."""
+    fig, ax = marked_waterfall()
+    renderer = _renderer_for(fig)
+    box = ax.get_window_extent()
+    start = min(
+        label.get_window_extent(renderer).x0 for label in ax.get_yticklabels() if label.get_text()
+    )
+    for anchor in _row_mark_anchors(ax):
+        assert box.x0 + anchor * box.width == pytest.approx(start - ROW_MARK_GAP * box.width)
+
+
+def test_the_row_ticks_are_not_drawn_beside_a_column_they_no_longer_touch():
+    """A right-aligned label ended against its tick and read as one thing. Left
+    aligned, the tick is a stray dash marooned in the gap — and the row is
+    already named, twice, by the mark and the label at the other end of it."""
+    _fig, ax = marked_waterfall()
+    assert all(tick.tick1line.get_markersize() == 0 for tick in ax.yaxis.get_major_ticks())

@@ -1399,8 +1399,25 @@ COMPONENT_NAMES = {
 # them by name rather than into one anonymous heap.
 VARIANT_COMPONENTS = ("dropped_pick", "receiver_drop")
 
-# The plural each folded row counts in.
-VARIANT_PLURALS = {"dropped_pick": "dropped picks", "receiver_drop": "receiver drops"}
+# What a variant row is *called*, which depends on how the ball ended up. Round
+# 7: `receiver drop · Dissly, caught (95% catch)` is a row that contradicts
+# itself in six words, because the component's name and the branch that actually
+# happened are two different facts wearing one label. Naming the branch instead
+# — `catch · Dissly` — says it once and leaves the probability to say how likely
+# it was. Keyed on the **good** branch for the charged team, which is what
+# ``actual`` records: an escaped throw, a caught ball.
+VARIANT_NOUNS = {
+    ("dropped_pick", True): "dropped pick",
+    ("dropped_pick", False): "interception",
+    ("receiver_drop", True): "catch",
+    ("receiver_drop", False): "drop",
+}
+
+# What a row is called when the ledger does not record which branch it took, and
+# the noun the fold counts in — a fold mixes branches, so neither of the two
+# above is true of all of it.
+VARIANT_BASE_NOUNS = {"dropped_pick": "dropped pick", "receiver_drop": "drop"}
+VARIANT_PLURALS = {"dropped_pick": "dropped picks", "receiver_drop": "drops"}
 
 # Below a point a bar is a step a reader cannot see, and under the Full edition
 # there are forty of them. One point rather than a share of the game's total: a
@@ -1442,6 +1459,10 @@ class LuckBar:
     # drops under their own name instead of into an anonymous count. ``None``
     # on a row that is already a fold of several kinds.
     component: str | None = None
+    # The club that performed the events, which on a dropped pick is not the one
+    # they are charged to. Carried rather than recomputed because a fold has no
+    # row left to ask — see :func:`actor_team`.
+    actor: str | None = None
 
 
 def _fumble_phrase(event_class: str) -> str:
@@ -1462,6 +1483,35 @@ VARIANT_NAMED_BY = {
     "dropped_pick": ("passer", "thrown by {name}"),
     "receiver_drop": ("receiver", "{name}"),
 }
+
+
+def actor_team(row: dict) -> str | None:
+    """The club that *performed* the event, which is not always the charged one.
+
+    Luck is charged to the club whose fortune it was; a sentence is about the
+    club that did the thing, and on one component of the four they are different
+    clubs. A dropped pick is charged to the offence — it threw an interceptable
+    ball and got away with it — while the hands that dropped it were the
+    defence's. So `HOU dropped pick · thrown by Herbert` sits under Los Angeles's
+    mark, and the two together say the whole thing: Houston's drop, Los Angeles's
+    luck.
+
+    ``opponent`` is added by :func:`render.prepare_rows` and is absent from the
+    raw ledger, so a row without one names the club it can name rather than
+    printing ``None`` at the front of a sentence.
+    """
+    if str(row["component"]) == "dropped_pick":
+        return row.get("opponent") or row.get("charged_team")
+    return row.get("charged_team")
+
+
+def _variant_noun(row: dict) -> str:
+    """`"catch"` or `"drop"`, `"dropped pick"` or `"interception"`."""
+    component = str(row["component"])
+    branch = row.get("actual")
+    if branch is None:
+        return VARIANT_BASE_NOUNS[component]
+    return VARIANT_NOUNS[component, bool(round(float(branch)))]
 
 
 def _with_kicker(phrase: str, row: dict) -> str:
@@ -1505,7 +1555,7 @@ def event_phrase(row: dict) -> str:
         # the ledger for anyone auditing it.
         key, template = VARIANT_NAMED_BY[component]
         name = row.get(key)
-        phrase = COMPONENT_NAMES[component]
+        phrase = _variant_noun(row)
         return f"{phrase} \u00b7 {template.format(name=name)}" if name else phrase
     # An unfamiliar component still gets a row rather than a crash: the ledger
     # is allowed to grow a fourth kind of event before this function knows it.
@@ -1533,6 +1583,24 @@ def _spread(row: dict, *, mirrored: bool = False) -> str:
     if mirrored:
         low, high = 1.0 - float(high), 1.0 - float(low)
     return f", {round(float(low) * 100)}\u2013{round(float(high) * 100)}"
+
+
+def _catch_note(row: dict, *, interval: bool = False) -> str:
+    """`" (58% catch)"` — the catch probability a variant row is priced at.
+
+    Empty when the row does not carry one. Both components quote the **catch**,
+    which is the one number a reader can hold across the two: a 96% catch that
+    was dropped and a 48% catch that escaped are the same kind of statement. The
+    dropped pick's own ``expected`` is the probability the ball *escaped*, so it
+    is turned round here rather than quoted as it is stored.
+    """
+    expected = row.get("expected")
+    if expected is None:
+        return ""
+    mirrored = str(row["component"]) == "dropped_pick"
+    catch = 1.0 - float(expected) if mirrored else float(expected)
+    spread = _spread(row, mirrored=mirrored) if interval else ""
+    return f" ({round(catch * 100)}% catch{spread})"
 
 
 def outcome_phrase(row: dict, *, interval: bool = False) -> str:
@@ -1576,23 +1644,15 @@ def outcome_phrase(row: dict, *, interval: bool = False) -> str:
         opponent = row.get("opponent")
         return f"recovered by {opponent}" if opponent else "lost"
     if component in VARIANT_COMPONENTS:
-        # Both branches are quoted at the **catch** probability, which is the
-        # one number a reader can hold in their head across the two components:
-        # a 96% catch that was dropped and a 48% catch that escaped are the same
-        # kind of statement about how likely the ball was to be caught. The
-        # dropped pick's own `expected` is the probability it *escaped*, so it
-        # is turned round here rather than quoted as it is stored.
-        expected = row.get("expected")
+        # The card states the branch as a verb in its own column, beside an
+        # Event cell that already names it as a noun. The two agree by
+        # construction — both read `actual` — and the waterfall, which has one
+        # cell rather than two, keeps only the noun (see :func:`plain_label`).
         if component == "dropped_pick":
             happened = "escaped" if made else "intercepted"
-            catch = None if expected is None else 1.0 - float(expected)
         else:
             happened = "caught" if made else "dropped"
-            catch = None if expected is None else float(expected)
-        if catch is None:
-            return happened
-        spread = _spread(row, mirrored=component == "dropped_pick") if interval else ""
-        return f"{happened} ({round(catch * 100)}% catch{spread})"
+        return f"{happened}{_catch_note(row, interval=interval)}"
     return ""
 
 
@@ -1603,9 +1663,19 @@ def plain_label(row: dict, *, interval: bool = False) -> str:
     `"run/aborted fumble — DET"` — and it is exactly right for auditing a ledger
     and exactly wrong on a figure somebody reads once. This is the same row said
     the way it would be said out loud: the team, the event, and what happened.
+
+    The team is :func:`actor_team`'s, not the charged one, so a dropped pick
+    reads `"HOU dropped pick · thrown by Herbert (58% catch)"` under Los
+    Angeles's mark. That the two can differ is the point of saying both.
     """
+    head = f"{actor_team(row)} {event_phrase(row)}"
+    if str(row["component"]) in VARIANT_COMPONENTS:
+        # `HOU dropped pick · thrown by Herbert, escaped (58% catch)` states the
+        # branch twice, once as the noun and once as the verb. The noun is the
+        # half that names the event, so the clause goes and the probability the
+        # verb was carrying stays.
+        return f"{head}{_catch_note(row, interval=interval)}"
     outcome = outcome_phrase(row, interval=interval)
-    head = f"{row['charged_team']} {event_phrase(row)}"
     return f"{head}, {outcome}" if outcome else head
 
 
@@ -1635,6 +1705,7 @@ def luck_bars(
             play_id=float(row["play_id"]),
             team=row.get("charged_team"),
             component=row.get("component"),
+            actor=actor_team(row),
         )
         for row in rows
     ]
@@ -1662,10 +1733,15 @@ def luck_bars(
     return kept
 
 
-def _group_label(component: str | None, team: str | None, count: int, threshold: float) -> str:
-    """What a folded row is called, which depends on what was folded into it."""
-    if component in VARIANT_PLURALS and team:
-        return f"{count} smaller {VARIANT_PLURALS[component]} ({team})"
+def _group_label(component: str | None, actor: str | None, count: int, threshold: float) -> str:
+    """What a folded row is called, which depends on what was folded into it.
+
+    The club named is the one that *performed* the events, the same rule
+    :func:`plain_label` follows — so `5 smaller HOU dropped picks` sits under
+    Los Angeles's mark, exactly as the five unfolded rows would have.
+    """
+    if component in VARIANT_PLURALS and actor:
+        return f"{count} smaller {actor} {VARIANT_PLURALS[component]}"
     return f"{count} events under {threshold:g} pt"
 
 
@@ -1679,15 +1755,15 @@ def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> l
 
     Two kinds of fold, because the two kinds of remainder answer different
     questions. The hands-on-the-ball components fold **per component and per
-    team** — `12 smaller receiver drops (GB)` is a fact about Green Bay's
-    afternoon and wears Green Bay's mark — while the Strict components keep the
-    single un-teamed row they have always had, since a game has a handful of
-    them rather than dozens.
+    team** — `12 smaller GB drops` is a fact about Green Bay's afternoon and
+    wears Green Bay's mark — while the Strict components keep the single
+    un-teamed row they have always had, since a game has a handful of them
+    rather than dozens.
 
     Folding is not dropping. Every folded row carries the **exact sum** of what
     went into it, so the waterfall still reconciles its two ends, and a lone
-    small event is left where it is: `1 smaller receiver drops (GB)` is a worse
-    row than the drop it hides.
+    small event is left where it is: `1 smaller GB drops` is a worse row than
+    the drop it hides.
     """
     big = [bar for bar in bars if abs(bar.points) >= threshold]
     small = [bar for bar in bars if abs(bar.points) < threshold]
@@ -1709,14 +1785,18 @@ def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> l
             folded.extend(group)
             continue
         count = sum(bar.n_events for bar in group)
+        # One bucket is one component charged to one club, so every bar in it
+        # has the same actor and the first one's is the group's.
+        actor = group[0].actor
         folded.append(
             LuckBar(
-                label=_group_label(component, team, count, threshold),
+                label=_group_label(component, actor, count, threshold),
                 points=sum(bar.points for bar in group),
                 play_id=None,
                 n_events=count,
                 team=team,
                 component=component,
+                actor=actor,
             )
         )
 
@@ -1792,29 +1872,69 @@ def _left_edge_points(ax) -> float:
     return (leftmost - ax.get_window_extent().x0) * 72.0 / ax.figure.dpi
 
 
-def _stamp_row_logos(ax, bars, rows_y, logos) -> None:
-    """A club's mark immediately left of each row's own label.
+# The gap between the mark column and the label column, in axes fractions.
+ROW_MARK_GAP = 0.012
+# The air between the longest row label and the axis it stops short of, in
+# points. Matplotlib's own default y-tick pad, which is what the right-aligned
+# labels wore, so the widest row sits exactly where it always did.
+ROW_LABEL_GAP = 3.5
 
-    Left of *its own* label rather than at a shared column: the labels are right
-    aligned on the axis and vary in length, so a fixed column would leave a short
-    row's mark stranded halfway across the figure.
+
+def _left_align_row_labels(ax) -> None:
+    """One left edge for every row name, so the marks have one x to sit at.
+
+    Matplotlib right-aligns y tick labels against the axis: a clean edge on the
+    bar side, a ragged one on the reader's. Round 6 hung each mark off its own
+    label's start and the marks followed that rag down the figure. Round 7 turns
+    it round — the labels share a start, the marks make a column just outside
+    it, and the rag moves to the side where the connectors already are.
+
+    The pad is measured, not guessed: it is the widest label's own width, so the
+    longest row still stops the same distance short of the axis as before and no
+    row can grow into the plot.
+    """
+    renderer = _renderer(ax.figure)
+    labels = [label for label in ax.get_yticklabels() if label.get_text()]
+    if not labels:
+        return
+    widest = max(label.get_window_extent(renderer).width for label in labels)
+    # ``length=0`` because the tick was only ever legible as the end of its own
+    # right-aligned label. Left of a gap this wide it reads as a stray dash, and
+    # the row it marks is already named by the label and the mark beside it.
+    ax.tick_params(axis="y", pad=widest * 72.0 / ax.figure.dpi + ROW_LABEL_GAP, length=0)
+    for label in labels:
+        label.set_horizontalalignment("left")
+
+
+def _stamp_row_logos(ax, bars, rows_y, logos) -> None:
+    """A club's mark on every row, all of them in one straight column.
+
+    Round 6 hung each mark off its own label's left edge. The labels are right
+    aligned on the axis and vary in length by a factor of three, so the marks
+    came out on a ragged diagonal and could not be read as a column at all — a
+    short row's mark stood alone in the middle of the figure with nothing above
+    or below it. Round 7 fixes the column at the **leftmost** label's edge, which
+    is the one x that is clear of every label, and lets the short rows carry the
+    gap instead.
     """
     from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 
     renderer = _renderer(ax.figure)
     box = ax.get_window_extent()
     labels = ax.get_yticklabels()
-    for y, bar in zip(rows_y[1:-1], bars, strict=True):
-        logo = logos.get(bar.team)
-        if logo is None:
-            continue
-        left = labels[int(round(y))].get_window_extent(renderer).x0
+    drawn = [(y, bar) for y, bar in zip(rows_y[1:-1], bars, strict=True) if bar.team in logos]
+    if not drawn:
+        return
+    left = min(labels[int(round(y))].get_window_extent(renderer).x0 for y, _bar in drawn)
+    column = (left - box.x0) / box.width - ROW_MARK_GAP
+    for y, bar in drawn:
+        logo = logos[bar.team]
         ax.add_artist(
             AnnotationBbox(
                 OffsetImage(
                     logo, zoom=logo_zoom(logo, ax.figure, max_width_in=0.20, max_height_in=0.14)
                 ),
-                ((left - box.x0) / box.width - 0.012, y),
+                (column, y),
                 xycoords=("axes fraction", "data"),
                 frameon=False,
                 annotation_clip=False,
@@ -2021,6 +2141,7 @@ def plot_luck_ledger(
     chronological: bool = False,
     colors: tuple[str, str] | None = None,
     logos: dict | None = None,
+    show_intervals: bool = False,
 ):
     """The luck ledger as a waterfall: actual margin at one end, deserved at the other.
 
@@ -2032,6 +2153,12 @@ def plot_luck_ledger(
     ``colors`` and ``logos`` are the game's, supplied by the caller rather than
     looked up here — see :func:`plot_bootstrap_distribution`.
 
+    ``show_intervals`` puts each probability's own 89% bounds on the row that
+    quotes it — `(88% kick, 83–92)`. Off by default since round 7: the card had
+    the short form and the waterfall the long one, and one number said two ways
+    across two figures of the same game is one way too many. The long form is
+    kept, and tested, for an article figure that has room to ask for it.
+
     Returns ``(figure, axes)``.
     """
     home_colour, away_colour = colors or (HOME_HUE, AWAY_HUE)
@@ -2042,9 +2169,7 @@ def plot_luck_ledger(
         points_per_epa=points_per_epa,
         floor=floor,
         chronological=chronological,
-        # The waterfall is the article figure and has room for the spread; the
-        # card is the share image and does not.
-        interval=True,
+        interval=show_intervals,
     )
     # Chronological order is the game's story and grouping would break it: a
     # folded row has no place on a timeline. Every other reading is the
@@ -2183,12 +2308,18 @@ def plot_luck_ledger(
                 )
 
             ax.set_yticks(rows_y)
-            ax.set_yticklabels(
+            labels = ax.set_yticklabels(
                 [anchor_label("Actual", verdict.actual_margin, verdict)]
                 + [bar.label for bar in bars]
                 + [anchor_label("Deserved", verdict.deserved_margin, verdict)],
                 fontsize=9,
             )
+            # Weight, not size. The two totals are the question the figure
+            # answers and every row between them is one step of the answer; a
+            # larger anchor would also re-rank the rows by eye, which is the one
+            # thing the ordering already does honestly.
+            labels[0].set_fontweight("bold")
+            labels[-1].set_fontweight("bold")
             # Inverted by hand rather than by `invert_yaxis`, because the band
             # the two side headers live in has to be reserved above the first
             # row and an auto-scaled limit has no room in it.
@@ -2251,6 +2382,9 @@ def plot_luck_ledger(
             ax.set_xlabel("")
             _draw_wins_by_labels(fig, ax, verdict, home_colour, away_colour)
             _draw_ledger_arrow(ax, verdict, rows_y, x_rail)
+            # Before the marks: they take their column from where the labels
+            # start, and until this runs every label starts somewhere else.
+            _left_align_row_labels(ax)
             _stamp_row_logos(ax, bars, rows_y, logos)
 
         # A waterfall's height grows with its row count, so anything placed in
