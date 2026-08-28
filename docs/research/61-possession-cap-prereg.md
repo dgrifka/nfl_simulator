@@ -220,3 +220,33 @@ have to be priced to reach these two drops.
 | Strict not capped | Separate decision; M-4 measures the stakes |
 | Cross-drive dependence (a turnover ends one drive and starts another) | Out of scope; noted |
 | Tighter state-aware cap | Parked |
+
+---
+
+## 8. Outcome
+
+**Enacted, 2026-08-28**, on branch `feat/possession-cap`. Record: document 62.
+Every gate in §6 passed: P-1 at 0.00e+00 over 2,761 games on the widened frame,
+P-2 at 0.00e+00 over 1,139 with the uncapped arm still reproducing document 59
+§4 exactly, P-3 at 0.00e+00, and P-4 through P-6 pinned in
+`tests/test_possession_cap.py`. P-7, reported: the Full edition's bucket moves
+fall from **200 to 190** (17.6% → **16.7%**), the median |ΔDTW| on affected
+games from 3.85 pp to **3.39 pp**, and the mean 89% interval from 0.0516 to
+**0.0495**.
+
+Two things §3's "what would make it fail" did not anticipate, both recorded in
+document 62 rather than smoothed over:
+
+- **(a) and (b) are both true at once.** The cap touches nearly every possession
+  — 14,747 rows over 1,139 games, one in every game — and does almost nothing to
+  nearly all of them, a median 0.012 EPA per row. It is cosmetic 14,000 times
+  and material a few dozen.
+- **The case that raised this document is not reached by the cap it proposed.**
+  The two would-be-touchdown drops in `2024_19_LAC_HOU` are on consecutive
+  possessions, not one, and each is its own possession's `C_d`. §7's cross-drive
+  dependence, which this document put out of scope, is what that case needs.
+
+§4's pre-registered M-2 statistic was kept and reported first; a second
+statistic was added beside it because the first is nearly blind to what the cap
+does inside the bootstrap, and the addition is named as an addition in §4, in
+document 62 §2, and in `log-2026-08-28-possession-cap.md`.
