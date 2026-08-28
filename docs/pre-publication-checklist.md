@@ -48,3 +48,11 @@ Nothing below is automated away. A grep is the floor, not the review.
 - [ ] Fresh clone into a clean directory; run the test suite and one research
       script; confirm nothing depends on anything outside the repo.
 - [ ] Read the README and `CLAUDE.md` as a stranger would.
+
+## 5. Spelling and voice (added 2026-08-27)
+
+- [ ] American English throughout tracked files: "defense" not "defence",
+      "neutralize" not "neutralise", "color" not "colour", "modeling" not
+      "modelling". `git ls-files | xargs grep -n -i "defence\|neutralis\|colour\|modelling"`
+      returns nothing (code identifiers included — rename, don't just re-spell prose).
+- [ ] No personal names beyond the author's own handle; no coworkers.
