@@ -31,8 +31,10 @@ from nfl_simulator.plots import (  # noqa: E402
     BAND_HIGH,
     BAND_LOW,
     CLEAR_FLIP,
+    CORNER_CLEARANCE,
     LEDGER_BOX_HEIGHT,
     LEDGER_BOXES_Y,
+    MEASURED_COVERAGE,
     OVERTIME_TITLE,
     REPORTED_NOT_NEUTRALIZED,
     SCOREBOARD_HOLDS,
@@ -42,9 +44,11 @@ from nfl_simulator.plots import (  # noqa: E402
     attach_overtime_sidebar,
     band_sweep,
     bucket_label,
+    event_phrase,
     luck_bars,
     margin_sentence,
     net_luck,
+    outcome_phrase,
     overtime_lines,
     pill_colour,
     plain_label,
@@ -53,6 +57,7 @@ from nfl_simulator.plots import (  # noqa: E402
     plot_game_card,
     plot_luck_ledger,
     plot_luck_ledger_card,
+    plot_team_points_distribution,
     running_totals,
     table_rows,
     team_ledgers,
@@ -211,6 +216,15 @@ def _vline_positions(ax) -> list[float]:
     return positions
 
 
+def _bars_of(ax) -> list:
+    """The histogram's bars, without the two half-plane tints drawn behind them."""
+    return [p for p in ax.patches if p.get_gid() != "side-span"]
+
+
+def _spans_of(ax) -> list:
+    return [p for p in ax.patches if p.get_gid() == "side-span"]
+
+
 def test_the_figure_marks_the_actual_margin():
     fig, ax = plot_bootstrap_distribution(verdict(actual_margin=8.0, deserved_margin=-8.28))
     assert 8.0 in _vline_positions(ax)
@@ -243,41 +257,40 @@ def test_a_point_mass_game_is_drawn_as_a_note_rather_than_a_density():
     fig, ax = plot_bootstrap_distribution(verdict(draws=np.full(1, 7.0), actual_margin=7.0))
     text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
     assert "no luck events" in text.lower()
-    assert not ax.patches
+    assert not _bars_of(ax)
 
 
 def test_a_game_with_draws_is_drawn_as_a_density():
     fig, ax = plot_bootstrap_distribution(verdict())
-    assert ax.patches
+    assert _bars_of(ax)
 
 
 def test_the_shaded_home_win_region_is_the_share_the_bootstrap_reports():
     """The fill right of zero is the DTW% the headline claims, not a redrawing."""
     draws = np.array([-3.0] * 250 + [5.0] * 750)
     fig, ax = plot_bootstrap_distribution(verdict(dtw_home=0.75, draws=draws))
-    shaded = [p for p in ax.patches if p.get_x() >= 0.0]
+    shaded = [p for p in _bars_of(ax) if p.get_x() >= 0.0]
     assert shaded
 
 
-def test_the_figure_legends_both_teams_so_the_fills_are_not_colour_alone():
+def test_the_figure_names_both_teams_so_the_fills_are_not_colour_alone():
+    """Round 5 moved the naming from a legend row to the two corner labels."""
     fig, ax = plot_bootstrap_distribution(verdict())
-    labels = [t.get_text() for t in ax.get_legend().get_texts()]
-    assert any("MIN" in label for label in labels)
-    assert any("DET" in label for label in labels)
+    assert {"MIN wins", "DET wins"} <= {t.get_text() for t in ax.texts}
 
 
-def test_a_point_mass_game_has_no_legend_because_it_has_no_fills():
+def test_a_point_mass_game_is_named_the_same_way():
     fig, ax = plot_bootstrap_distribution(verdict(draws=np.full(1, 7.0)))
-    assert ax.get_legend() is None
+    assert {"MIN wins", "DET wins"} <= {t.get_text() for t in ax.texts}
 
 
 def test_bins_are_one_point_of_margin_wide_and_aligned_to_zero():
     """Margins are lumpy — bins off the integer grid comb the distribution."""
     draws = np.concatenate([np.full(400, -8.3), np.full(600, 3.1)])
     fig, ax = plot_bootstrap_distribution(verdict(dtw_home=0.6, draws=draws))
-    edges = sorted({round(p.get_x(), 6) for p in ax.patches})
+    edges = sorted({round(p.get_x(), 6) for p in _bars_of(ax)})
     assert all(abs(edge - round(edge)) < 1e-9 for edge in edges)
-    assert all(abs(p.get_width() - 1.0) < 1e-9 for p in ax.patches)
+    assert all(abs(p.get_width() - 1.0) < 1e-9 for p in _bars_of(ax))
 
 
 def test_the_interval_is_stated_for_the_team_the_headline_names():
@@ -297,15 +310,13 @@ def test_the_interval_is_mirrored_when_the_away_side_is_favoured():
 # --------------------------------------------------------------------------
 
 
-CALLOUT = re.compile(r"^(Actual|Deserved) [+-]")
-
-
 def _callouts(ax) -> list:
-    """The two boxed rule labels.
+    """The two boxed rule labels, found by the gid :func:`_rule` stamps on them.
 
-    Matched on the signed number, not on the word: the header's subtitle also
-    opens with "Actual", and a looser match picked it up as a third rule."""
-    return [text for text in ax.texts if CALLOUT.match(text.get_text())]
+    Matched on the gid rather than on the words: round 5 made the labels read
+    `Actual: DET by 8`, and both the header's subtitle and, on a verdict with no
+    scoreboard on file, its own score line open with exactly that."""
+    return [text for text in ax.texts if text.get_gid() == "rule-label"]
 
 
 def _rule_label_boxes(fig, ax) -> list:
@@ -328,8 +339,14 @@ def test_the_two_rule_labels_never_overprint_when_the_margins_are_close(gap):
     assert len(boxes) == 2
     assert not boxes[0].overlaps(boxes[1])
     # A label moved out of the plot has somewhere else to be wrong: the subtitle
-    # sits just above the top spine.
-    subtitle = next(text for text in ax.texts if text.get_text().startswith("Actual: "))
+    # sits just above the top spine. Found by excluding the rules, because on a
+    # verdict with no scoreboard on file the subtitle's own score line and the
+    # actual rule's label are the same words.
+    subtitle = next(
+        text
+        for text in ax.texts
+        if text.get_gid() != "rule-label" and text.get_text().startswith("Actual: ")
+    )
     assert not any(box.overlaps(subtitle.get_window_extent()) for box in boxes)
 
 
@@ -500,7 +517,8 @@ def test_the_waterfall_draws_one_bar_per_row_plus_the_two_anchors():
     fig, ax = plot_luck_ledger(
         verdict(actual_margin=8.0, deserved_margin=8.0 - gap), rows, points_per_epa=PPE
     )
-    assert len(ax.patches) == 4
+    # The two side-of-zero tints are patches too, and are not bars.
+    assert len([p for p in ax.patches if p.get_gid() != "side-span"]) == 4
 
 
 def test_the_waterfall_names_both_ends_with_their_margins():
@@ -975,12 +993,13 @@ def test_the_pill_stays_clear_of_the_corner_the_watermark_is_stamped_into(tmp_pa
     assert spread.max() < 40, "something coloured is in the watermark's corner"
 
 
-def test_a_degenerate_game_legends_only_the_side_that_has_bars():
-    """`LV_KC`: KC wins every re-flip, and a key for an absent colour sends a
-    reader hunting the figure for it."""
+def test_a_degenerate_game_still_names_the_side_that_won_nothing():
+    """`LV_KC`: DET wins every re-flip. Round 4's legend dropped the empty side,
+    because a key for an absent colour sends a reader hunting for it; a corner
+    label is not a key but a half of the axis, and an empty half is the finding.
+    """
     fig, ax = plot_bootstrap_distribution(branded(dtw_home=1.0, draws=np.linspace(15, 40, 512)))
-    labels = [t.get_text() for t in ax.get_legend().get_texts()]
-    assert labels == ["DET wins"]
+    assert {"GB wins", "DET wins"} <= {text.get_text() for text in ax.texts}
 
 
 def test_the_distribution_heading_counts_the_simulations_it_actually_drew():
@@ -1006,16 +1025,17 @@ def test_the_rule_callouts_are_boxed_so_they_read_over_the_bars():
     assert all(t.get_bbox_patch() is not None for t in callouts)
 
 
-def test_the_callouts_name_the_two_margins_in_derek_s_wording():
+def test_the_callouts_name_the_team_each_margin_favours():
+    """Round 5: `Actual +8` is only readable through the axis's subtraction."""
     fig, ax = plot_bootstrap_distribution(branded())
     text = figure_text(fig)
-    assert "Actual +8" in text
-    assert "Deserved -8.3" in text
+    assert "Actual: DET by 8" in text
+    assert "Deserved: GB by 8.3" in text
 
 
 def test_the_bars_wear_the_team_colours_they_are_handed():
     fig, ax = plot_bootstrap_distribution(branded(), colors=("#0076B6", "#203731"))
-    faces = {p.get_facecolor()[:3] for p in ax.patches}
+    faces = {p.get_facecolor()[:3] for p in _bars_of(ax)}
     assert matplotlib.colors.to_rgb("#0076B6") in faces
     assert matplotlib.colors.to_rgb("#203731") in faces
 
@@ -1103,18 +1123,33 @@ def test_the_verdict_pill_never_comes_down_onto_the_how_to_read_caption():
 def test_the_waterfall_end_bars_are_a_neutral_rather_than_a_team_colour():
     """The two ends are totals, not luck, so they never wear a side's colour."""
     fig, ax = waterfall(colors=("#0076B6", "#203731"))
-    ends = [p.get_facecolor()[:3] for p in ax.patches[:1]] + [
-        p.get_facecolor()[:3] for p in ax.patches[-1:]
-    ]
-    assert set(ends) == {matplotlib.colors.to_rgb(PALETTE["anchor"])}
+    bars = [p for p in ax.patches if p.get_gid() != "side-span"]
+    ends = {matplotlib.colors.to_hex(bars[0].get_facecolor())} | {
+        matplotlib.colors.to_hex(bars[-1].get_facecolor())
+    }
+    assert ends.isdisjoint({"#0076b6", "#203731"})
+
+
+def test_the_two_ends_are_ink_when_ink_is_legible_against_both_clubs():
+    fig, ax = waterfall(colors=("#E31837", "#4F2683"))
+    bars = [p for p in ax.patches if p.get_gid() != "side-span"]
+    assert matplotlib.colors.to_hex(bars[0].get_facecolor()) == matplotlib.colors.to_hex(
+        PALETTE["text"]
+    )
 
 
 def test_a_team_whose_primary_is_black_is_still_told_apart_from_the_totals():
     """`LV_KC_9-48--0-100_luck_ledger.png`: the Raiders' #000000 event bars and
     the waterfall's totals were the same colour, and the figure could not say
-    which bar was a total."""
+    which bar was a total.
+
+    Round 4 asked for the ends in ink, and ink is 0.18 from that same black.
+    The ends therefore step to the neutral on a matchup where ink would clash,
+    by the rule document 42 §3 already owns — so this defect stays closed.
+    """
     fig, ax = waterfall(colors=("#E31837", "#000000"))
-    faces = {matplotlib.colors.to_hex(p.get_facecolor()) for p in ax.patches}
+    bars = [p for p in ax.patches if p.get_gid() != "side-span"]
+    faces = {matplotlib.colors.to_hex(p.get_facecolor()) for p in bars}
     anchor = matplotlib.colors.to_hex(PALETTE["anchor"])
     assert anchor in faces
     assert all(colour_distance(colour, anchor) >= CLASH_DISTANCE for colour in faces - {anchor})
@@ -1172,6 +1207,47 @@ def test_the_card_draws_no_axes_because_it_is_not_a_plot():
     assert not ax.axison
 
 
+# --- the share footer, figure round 4 Part A ------------------------------
+
+# The whole footer, and nothing else on it. the maintainer's round-4 call: the card is
+# the figure for somebody who will not open the other two, and a measured
+# coverage figure is a methodological aside they cannot act on. It stays on the
+# article figure, where a reader has already asked for the methodology.
+CARD_SHARE_NOTE = re.compile(r"^89% interval on \w+'s share: \d+–\d+%\.$")
+
+
+def _card_note(fig) -> str:
+    notes = [
+        text.get_text()
+        for text in fig.findobj(matplotlib.text.Text)
+        if "interval on" in text.get_text()
+    ]
+    assert len(notes) == 1, notes
+    return notes[0]
+
+
+def test_the_card_footer_states_the_interval_and_stops_there():
+    assert CARD_SHARE_NOTE.match(_card_note(plot_game_card(branded())[0]))
+
+
+def test_the_word_coverage_appears_nowhere_on_the_card():
+    assert "coverage" not in figure_text(plot_game_card(branded())[0]).lower()
+
+
+def test_a_degenerate_card_still_says_the_interval_collapsed():
+    """Part A moves the coverage stamp; it does not touch the degenerate note."""
+    text = figure_text(plot_game_card(branded(dtw_home=1.0, interval=(1.0, 1.0)))[0])
+    assert "collapses to a point" in text
+
+
+def test_the_article_figure_keeps_the_coverage_sentence_the_card_dropped():
+    """Document 10's measured coverage belongs where the methodology already is."""
+    game = branded(went_to_overtime=True)
+    fig, ax = plot_bootstrap_distribution(game)
+    attach_overtime_sidebar(fig, ax, game, toss())
+    assert f"coverage at {MEASURED_COVERAGE}" in figure_text(fig)
+
+
 # --------------------------------------------------------------------------
 # the distribution's variant options — figure workshop round 2, Part A
 # --------------------------------------------------------------------------
@@ -1191,24 +1267,24 @@ VARIANTS = [
     {"bin_width": 1.0, "callout": True},
     {"bin_width": 3.0, "callout": True},
     {"bin_width": 3.0, "callout": True, "arrow": True},
-    {"bin_width": 3.0, "callout": True, "arrow": True, "legend_logos": True},
+    {"bin_width": 3.0, "callout": True, "arrow": True},
 ]
 
 
 def test_a_wider_bin_draws_fewer_bars_and_every_bar_is_that_wide():
     game = branded(draws=np.linspace(-20.0, 6.0, 4000))
-    narrow = plot_bootstrap_distribution(game, bin_width=1.0)[1]
-    wide = plot_bootstrap_distribution(game, bin_width=3.0)[1]
-    assert len(wide.patches) < len(narrow.patches)
-    assert all(abs(patch.get_width() - 1.0) < 1e-9 for patch in narrow.patches)
-    assert all(abs(patch.get_width() - 3.0) < 1e-9 for patch in wide.patches)
+    narrow = _bars_of(plot_bootstrap_distribution(game, bin_width=1.0)[1])
+    wide = _bars_of(plot_bootstrap_distribution(game, bin_width=3.0)[1])
+    assert len(wide) < len(narrow)
+    assert all(abs(patch.get_width() - 1.0) < 1e-9 for patch in narrow)
+    assert all(abs(patch.get_width() - 3.0) < 1e-9 for patch in wide)
 
 
 def test_a_wider_bin_still_puts_an_edge_on_zero():
     """Zero decides the winner, so no bar may straddle it at any width."""
     game = branded(draws=np.linspace(-20.0, 6.0, 4000))
     _fig, ax = plot_bootstrap_distribution(game, bin_width=3.0)
-    assert all(abs(patch.get_x() % 3.0) < 1e-9 for patch in ax.patches)
+    assert all(abs(patch.get_x() % 3.0) < 1e-9 for patch in _bars_of(ax))
 
 
 def test_the_y_axis_is_a_percentage_of_the_simulations():
@@ -1223,12 +1299,7 @@ def test_the_y_axis_is_a_percentage_of_the_simulations():
 def test_the_bar_heights_are_the_share_of_simulations_in_each_bin():
     """Percent, not density: over a one-point grid the bars sum to 100."""
     _fig, ax = plot_bootstrap_distribution(branded(draws=np.linspace(-20.0, 6.0, 4000)))
-    assert sum(patch.get_height() for patch in ax.patches) == pytest.approx(100.0)
-
-
-def test_the_axis_label_names_the_two_teams_the_margin_runs_between():
-    _fig, ax = plot_bootstrap_distribution(branded())
-    assert ax.get_xlabel() == "final margin (DET \u2212 GB)"
+    assert sum(patch.get_height() for patch in _bars_of(ax)) == pytest.approx(100.0)
 
 
 # --- the callout ----------------------------------------------------------
@@ -1355,29 +1426,221 @@ def test_there_is_no_arrow_unless_the_figure_asks_for_one():
     assert not _spans(ax)
 
 
-# --- the logo legend ------------------------------------------------------
+# --- the "wins by" axis — figure round 5 ----------------------------------
+#
+# The margin histogram is the share image again, and the round's brief is that
+# a reader never subtracts. Everything under here is that brief: unsigned
+# ticks, two direction labels where the axis title used to be, the two
+# half-plane tints and their corner labels, and rule labels that name a team
+# instead of carrying a sign.
 
 
-def test_the_legend_can_be_the_two_clubs_marks_instead_of_two_swatches():
-    logos = {"GB": synthetic_mark(), "DET": synthetic_mark((200, 30, 30))}
-    _fig, ax = plot_bootstrap_distribution(branded(), logos=logos, legend_logos=True)
-    assert ax.get_legend() is None
-    marks = [artist for artist in ax.artists if isinstance(artist, AnnotationBbox)]
-    assert len(marks) == 2
-    assert {"GB wins", "DET wins"} <= {text.get_text() for text in ax.texts}
+def _wins_by(ax) -> dict:
+    return {text.get_text(): text for text in ax.texts if " wins by" in text.get_text()}
 
 
-def test_the_swatch_legend_is_what_a_figure_gets_by_default():
+def _corner_labels(ax) -> list:
+    return [text for text in ax.texts if text.get_text().endswith(" wins")]
+
+
+def test_no_x_tick_label_carries_a_sign():
+    """`-15` is only readable through the subtraction the axis title stated."""
+    fig, ax = plot_bootstrap_distribution(branded(draws=np.linspace(-20.0, 6.0, 4000)))
+    fig.canvas.draw()
+    labels = [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()]
+    assert labels
+    assert not [label for label in labels if "-" in label or "\u2212" in label]
+
+
+def test_the_tick_positions_are_still_the_signed_margins_underneath():
+    """Only the printing is unsigned: a rule at -8.28 still lands where it did."""
+    _fig, ax = plot_bootstrap_distribution(branded(draws=np.linspace(-20.0, 6.0, 4000)))
+    assert min(ax.get_xticks()) < 0 < max(ax.get_xticks())
+
+
+def test_the_axis_title_is_replaced_by_two_direction_labels():
     _fig, ax = plot_bootstrap_distribution(branded())
-    assert ax.get_legend() is not None
+    assert ax.get_xlabel() == ""
+    assert set(_wins_by(ax)) == {"\u2190 GB wins by", "DET wins by \u2192"}
 
 
-def test_a_club_without_a_mark_still_gets_its_name_in_the_logo_legend():
-    _fig, ax = plot_bootstrap_distribution(
-        branded(), logos={"DET": synthetic_mark()}, legend_logos=True
+def test_each_direction_label_wears_its_own_club_s_colour():
+    _fig, ax = plot_bootstrap_distribution(branded(), colors=(DET_BLUE, GB_GREEN))
+    labels = _wins_by(ax)
+    assert matplotlib.colors.to_hex(labels["\u2190 GB wins by"].get_color()) == GB_GREEN.lower()
+    assert matplotlib.colors.to_hex(labels["DET wins by \u2192"].get_color()) == DET_BLUE.lower()
+
+
+def test_the_two_direction_labels_flank_the_zero_they_are_measured_from():
+    fig, ax = plot_bootstrap_distribution(branded())
+    fig.canvas.draw()
+    labels = _wins_by(ax)
+    zero = ax.transData.transform((0.0, 0.0))[0]
+    assert labels["\u2190 GB wins by"].get_window_extent().x1 <= zero
+    assert labels["DET wins by \u2192"].get_window_extent().x0 >= zero
+
+
+def test_the_direction_labels_sit_under_the_axis_clear_of_the_tick_labels():
+    fig, ax = plot_bootstrap_distribution(branded())
+    fig.canvas.draw()
+    ticks = [t.get_window_extent() for t in ax.get_xticklabels() if t.get_text()]
+    frame = ax.get_window_extent()
+    for label in _wins_by(ax).values():
+        box = label.get_window_extent()
+        assert box.y1 < frame.y0, "a direction label is inside the plot"
+        assert not [tick for tick in ticks if tick.overlaps(box)]
+
+
+def test_a_direction_label_anchored_at_the_frame_s_edge_is_pulled_back_inside():
+    """`2021_14_LV_KC` is one-sided, so zero sits hard against the left edge and
+    the away label hangs off it into the y axis."""
+    game = branded(
+        dtw_home=1.0, actual_margin=39.0, deserved_margin=27.93, draws=np.linspace(15.0, 45.0, 512)
     )
-    assert {"GB wins", "DET wins"} <= {text.get_text() for text in ax.texts}
+    fig, ax = plot_bootstrap_distribution(game)
+    fig.canvas.draw()
+    frame = ax.get_window_extent()
+    for label in _wins_by(ax).values():
+        box = label.get_window_extent()
+        assert box.x0 >= frame.x0 - 0.5
+        assert box.x1 <= frame.x1 + 0.5
+
+
+def test_each_half_of_the_axis_is_tinted_in_the_club_that_wins_there():
+    _fig, ax = plot_bootstrap_distribution(branded(), colors=(DET_BLUE, GB_GREEN))
+    spans = _spans_of(ax)
+    assert len(spans) == 2
+    by_side = {
+        ("home" if patch.get_x() >= 0.0 else "away"): matplotlib.colors.to_hex(
+            patch.get_facecolor()
+        )
+        for patch in spans
+    }
+    assert by_side == {"home": DET_BLUE.lower(), "away": GB_GREEN.lower()}
+
+
+def test_the_tints_sit_behind_the_bars_rather_than_over_them():
+    _fig, ax = plot_bootstrap_distribution(branded())
+    assert max(patch.get_zorder() for patch in _spans_of(ax)) < min(
+        patch.get_zorder() for patch in _bars_of(ax)
+    )
+
+
+def test_the_top_corners_name_the_winner_on_each_side():
+    _fig, ax = plot_bootstrap_distribution(branded())
+    assert {"GB wins", "DET wins"} == {text.get_text() for text in _corner_labels(ax)}
+
+
+def test_the_corner_labels_carry_the_clubs_marks():
+    logos = {"GB": synthetic_mark(), "DET": synthetic_mark((200, 30, 30))}
+    _fig, ax = plot_bootstrap_distribution(branded(), logos=logos)
+    marks = [a for a in ax.artists if a.get_gid() == "side-header-logo"]
+    assert len(marks) == 2
+
+
+def test_the_legend_row_is_gone_because_the_corners_replace_it():
+    """One club's mark, in its own corner — not two more in a row under the plot."""
+    _fig, ax = plot_bootstrap_distribution(branded(), logos={"GB": synthetic_mark()})
+    assert ax.get_legend() is None
     assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 1
+
+
+def test_a_degenerate_game_still_tints_and_names_both_halves():
+    """`2021_14_LV_KC`: one side of the axis is empty, and that is the finding."""
+    game = branded(
+        dtw_home=1.0, actual_margin=39.0, deserved_margin=27.93, draws=np.linspace(15.0, 45.0, 512)
+    )
+    _fig, ax = plot_bootstrap_distribution(game, callout=True)
+    assert len(_spans_of(ax)) == 2
+    assert len(_corner_labels(ax)) == 2
+    assert not [t for t in ax.texts if "deserved to win" in t.get_text()]
+
+
+def test_the_rule_labels_name_a_team_instead_of_carrying_a_sign():
+    _fig, ax = plot_bootstrap_distribution(branded())
+    assert {t.get_text() for t in _callouts(ax)} == {"Actual: DET by 8", "Deserved: GB by 8.3"}
+
+
+def test_a_dead_level_deserved_margin_reads_as_even_on_the_distribution():
+    _fig, ax = plot_bootstrap_distribution(
+        branded(deserved_margin=0.0, draws=np.linspace(-9.0, 9.0, 512))
+    )
+    assert "Deserved: even" in {t.get_text() for t in _callouts(ax)}
+
+
+@pytest.mark.parametrize(
+    "deserved, actual",
+    [(-8.28, 8.0), (27.93, 39.0), (0.70, 13.0), (-3.30, -1.0)],
+    ids=["2018_05_GB_DET", "2021_14_LV_KC", "2025_17_DET_MIN", "2025_13_DEN_WAS"],
+)
+def test_no_rule_label_crowds_a_corner_label(deserved, actual):
+    """The corner labels are new furniture at the top of the plot, and the two
+    rule labels have hung there since document 37. Measured with a clearance
+    rather than a bare overlap: on `2025_17_DET_MIN` the flipped `Actual: MIN by
+    13` stopped one pixel short of `MIN wins`, which reads as a clipped M."""
+    span = max(abs(deserved), abs(actual)) + 8
+    fig, ax = plot_bootstrap_distribution(
+        branded(
+            actual_margin=actual,
+            deserved_margin=deserved,
+            draws=np.linspace(deserved - span / 2, deserved + span / 2, 512),
+        )
+    )
+    fig.canvas.draw()
+    clearance = CORNER_CLEARANCE / 72.0 * fig.dpi
+    corners = [text.get_window_extent().padded(clearance) for text in _corner_labels(ax)]
+    assert len(corners) == 2
+    for box in _rule_label_boxes(fig, ax):
+        assert not [corner for corner in corners if corner.overlaps(box)]
+
+
+def test_a_corner_label_is_shielded_so_a_rule_cannot_strike_it_through():
+    """A rule runs the full height of the plot and crosses the corner band. On
+    `2018_05_GB_DET` the solid actual rule at +8 printed through `DET wins`."""
+    _fig, ax = plot_bootstrap_distribution(branded())
+    assert all(text.get_bbox_patch() is not None for text in _corner_labels(ax))
+
+
+def test_the_two_direction_labels_never_print_through_each_other():
+    """`2021_14_LV_KC` is one-sided, so both are anchored at a zero pinned to
+    the frame's left edge, and the clamp that saved the first collided them."""
+    game = branded(
+        dtw_home=1.0, actual_margin=39.0, deserved_margin=27.93, draws=np.linspace(15.0, 45.0, 512)
+    )
+    fig, ax = plot_bootstrap_distribution(game)
+    fig.canvas.draw()
+    boxes = [label.get_window_extent() for label in _wins_by(ax).values()]
+    assert len(boxes) == 2
+    assert not boxes[0].overlaps(boxes[1])
+
+
+# --- the coverage sentence stays on the article figure --------------------
+
+
+def test_the_interval_note_can_be_asked_for_without_the_coverage_sentence():
+    note = verdict(dtw_home=0.548, interval=(0.49, 0.599)).interval_note(coverage=False)
+    assert "MIN's share runs 49\u201360%" in note
+    assert MEASURED_COVERAGE not in note
+
+
+def test_a_degenerate_note_reads_the_same_either_way():
+    """The degenerate caveat never carried document 10's number to begin with."""
+    game = verdict(dtw_home=1.0)
+    assert game.interval_note(coverage=False) == game.interval_note()
+
+
+def test_the_share_image_states_the_interval_without_the_coverage_aside():
+    """Round 4 §A's reasoning, applied to the figure the margin plot came back to:
+    beside the share it is about, a second percentage reads as a competing one."""
+    fig, _ax = plot_bootstrap_distribution(branded(interval=(0.036, 0.075)), coverage=False)
+    text = figure_text(fig)
+    assert "89% interval on GB's share runs 92\u201396%." in text
+    assert MEASURED_COVERAGE not in text
+
+
+def test_the_article_figure_keeps_document_10_s_coverage_sentence():
+    fig, _ax = plot_bootstrap_distribution(branded())
+    assert MEASURED_COVERAGE in figure_text(fig)
 
 
 # --- every variant, on the awkward games ----------------------------------
@@ -1387,7 +1650,7 @@ def test_a_club_without_a_mark_still_gets_its_name_in_the_logo_legend():
 def test_every_variant_draws_a_degenerate_game_without_raising(options):
     game = branded(dtw_home=1.0, draws=np.linspace(15.0, 40.0, 512))
     _fig, ax = plot_bootstrap_distribution(game, logos={"DET": synthetic_mark()}, **options)
-    assert ax.patches
+    assert _bars_of(ax)
 
 
 @pytest.mark.parametrize("options", VARIANTS, ids=["V1", "V2", "V3", "V4"])
@@ -1416,7 +1679,7 @@ def test_the_annotated_figure_reserves_a_clear_band_above_its_tallest_bar():
     game = branded(draws=np.linspace(-20.0, 6.0, 4000))
     fig, ax = plot_bootstrap_distribution(game, callout=True, arrow=True)
     fig.canvas.draw()
-    tallest = max(patch.get_height() for patch in ax.patches)
+    tallest = max(patch.get_height() for patch in _bars_of(ax))
     callout = next(t for t in ax.texts if "deserved to win" in t.get_text())
     floor = ax.transData.inverted().transform((0, callout.get_window_extent().y0))[1]
     assert floor > tallest, "the callout sits on a bar"
@@ -1437,8 +1700,10 @@ def card_row(
     actual: float = 0.0,
     opponent: str = "DET",
     kick_distance: float | None = None,
+    expected: float | None = None,
+    kicker: str | None = None,
 ) -> dict:
-    """A committed ledger row with the three keys `render.prepare_rows` adds."""
+    """A committed ledger row with the keys `render.prepare_rows` adds."""
     return {
         "play_id": play_id,
         "component": component,
@@ -1446,8 +1711,10 @@ def card_row(
         "charged_team": charged_team,
         "luck_epa": luck_epa,
         "actual": actual,
+        "expected": expected,
         "opponent": opponent,
         "kick_distance": kick_distance,
+        "kicker": kicker,
     }
 
 
@@ -1756,6 +2023,13 @@ def test_a_team_with_fewer_than_five_events_renders_without_error():
 # --------------------------------------------------------------------------
 
 
+def _row_marks(ax) -> list:
+    """The marks on the rows and the two ends — not the two side headers'."""
+    return [
+        a for a in ax.artists if isinstance(a, AnnotationBbox) and a.get_gid() != "side-header-logo"
+    ]
+
+
 def test_a_bar_wears_the_colour_of_the_team_the_lucky_break_helped():
     """Round 1: GB missing a field goal was drawn in GB's colour, because
     neutralising it moves the margin toward GB. It is DET's lucky break, and a
@@ -1785,7 +2059,7 @@ def test_the_waterfall_title_starts_at_the_figure_margin_not_at_the_axes():
     and the title went with it, leaving a hole where the title should be."""
     fig, ax = waterfall()
     fig.canvas.draw()
-    heading = next(t for t in fig.findobj(matplotlib.text.Text) if t.get_text() == "Luck Ledger")
+    heading = next(t for t in fig.findobj(matplotlib.text.Text) if t.get_text() == "Luck Waterfall")
     assert heading.get_window_extent().x0 < ax.get_window_extent().x0
 
 
@@ -1793,7 +2067,7 @@ def test_a_row_carries_its_club_s_mark_beside_its_label():
     """Two end bars and one event row, each marked."""
     logos = {"GB": synthetic_mark(), "DET": synthetic_mark((200, 30, 30))}
     _fig, ax = waterfall(logos=logos)
-    assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 3
+    assert len(_row_marks(ax)) == 3
 
 
 def test_a_folded_row_has_no_club_to_mark():
@@ -1807,7 +2081,7 @@ def test_a_folded_row_has_no_club_to_mark():
     )
     labels = [t.get_text() for t in ax.get_yticklabels()]
     assert any("events under" in label for label in labels)
-    assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 3
+    assert len(_row_marks(ax)) == 3
 
 
 def test_the_two_tables_never_run_into_each_other():
@@ -1881,3 +2155,547 @@ def test_the_card_says_which_quantity_each_number_is():
     text = figure_text(fig)
     assert text.count("LUCK ON OWN PLAYS") == 2, "each headline names the quantity it is"
     assert "on each team's own plays" in text, "and the tables name theirs"
+
+
+# --------------------------------------------------------------------------
+# the team-points distribution — figure round 4, Part B
+# --------------------------------------------------------------------------
+#
+# The share image stops asking about a margin and asks about a scoreline. The
+# two histograms are the two teams' deserved points, so the axis is points and
+# has no negative side, and the pair has to subtract to the margin distribution
+# the rest of the product already publishes — the figure refuses to draw if it
+# does not.
+
+
+def points_pair(game: GameVerdict, away_at: float = 41.0):
+    """Two point distributions that subtract to ``game``'s own margin draws."""
+    away = np.full(len(game.margin_draws), float(away_at)) + np.linspace(
+        -3.0, 3.0, len(game.margin_draws)
+    )
+    return away + np.asarray(game.margin_draws, dtype=float), away
+
+
+def points_figure(game: GameVerdict | None = None, away_at: float = 41.0, **kwargs):
+    """The figure, its verdict and the two draw arrays it was drawn from."""
+    game = game if game is not None else branded(draws=np.linspace(-14.0, -2.0, 600))
+    home, away = points_pair(game, away_at)
+    fig, ax = plot_team_points_distribution(game, home, away, colors=(DET_BLUE, GB_GREEN), **kwargs)
+    return fig, ax, game, home, away
+
+
+def _bar_containers(ax):
+    return [c for c in ax.containers if isinstance(c, matplotlib.container.BarContainer)]
+
+
+SCORE_RULE = re.compile(r"^\w+ \d+ \(Actual\)$")
+
+
+def _score_label_boxes(fig, ax) -> list:
+    """The two boxed scoreline labels' bounding boxes, in display pixels."""
+    fig.canvas.draw()
+    return [t.get_window_extent() for t in ax.texts if SCORE_RULE.match(t.get_text())]
+
+
+def _positive_bars(container) -> list:
+    return [patch for patch in container.patches if patch.get_height() > 0]
+
+
+# --- the arithmetic it refuses to draw without ----------------------------
+
+
+def test_the_figure_refuses_two_distributions_that_are_not_this_games_margin():
+    game = branded(draws=np.linspace(-14.0, -2.0, 600))
+    home, away = points_pair(game)
+    with pytest.raises(ValueError, match="reconcile"):
+        plot_team_points_distribution(game, home + 1.0, away)
+
+
+def test_the_figure_draws_when_the_two_distributions_do_subtract_to_the_margin():
+    fig, ax, _game, _home, _away = points_figure()
+    assert _bar_containers(ax)
+
+
+# --- the axis -------------------------------------------------------------
+
+
+def test_the_points_axis_never_shows_a_negative_score():
+    _fig, ax, _game, _home, _away = points_figure()
+    assert ax.get_xlim()[0] >= 0.0
+
+
+def test_the_axis_is_labelled_points_rather_than_a_margin():
+    _fig, ax, _game, _home, _away = points_figure()
+    assert "points" in ax.get_xlabel().lower()
+    assert "−" not in ax.get_xlabel(), "a points axis is not a subtraction"
+
+
+def test_the_bins_are_three_points_wide_and_sit_on_the_three_point_grid():
+    _fig, ax, _game, _home, _away = points_figure()
+    for container in _bar_containers(ax):
+        for patch in container.patches:
+            assert patch.get_width() == pytest.approx(3.0)
+            assert patch.get_x() % 3.0 == pytest.approx(0.0)
+
+
+def test_the_two_histograms_share_one_set_of_bin_edges():
+    """Two grids would make the same score two different bars."""
+    _fig, ax, _game, _home, _away = points_figure()
+    away_bars, home_bars = _bar_containers(ax)
+    starts = {round(p.get_x(), 6) for p in away_bars.patches}
+    assert {round(p.get_x(), 6) for p in home_bars.patches} <= starts | {
+        round(p.get_x(), 6) for p in home_bars.patches
+    }
+    for patch in home_bars.patches:
+        assert patch.get_x() % 3.0 == pytest.approx(0.0)
+
+
+# --- the two fills --------------------------------------------------------
+
+
+def test_the_away_team_is_drawn_first_so_the_home_fill_sits_on_top():
+    _fig, ax, _game, _home, _away = points_figure()
+    away_bars, home_bars = _bar_containers(ax)
+    assert away_bars.patches[0].get_facecolor()[:3] == pytest.approx(
+        matplotlib.colors.to_rgb(GB_GREEN), abs=0.004
+    )
+    assert home_bars.patches[0].get_facecolor()[:3] == pytest.approx(
+        matplotlib.colors.to_rgb(DET_BLUE), abs=0.004
+    )
+
+
+def test_both_fills_are_translucent_so_the_overlap_is_visible():
+    _fig, ax, _game, _home, _away = points_figure()
+    for container in _bar_containers(ax):
+        assert container.patches[0].get_facecolor()[3] == pytest.approx(0.6)
+
+
+def test_each_histogram_is_outlined_at_full_strength_in_its_club_s_colour():
+    """A 0.6-alpha #203731 reads as grey; the outline is what keeps GB green."""
+    _fig, ax, _game, _home, _away = points_figure()
+    outlines = {
+        matplotlib.colors.to_hex(patch.get_edgecolor()).upper()
+        for patch in ax.patches
+        if isinstance(patch, matplotlib.patches.StepPatch)
+    }
+    assert outlines == {GB_GREEN.upper(), DET_BLUE.upper()}
+    for patch in ax.patches:
+        if isinstance(patch, matplotlib.patches.StepPatch):
+            assert patch.get_edgecolor()[3] == pytest.approx(1.0)
+
+
+def test_the_points_y_axis_is_a_percentage_of_the_simulations():
+    _fig, ax, _game, _home, _away = points_figure()
+    assert "%" in ax.yaxis.get_major_formatter().format_data(0.4)
+    assert "simulations" in ax.get_ylabel()
+
+
+# --- the two actual scores ------------------------------------------------
+
+
+def test_each_team_s_actual_score_is_marked_and_named():
+    fig, ax, _game, _home, _away = points_figure()
+    text = figure_text(fig)
+    assert "GB 23 (Actual)" in text
+    assert "DET 31 (Actual)" in text
+
+
+def test_the_actual_score_rules_stand_at_the_scores_themselves():
+    _fig, ax, _game, _home, _away = points_figure()
+    assert 23.0 in _vline_positions(ax)
+    assert 31.0 in _vline_positions(ax)
+
+
+def test_an_actual_score_rule_wears_its_own_club_s_colour():
+    _fig, ax, _game, _home, _away = points_figure()
+    colours = {
+        round(line.get_xdata()[0], 3): matplotlib.colors.to_hex(line.get_color()).upper()
+        for line in ax.lines
+        if len(set(line.get_xdata())) == 1
+    }
+    assert colours[23.0] == GB_GREEN.upper()
+    assert colours[31.0] == DET_BLUE.upper()
+
+
+def test_two_scores_a_point_apart_do_not_print_through_each_other():
+    """`2025_13_DEN_WAS`: 27-26, and the two boxed labels overlapped."""
+    game = branded(
+        game_id="2025_13_DEN_WAS",
+        home_team="WAS",
+        away_team="DEN",
+        home_score=26,
+        away_score=27,
+        actual_margin=-1.0,
+        deserved_margin=-3.3,
+        dtw_home=0.14,
+        draws=np.linspace(-9.0, 2.0, 600),
+    )
+    fig, ax, _game, _home, _away = points_figure(game)
+    boxes = _score_label_boxes(fig, ax)
+    assert len(boxes) == 2
+    assert not boxes[0].overlaps(boxes[1])
+
+
+# --- the most-likely scoreline --------------------------------------------
+
+
+def test_the_subtitle_states_the_most_likely_scoreline():
+    fig, _ax, _game, home, away = points_figure()
+    line = next(
+        t.get_text() for t in fig.findobj(matplotlib.text.Text) if t.get_text().startswith("Most ")
+    )
+    assert re.fullmatch(r"Most likely: GB \d+ – DET \d+", line), line
+
+
+def test_the_most_likely_score_is_the_modal_bin_rather_than_the_mean():
+    """A lopsided distribution's mode and mean are different scores.
+
+    Nine hundred draws at 33 points and a hundred at 21: the mode's bin is
+    33-36, whose centre rounds to 35, while the mean is 31.8 and would print 32.
+    """
+    game = branded(draws=np.concatenate([np.full(900, -8.0), np.full(100, -20.0)]))
+    away = np.full(len(game.margin_draws), 41.0)
+    fig, _ax = plot_team_points_distribution(game, away + game.margin_draws, away)
+    line = next(
+        t.get_text() for t in fig.findobj(matplotlib.text.Text) if t.get_text().startswith("Most ")
+    )
+    assert line == "Most likely: GB 41 – DET 35", line
+
+
+# --- the heading and the reused furniture ---------------------------------
+
+
+def test_the_heading_counts_the_simulations_it_actually_drew():
+    fig, _ax, _game, _home, _away = points_figure()
+    assert "Deserve-to-Win — 600 simulations" in figure_text(fig)
+
+
+def test_the_figure_carries_the_verdict_pill():
+    fig, ax, game, _home, _away = points_figure()
+    pill = next(t for t in ax.texts if t.get_text() == game.bucket)
+    assert pill.get_bbox_patch() is not None
+
+
+def test_the_points_figure_carries_the_interval_caveat():
+    fig, _ax, game, _home, _away = points_figure()
+    assert MEASURED_COVERAGE in figure_text(fig)
+
+
+def test_an_overtime_points_figure_says_the_toss_is_reported_not_neutralized():
+    fig, _ax, _game, _home, _away = points_figure(
+        branded(went_to_overtime=True, draws=np.linspace(-14.0, -2.0, 600))
+    )
+    assert REPORTED_NOT_NEUTRALIZED in figure_text(fig)
+
+
+def test_the_points_callout_says_who_deserved_to_win_and_how_often():
+    fig, _ax, _game, _home, _away = points_figure(callout=True)
+    assert "GB deserved to win 95% of simulations" in figure_text(fig)
+
+
+def test_a_degenerate_game_draws_no_callout_here_either():
+    game = branded(dtw_home=1.0, interval=(1.0, 1.0), draws=np.linspace(2.0, 26.0, 600))
+    fig, _ax, _game, _home, _away = points_figure(game, callout=True)
+    assert "deserved to win" not in figure_text(fig)
+
+
+def test_the_legend_carries_both_clubs_marks_and_names():
+    fig, ax, _game, _home, _away = points_figure(
+        legend_logos=True, logos={"DET": synthetic_mark(), "GB": synthetic_mark((10, 90, 20))}
+    )
+    text = figure_text(fig)
+    assert "GB" in text and "DET" in text
+    assert len([a for a in ax.artists if isinstance(a, AnnotationBbox)]) == 2
+
+
+# --- the game with nothing to adjudicate ----------------------------------
+
+
+def test_a_game_with_no_luck_events_is_one_bar_per_team_at_its_own_score():
+    game = branded(dtw_home=1.0, interval=(1.0, 1.0), draws=np.full(1, 8.0))
+    fig, ax = plot_team_points_distribution(game, np.full(1, 31.0), np.full(1, 23.0))
+    away_bars, home_bars = _bar_containers(ax)
+    away_bar, home_bar = _positive_bars(away_bars), _positive_bars(home_bars)
+    assert len(away_bar) == 1 and len(home_bar) == 1
+    assert away_bar[0].get_x() <= 23.0 < away_bar[0].get_x() + 3.0
+    assert home_bar[0].get_x() <= 31.0 < home_bar[0].get_x() + 3.0
+
+
+# --------------------------------------------------------------------------
+# a kick shows what it was expected to do — figure round 4, Part C
+# --------------------------------------------------------------------------
+#
+# the maintainer's round-4 note: a 41-yard miss costs 3.2 points and a 42-yard miss 3.1,
+# and nothing on the card says why. The make probability is already on every
+# ledger row as `expected`; printing it turns two numbers that look like a
+# rounding difference into two kicks of different difficulty.
+
+
+def test_a_missed_kick_says_what_it_was_expected_to_do():
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    assert outcome_phrase(row | {"actual": 0.0, "expected": 0.88}) == "missed (88% kick)"
+
+
+def test_a_made_kick_says_it_too():
+    row = ledger_row(-0.6, component="field_goal", event_class="35-39 yd", charged_team="DET")
+    assert outcome_phrase(row | {"actual": 1.0, "expected": 0.86}) == "made (86% kick)"
+
+
+def test_an_extra_point_carries_its_own_make_probability():
+    row = ledger_row(0.95, component="extra_point", event_class="extra point", charged_team="GB")
+    assert outcome_phrase(row | {"actual": 0.0, "expected": 0.945}) == "missed (94% kick)"
+
+
+def test_a_kick_without_an_expectation_recorded_says_only_what_happened():
+    """Never invent a probability: a row without `expected` keeps the old words."""
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    assert outcome_phrase(row | {"actual": 0.0}) == "missed"
+
+
+def test_a_fumble_row_is_untouched_by_the_kick_wording():
+    row = ledger_row(2.17, component="fumble", event_class="pass/live", charged_team="DET")
+    assert outcome_phrase(row | {"actual": 0.0, "expected": 0.53, "opponent": "GB"}) == (
+        "recovered by GB"
+    )
+
+
+def test_a_kick_names_its_kicker_when_the_play_by_play_knows_one():
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    assert event_phrase(row | {"kick_distance": 41.0, "kicker": "Crosby"}) == (
+        "41-yd field goal · Crosby"
+    )
+
+
+def test_an_extra_point_names_its_kicker_too():
+    row = ledger_row(0.95, component="extra_point", event_class="extra point", charged_team="GB")
+    assert event_phrase(row | {"kicker": "Crosby"}) == "extra point · Crosby"
+
+
+def test_a_kick_with_no_kicker_on_file_keeps_the_label_it_had():
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    assert event_phrase(row | {"kick_distance": 41.0}) == "41-yd field goal"
+
+
+def test_a_fumble_never_grows_a_kicker():
+    row = ledger_row(2.17, component="fumble", event_class="pass/live", charged_team="DET")
+    assert event_phrase(row | {"kicker": "Crosby"}) == "fumble on a pass"
+
+
+def test_the_plain_label_carries_both_the_kicker_and_the_expectation():
+    row = ledger_row(3.8, component="field_goal", event_class="40-44 yd", charged_team="GB")
+    label = plain_label(
+        row | {"actual": 0.0, "expected": 0.88, "kick_distance": 41.0, "kicker": "Crosby"}
+    )
+    assert label == "GB 41-yd field goal · Crosby, missed (88% kick)"
+
+
+def test_the_card_prints_the_make_probability_in_its_what_happened_column():
+    rows = [
+        card_row(3.8, play_id=1.0, kick_distance=41.0, expected=0.88, kicker="Crosby"),
+        card_row(3.7, play_id=2.0, kick_distance=42.0, expected=0.87, kicker="Crosby"),
+        card_row(
+            -3.1,
+            play_id=3.0,
+            charged_team="DET",
+            opponent="GB",
+            kick_distance=55.0,
+            expected=0.55,
+            kicker="Prater",
+        ),
+    ]
+    fig, ax = ledger_card(rows)
+    text = figure_text(fig)
+    assert "missed (88% kick)" in text
+    assert "missed (87% kick)" in text
+    assert "41-yd field goal · Crosby" in text
+
+
+def test_the_waterfall_row_labels_carry_the_same_wording_the_card_does():
+    rows = [
+        card_row(3.8, play_id=1.0, kick_distance=41.0, expected=0.88, kicker="Crosby"),
+        card_row(
+            -3.1,
+            play_id=2.0,
+            charged_team="DET",
+            opponent="GB",
+            kick_distance=55.0,
+            expected=0.55,
+            kicker="Prater",
+        ),
+    ]
+    _fig, ax = waterfall(reconciling(rows), rows)
+    labels = [label.get_text() for label in ax.get_yticklabels()]
+    assert "GB 41-yd field goal · Crosby, missed (88% kick)" in labels
+
+
+def test_a_kick_row_never_wraps_onto_a_second_line_on_the_card():
+    """The card's Event column is one line; a two-line row would overprint."""
+    rows = [
+        card_row(3.8, play_id=1.0, kick_distance=41.0, expected=0.88, kicker="Crosby"),
+    ]
+    fig, ax = ledger_card(rows)
+    events = [t.get_text() for t in ax.texts if "field goal" in t.get_text()]
+    assert events and all("\n" not in event for event in events)
+
+
+# --------------------------------------------------------------------------
+# the waterfall reads without arithmetic — figure round 4, Part D
+# --------------------------------------------------------------------------
+
+
+def _renderer_for(fig):
+    fig.canvas.draw()
+    return fig.canvas.get_renderer()
+
+
+VALUE_LABEL = re.compile(r"^[+-]\d+\.\d+$")
+
+
+def _value_labels(ax) -> list:
+    return [t for t in ax.texts if VALUE_LABEL.fullmatch(t.get_text())]
+
+
+def det_min_rows() -> list[dict]:
+    """`2025_17_DET_MIN`'s ten bars, including the three that fold into one.
+
+    The D-4 game: a -0.3 bar and a folded -0.01 bar, both narrower than their
+    own labels, both of them printing through the zero rule in round 3.
+    """
+    points = [-2.7, -2.7, -1.9, -1.8, -1.8, -1.0, -0.8, 0.7, -0.3]
+    rows = [
+        card_row(-value / PPE, play_id=float(index), charged_team="DET", opponent="MIN")
+        for index, value in enumerate(points, start=1)
+    ]
+    rows += [
+        card_row(0.0033 / PPE, play_id=float(20 + index), charged_team="MIN", opponent="DET")
+        for index in range(3)
+    ]
+    return rows
+
+
+def det_min_waterfall(**kwargs):
+    rows = det_min_rows()
+    game = branded(game_id="2025_17_DET_MIN", home_team="MIN", away_team="DET", actual_margin=13.0)
+    return waterfall(reconciling(rows, game), rows, **kwargs)
+
+
+# --- the name ------------------------------------------------------------
+
+
+def test_the_waterfall_is_called_a_waterfall():
+    """Round 4: two figures called "Luck Ledger" is one name too few."""
+    fig, ax = waterfall()
+    heading = next(t for t in ax.texts if t.get_text().startswith("Luck"))
+    assert heading.get_text() == "Luck Waterfall"
+
+
+def test_the_share_card_keeps_the_luck_ledger_name():
+    """The card's layout is frozen, and its title is part of it."""
+    fig, _ax = ledger_card()
+    assert "Luck Ledger" in figure_text(fig)
+
+
+# --- the two sides of zero ------------------------------------------------
+
+
+def test_each_side_of_zero_is_shaded_in_the_club_that_wins_there():
+    fig, ax = waterfall(colors=(DET_BLUE, GB_GREEN))
+    spans = _spans_of(ax)
+    assert len(spans) == 2
+    left, right = sorted(spans, key=lambda p: p.get_window_extent(_renderer_for(fig)).x0)
+    assert matplotlib.colors.to_hex(left.get_facecolor()).upper() == GB_GREEN.upper()
+    assert matplotlib.colors.to_hex(right.get_facecolor()).upper() == DET_BLUE.upper()
+    assert all(span.get_alpha() == pytest.approx(0.06) for span in spans)
+
+
+def test_each_side_says_which_club_wins_there():
+    fig, ax = waterfall()
+    text = figure_text(fig)
+    assert "GB wins" in text and "DET wins" in text
+
+
+def test_each_side_header_wears_its_club_s_mark():
+    fig, ax = waterfall(logos={"DET": synthetic_mark(), "GB": synthetic_mark((10, 90, 20))})
+    headers = [a for a in ax.artists if getattr(a, "get_gid", lambda: None)() == "side-header-logo"]
+    assert len(headers) == 2
+
+
+# --- the two ends ---------------------------------------------------------
+
+
+def test_the_two_end_bars_never_wear_either_club_s_colour():
+    fig, ax = waterfall(colors=(DET_BLUE, GB_GREEN))
+    bars = _bars_of(ax)
+    ends = {
+        matplotlib.colors.to_hex(bars[0].get_facecolor()),
+        matplotlib.colors.to_hex(bars[-1].get_facecolor()),
+    }
+    assert len(ends) == 1
+    assert ends.isdisjoint({DET_BLUE.lower(), GB_GREEN.lower()})
+
+
+def test_the_two_end_bars_are_taller_than_every_event_bar():
+    """Ink alone cannot separate a total from a black club's bar, so height does."""
+    rows = [ledger_row(3.42, play_id=1.0), ledger_row(-0.80, play_id=2.0)]
+    gap = (3.42 - 0.80) * PPE
+    fig, ax = plot_luck_ledger(
+        verdict(actual_margin=8.0, deserved_margin=8.0 - gap), rows, points_per_epa=PPE
+    )
+    bars = _bars_of(ax)
+    events = [p.get_height() for p in bars[1:-1]]
+    assert bars[0].get_height() == pytest.approx(bars[-1].get_height())
+    assert bars[0].get_height() == pytest.approx(max(events) * 1.4)
+
+
+def test_the_ends_name_the_team_they_favour_instead_of_a_sign():
+    fig, ax = waterfall()
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    assert labels[0] == "Actual: DET by 8"
+    assert labels[-1] == "Deserved: GB by 8.3"
+
+
+def test_a_dead_level_deserved_margin_reads_as_even():
+    game = branded(deserved_margin=0.0)
+    fig, ax = waterfall(game)
+    assert [t.get_text() for t in ax.get_yticklabels()][-1] == "Deserved: even"
+
+
+# --- the value labels -----------------------------------------------------
+
+
+def test_a_value_label_sits_on_the_side_of_the_team_the_break_helped():
+    """A bar that helped DET puts its number on DET's side of the zero line."""
+    rows = [ledger_row(3.42, play_id=1.0)]
+    game = branded(deserved_margin=8.0 - 3.42 * PPE)
+    fig, ax = waterfall(game, rows)
+    fig.canvas.draw()
+    label = _value_labels(ax)[0]
+    bar = _bars_of(ax)[1]
+    # -2.9 points: the break helped DET, whose wins are right of zero, so the
+    # number goes to the right of the bar rather than trailing its left end.
+    assert label.xy[0] == pytest.approx(bar.get_x() + bar.get_width())
+    assert label.get_position()[0] > 0, "the offset runs toward DET's side"
+
+
+def test_every_value_label_carries_a_surface_so_a_rule_cannot_strike_it_through():
+    """D-4: `-0.3` printed through the dashed zero rule on `2025_17_DET_MIN`."""
+    fig, ax = det_min_waterfall()
+    labels = _value_labels(ax)
+    assert labels
+    assert all(label.get_bbox_patch() is not None for label in labels)
+
+
+def test_a_sub_half_point_bar_hangs_its_label_off_a_leader():
+    fig, ax = det_min_waterfall()
+    fig.canvas.draw()
+    leaders = [t for t in _value_labels(ax) if t.arrow_patch is not None]
+    assert {t.get_text() for t in leaders} == {"-0.3", "-0.01"}
+
+
+def test_no_two_value_labels_print_through_each_other_on_det_min():
+    fig, ax = det_min_waterfall()
+    fig.canvas.draw()
+    boxes = [t.get_window_extent() for t in _value_labels(ax)]
+    for index, box in enumerate(boxes):
+        for other in boxes[index + 1 :]:
+            assert not box.overlaps(other)

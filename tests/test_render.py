@@ -10,7 +10,6 @@ house cream with its data credit on it.
 
 from __future__ import annotations
 
-import re
 from dataclasses import replace
 
 import matplotlib
@@ -23,6 +22,7 @@ import pytest
 from PIL import Image
 
 from nfl_simulator.plots import (
+    MEASURED_COVERAGE,
     OVERTIME_FOOTER,
     GameVerdict,
     OvertimeToss,
@@ -32,7 +32,13 @@ from nfl_simulator.plots import (
     plot_luck_ledger,
     plot_luck_ledger_card,
 )
-from nfl_simulator.render import ARTICLE_SUFFIX, SUFFIXES, figure_filename, prepare_rows
+from nfl_simulator.render import (
+    ARTICLE_SUFFIX,
+    SUFFIXES,
+    figure_filename,
+    kicker_surname,
+    prepare_rows,
+)
 from nfl_simulator.style import PALETTE, finalize
 
 PPE = 0.8389495557652871
@@ -120,9 +126,32 @@ def test_prepared_rows_read_as_sentences(game):
 
     rows = prepare_rows(ledger_frame(), game, distances={834.0: 42.0})
     assert [plain_label(row) for row in rows] == [
-        "GB 42-yd field goal, missed",
+        "GB 42-yd field goal, missed (88% kick)",
         "GB fumble on a punt, recovered by DET",
     ]
+
+
+def test_a_prepared_kick_row_carries_the_kicker_the_play_by_play_names(game):
+    from nfl_simulator.plots import plain_label
+
+    rows = prepare_rows(ledger_frame(), game, distances={834.0: 42.0}, kickers={834.0: "Crosby"})
+    assert plain_label(rows[0]) == "GB 42-yd field goal · Crosby, missed (88% kick)"
+
+
+def test_a_play_with_no_kicker_on_file_prepares_without_one(game):
+    rows = prepare_rows(ledger_frame(), game, distances={834.0: 42.0})
+    assert rows[0]["kicker"] is None
+
+
+def test_a_kicker_is_read_down_to_the_surname_the_figure_prints():
+    """nflverse writes `M.Crosby`; a card row has no room for the initial."""
+    assert kicker_surname("M.Crosby") == "Crosby"
+    assert kicker_surname("G.Tavecchio") == "Tavecchio"
+
+
+def test_a_kicker_name_that_is_not_on_file_stays_absent():
+    assert kicker_surname(None) is None
+    assert kicker_surname("") is None
 
 
 def test_the_branch_is_recovered_for_an_artifact_that_does_not_carry_it(game):
@@ -158,8 +187,11 @@ def figures(game):
         game, deserved_margin=game.actual_margin - sum(r["luck_epa"] for r in rows) * PPE
     )
     colours = ("#0076B6", "#203731")
+    # Round 5: the `dtw` share image is the margin distribution again, with the
+    # unsigned "wins by" axis. The per-team scoreline figure is withdrawn from
+    # the render path — a margin swing is not a per-team points swing.
     return {
-        "dtw": plot_bootstrap_distribution(reconciling, colors=colours)[0],
+        "dtw": plot_bootstrap_distribution(reconciling, colors=colours, coverage=False)[0],
         "luck_ledger": plot_luck_ledger_card(reconciling, rows, points_per_epa=PPE, colors=colours)[
             0
         ],
@@ -195,13 +227,35 @@ def test_the_two_rule_labels_are_still_clear_on_the_branded_figure(game):
     """The restyle boxed the callouts, which made them wider — the fix still holds."""
     fig, ax = plot_bootstrap_distribution(game)
     fig.canvas.draw()
-    boxes = [
-        text.get_window_extent()
-        for text in ax.texts
-        if re.match(r"^(Actual|Deserved) [+-]", text.get_text())
-    ]
+    boxes = [text.get_window_extent() for text in ax.texts if text.get_gid() == "rule-label"]
     assert len(boxes) == 2
     assert not boxes[0].overlaps(boxes[1])
+
+
+def test_the_share_and_the_article_are_the_same_margin_figure(game):
+    """Round 5 withdrew the scoreline swap: both are the "wins by" margin plot."""
+    share = figures(game)["dtw"].axes[0]
+    article, _ax = plot_bootstrap_distribution(game)
+    for axes in (share, article.axes[0]):
+        assert axes.get_xlabel() == ""
+        assert {"\u2190 GB wins by", "DET wins by \u2192"} <= {
+            text.get_text() for text in axes.texts
+        }
+
+
+def test_the_share_drops_the_coverage_sentence_the_article_keeps(game):
+    """Round 4 §A: a second percentage beside the share reads as a competing one."""
+    share = " ".join(t.get_text() for t in figures(game)["dtw"].findobj(matplotlib.text.Text))
+    article = " ".join(
+        t.get_text() for t in plot_bootstrap_distribution(game)[0].findobj(matplotlib.text.Text)
+    )
+    assert MEASURED_COVERAGE not in share
+    assert MEASURED_COVERAGE in article
+
+
+def test_the_four_share_suffixes_did_not_change(game):
+    """The `dtw` file is the same name for a different figure, not a fifth file."""
+    assert SUFFIXES == ("dtw", "luck_ledger", "card", "waterfall")
 
 
 def test_the_palette_the_card_paints_is_the_house_one():

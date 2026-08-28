@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-import numpy as np
 import polars as pl
 
 from nfl_simulator import paths
@@ -73,9 +72,14 @@ ARTICLE_SUFFIX = "dtw_article"
 # The distribution's shipped reading, chosen by looking at the eight variants
 # `research/59_dtw_variants.py` renders (document 42 §1). Three-point bins pool
 # the reachable margins without smoothing between them; the callout states the
-# verdict in a sentence; the arrow says what luck moved and toward whom; and the
-# clubs' marks carry identity in place of two coloured swatches.
-DTW_FIGURE = {"bin_width": 3.0, "callout": True, "arrow": True, "legend_logos": True}
+# verdict in a sentence; and the arrow says what luck moved and toward whom.
+# Round 5 dropped the legend switch: the axis's own tints and corner labels are
+# the key now, on every figure this function draws.
+#
+# The share image and the article figure are the same figure at this reading and
+# differ in one thing — `coverage`, below — so the two call sites pass it
+# explicitly rather than leaving the difference to a default.
+DTW_FIGURE = {"bin_width": 3.0, "callout": True, "arrow": True}
 
 
 # --------------------------------------------------------------------------
@@ -112,8 +116,24 @@ def figure_filename(verdict: GameVerdict, suffix: str) -> str:
 # --------------------------------------------------------------------------
 
 
+def kicker_surname(name: str | None) -> str | None:
+    """`"M.Crosby"` -> `"Crosby"`, and nothing at all when there is no name.
+
+    nflverse writes a kicker as an initial and a surname. A ledger row has room
+    for one word, and the surname is the one a reader recognises — so the
+    initial is dropped rather than the row being widened for it. A play without
+    a name on file gets no name invented for it.
+    """
+    if not name:
+        return None
+    return str(name).split(".")[-1].strip() or None
+
+
 def prepare_rows(
-    frame: pl.DataFrame, verdict: GameVerdict, distances: dict | None = None
+    frame: pl.DataFrame,
+    verdict: GameVerdict,
+    distances: dict | None = None,
+    kickers: dict | None = None,
 ) -> list[dict]:
     """Ledger rows with the three extra keys :func:`plots.plain_label` can use.
 
@@ -124,14 +144,17 @@ def prepare_rows(
     ``kick_distance`` is the kick's real yardage from the play-by-play, left
     absent rather than guessed when the play is not found: the ledger stores a
     five-yard class, and printing its midpoint as the distance would be making
-    a number up.
+    a number up. ``kicker`` is the surname on the same play, and is absent the
+    same way.
     """
     distances = distances or {}
+    kickers = kickers or {}
     rows = with_actual(frame).to_dicts()
     for row in rows:
         charged = row.get("charged_team")
         row["opponent"] = verdict.away_team if charged == verdict.home_team else verdict.home_team
         row["kick_distance"] = distances.get(row.get("play_id"))
+        row["kicker"] = kickers.get(row.get("play_id"))
     return rows
 
 
@@ -223,15 +246,29 @@ def _simulation_context():
     }
 
 
-def replay(game_id: str, row: dict) -> tuple[np.ndarray, dict]:
-    """The game's bootstrap draws, re-simulated and checked against the summary.
+def replay(game_id: str, row: dict, schedule: dict | None = None):
+    """The game's bootstrap, re-simulated and checked against the summary.
 
     The shipped parquet keeps the summary, not the 160,000 draws, so a figure
     that shows the distribution has to redraw it. Redrawing it is only safe if
     the redraw lands on the published number — otherwise the histogram belongs
     to a different adjudication than the headline over it.
+
+    ``schedule`` supplies the two scores. Given them the result also carries
+    each team's deserved points, split out of the same replay — which is why
+    this returns the whole :class:`SimulationResult` rather than the margins
+    alone: two figures drawn from two replays of the same coins would be two
+    adjudications wearing one headline.
     """
     from nfl_simulator.simulator import simulate_game
+
+    schedule = schedule or {}
+    scores = {
+        "home_points": schedule.get("home_score"),
+        "away_points": schedule.get("away_score"),
+    }
+    if scores["home_points"] is None or scores["away_points"] is None:
+        scores = {}
 
     context = _simulation_context()
     result = simulate_game(
@@ -245,6 +282,7 @@ def replay(game_id: str, row: dict) -> tuple[np.ndarray, dict]:
         n_coin_draws=COIN_DRAWS,
         seed=RANDOM_SEED,
         include_blocked=False,
+        **scores,
     )
     gaps = {
         "deserved_margin": abs(result.deserved_margin - row["deserved_margin"]),
@@ -256,7 +294,7 @@ def replay(game_id: str, row: dict) -> tuple[np.ndarray, dict]:
         raise SystemExit(
             f"{game_id} does not replay to its shipped summary ({gaps}). Stop rather than draw it."
         )
-    return result.margin_draws, gaps
+    return result, gaps
 
 
 def kick_distances(game_id: str) -> dict:
@@ -273,6 +311,23 @@ def kick_distances(game_id: str) -> dict:
         return {float(p): float(d) for p, d in kicks.iter_rows()}
     except Exception as error:  # pragma: no cover - the labels degrade, not the render
         print(f"Warning: no kick distances for {game_id}: {error}")
+        return {}
+
+
+def kicker_names(game_id: str) -> dict:
+    """`play_id -> surname` for the game's kicks, from the cached play-by-play.
+
+    Degrades exactly as :func:`kick_distances` does: no name is a label without
+    a name on it, never a render that stops.
+    """
+    try:
+        plays = _simulation_context()["pbp"].filter(pl.col("game_id") == game_id)
+        if "kicker_player_name" not in plays.columns:
+            return {}
+        kicks = plays.select("play_id", "kicker_player_name").drop_nulls("kicker_player_name")
+        return {float(p): kicker_surname(name) for p, name in kicks.iter_rows()}
+    except Exception as error:  # pragma: no cover - the labels degrade, not the render
+        print(f"Warning: no kicker names for {game_id}: {error}")
         return {}
 
 
@@ -299,11 +354,11 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
 
     row = sources.game_row(game_id)
     schedule = sources.schedule_row(game_id)
-    draws, _gaps = replay(game_id, row)
-    verdict = verdict_from_row(row, draws, schedule)
+    result, _gaps = replay(game_id, row, schedule)
+    verdict = verdict_from_row(row, result.margin_draws, schedule)
 
     ledger = sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
-    rows = prepare_rows(ledger, verdict, kick_distances(game_id))
+    rows = prepare_rows(ledger, verdict, kick_distances(game_id), kicker_names(game_id))
     colours = pair_colors(verdict.home_team, verdict.away_team)
     sides = (verdict.home_team, verdict.away_team)
     logos = {team: team_logo(team) for team in sides}
@@ -313,8 +368,14 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
     written = []
     for suffix in SUFFIXES:
         if suffix == "dtw":
+            # The margin distribution, with round 5's unsigned "wins by" axis.
+            # Round 4's per-team scoreline figure is withdrawn from the render
+            # path — `plot_team_points_distribution` is correct arithmetic and
+            # stays in the module, but a margin swing is not a per-team points
+            # swing, and drawing it as one put `GB 44 - DET 35` on a share
+            # image. Nothing renders it.
             fig, _ax = plot_bootstrap_distribution(
-                verdict, colors=colours, logos=logos, **DTW_FIGURE
+                verdict, colors=colours, logos=logos, coverage=False, **DTW_FIGURE
             )
         elif suffix == "luck_ledger":
             fig, _ax = plot_luck_ledger_card(
@@ -342,7 +403,11 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
         )
 
     if article and toss is not None:
-        fig, ax = plot_bootstrap_distribution(verdict, colors=colours, logos=logos, **DTW_FIGURE)
+        # The one difference from the share image: document 10's measured
+        # coverage, for a reader who has already asked for the methodology.
+        fig, ax = plot_bootstrap_distribution(
+            verdict, colors=colours, logos=logos, coverage=True, **DTW_FIGURE
+        )
         attach_overtime_sidebar(fig, ax, verdict, toss)
         written.append(finalize(fig, out_dir / figure_filename(verdict, ARTICLE_SUFFIX)))
     return written

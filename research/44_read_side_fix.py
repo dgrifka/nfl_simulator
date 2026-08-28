@@ -61,6 +61,10 @@ LONG_ATTEMPT_YARDS = 50.0  # where document 27 §14f localizes the error
 SIM_COLUMNS = [
     *ANALYSIS_COLUMNS,
     "kicker_player_id",
+    # Presentation only, added in figure round 4 so a ledger row can name the
+    # kicker. Nothing prices on it — the pricing uses `kicker_player_id` — and
+    # the five example games still replay to 0.00e+00 with it loaded.
+    "kicker_player_name",
     "extra_point_attempt",
     "extra_point_result",
     "roof",

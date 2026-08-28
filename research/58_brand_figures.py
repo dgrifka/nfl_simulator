@@ -40,6 +40,7 @@ from nfl_simulator.render import (
     SUFFIXES,
     figure_filename,
     kick_distances,
+    kicker_names,
     load_sources,
     prepare_rows,
     render_game,
@@ -84,7 +85,8 @@ def main() -> None:
     records = []
     for game_id in EXAMPLES:
         row = sources.game_row(game_id)
-        draws, gaps = replay(game_id, row)
+        result, gaps = replay(game_id, row, sources.schedule_row(game_id))
+        draws = result.margin_draws
         worst = max(gaps.values())
         print(
             f"  {game_id:<18} max |Δ vs committed| {worst:.2e}  {'ok' if worst == 0 else 'check'}"
@@ -92,7 +94,7 @@ def main() -> None:
 
         verdict = verdict_from_row(row, draws, sources.schedule_row(game_id))
         ledger = sources.ledger.filter(sources.ledger["game_id"] == game_id).drop("game_id")
-        rows = prepare_rows(ledger, verdict, kick_distances(game_id))
+        rows = prepare_rows(ledger, verdict, kick_distances(game_id), kicker_names(game_id))
         bars = luck_bars(rows, points_per_epa=sources.slope)
         home_colour, away_colour = pair_colors(verdict.home_team, verdict.away_team)
         records.append(

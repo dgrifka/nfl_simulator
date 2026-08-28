@@ -318,18 +318,56 @@ sentence belongs to neither club. Outside the band nothing moved. A degenerate
 game draws no callout at all — see §7 for the one caveat on that. The wording
 was a settled decision and the maintainer settled it again.
 
-**D-4 — waterfall value labels crowd very small bars (cosmetic).** A bar worth
-0.2 points is narrower than its own label, so the label sits against the bar's
-edge. Inherent to a waterfall with a wide dynamic range; the labels stay inside
-the frame, which is the property that is tested.
+**D-4 — waterfall value labels crowd very small bars (closed, round 4).** A bar
+worth 0.2 points is narrower than its own label, so the label sat against the
+bar's edge — and on `2025_17_DET_MIN` the `-0.3` and `-0.01` labels printed
+through the dashed zero rule beside them, which reads as a number struck out.
+Closed by `fix(waterfall): rename, shade sides, anchor bars, tip labels; close
+D-4`, in three parts: every value label moved to its bar's **tip**, the end away
+from the running total, so it lands over the half of the axis belonging to the
+team the break helped; every value label gained the module's cream `_shielded`
+backing, so no rule can strike one through; and a bar under `LEADER_FLOOR`
+(0.5 pt) has its label pushed clear of the bar and joined back to it by a
+leader. Pinned by a regression test on `2025_17_DET_MIN`'s own ten bars: every
+label carries a surface, the two sub-half-point bars carry leaders, and no two
+labels overlap. Document 51 §D is the round's record.
 
 **D-5 — the article figure has trailing space under its plot (cosmetic).**
 `attach_overtime_sidebar` spans the figure's full height by design (the
 waterfall's height changes with its row count), so a seven-paragraph panel is
 taller than a 4-inch distribution.
 
-**Open after round 3:** D-4 and D-5, both cosmetic. D-1, D-2 and D-3 are
-closed above.
+**D-6 — the most-likely scoreline can read as a tie on a game the product
+calls (closed as moot, round 5).** Round 5 withdrew the team-points share image
+— a margin swing is not a per-team points swing — and this defect was a defect
+of that figure's second subtitle line. Nothing draws the most-likely scoreline
+any more, so there is nothing left to fix or to disclose. The reasoning below is
+kept because it is the measurement, not the verdict: the modal *joint* bin pair
+agreed with the marginal modes on all five example games, so the tie was the
+three-point bin meeting a one-point game rather than the estimator. Document 51
+§R5-A is the round's record.
+
+*Round 4's statement, for the record.* The share image's second subtitle line is
+each team's modal three-point bin, and on `2025_13_DEN_WAS` both modes land in
+the same 21-24 bin: `Most likely: DEN 23 - WAS 23` sits under a pill that says
+the scoreboard holds and a callout that says DEN deserved to win 86% of
+simulations. It is not the estimator's fault — the modal *joint* bin pair is the
+same 23-23 on that game, and agrees with the marginal modes on all five example
+games — it is what a three-point bin does to a one-point game. Disclosed rather
+than fixed: naming a tie is honest about two distributions that genuinely
+overlap, and narrowing the bin would comb the histogram. the maintainer's call.
+
+**Open after round 4:** D-5 and D-6, both cosmetic-to-semantic. D-1, D-2, D-3
+and D-4 are closed above.
+
+**Open after round 5:** D-5 alone. D-6 is closed as moot above; D-1 through D-4
+were already closed. Round 5 found and closed three new layout defects in the
+same commit that introduced their cause, so none of them reached this register —
+they are recorded in document 51 §R5-D. One thing is raised and not fixed: the
+distribution now reads its axis unsigned with two direction labels while the
+waterfall still reads `final margin (DET − GB)` with signed ticks. That is a
+scope boundary, not a defect, and it is the maintainer's call whether the waterfall
+follows.
 
 **Closed in round 2:** the round-1 protan defect on `2016_14_NYJ_SF` (document
 41 §6, §8) — resolved by §3, from ΔE 5.2 to 36.5. Round 1's KC/SF finding is
