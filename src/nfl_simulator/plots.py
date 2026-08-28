@@ -44,6 +44,7 @@ from nfl_simulator.style import (
     colour_distance,
     heading_font,
     rc_style,
+    separated,
 )
 
 # Document 10 Gate V-3's convention: a game whose verdict never changes across
@@ -2020,26 +2021,46 @@ HOW_TO_READ = (
 
 
 def anchor_colour(home_colour: str, away_colour: str) -> str:
-    """Ink for the two totals, stepping to the neutral when ink is a club's colour.
+    """Ink for the two totals, stepping to the neutral when a club sits too near it.
 
     Round 4 asked for the ends in ink, so that Actual and Deserved read as the
     figure's two anchors rather than as two more events. On most matchups that
-    is exactly right. On three of the round's five example games it is not: ink
-    is 0.18 from the Jets' and the Raiders' ``#000000`` and 0.15 from Green
-    Bay's ``#203731``, both inside document 42 §3's 0.20 clash floor, and
-    `NYJ_SF`'s totals came out the same colour as its luck bars — the defect
-    document 42 §6 closed in round 2.
+    is exactly right, and on some it is not — `NYJ_SF`'s totals came out the
+    same colour as its luck bars, the defect document 42 §6 closed in round 2.
 
-    So the ink is stepped by the clash rule the module already owns rather than
-    by taste: a game whose clubs leave ink legible gets ink, and one that does
-    not gets the neutral the ends wore before. The two totals are also 1.4x the
-    height of every event bar and named `Actual:` / `Deserved:` in their row
-    labels, so the reading never rests on the colour alone either way.
+    Round 7 adds :func:`style.separated` — the ported `dataviz` validator — to
+    the RGB floor the round-2 fix used, because RGB distance measures a
+    separation no reader has. It passed Washington's ``#5A1414`` at 0.28 while a
+    protan reader sees it 5.2 from the ink, under document 42 §3's own 6.0
+    colour-vision floor, so `WAS_NYG` shipped its anchors in an ink a good many
+    of its readers could not tell from its bars.
+
+    **Both** checks, not the new one alone. The separation rule reads pure black
+    and the ink as 21.8 apart in OKLab for every reader — past its 15.0 normal
+    floor — and on `NYJ_SF` that verdict is wrong in the only way that matters:
+    the Jets' ``#000000`` event bars and a ``#1A1A1A`` anchor are one black at
+    the size a waterfall draws them, which is the round-2 defect document 42 §6
+    closed. That floor was calibrated for thin categorical marks, and these are
+    the two largest blocks on the figure. So the ink is taken only where both
+    rules allow it, and the two rules catch different failures: RGB the pair a
+    full-colour reader loses at size, OKLab the pair a colourblind one loses at
+    any size.
+
+    The two totals are also 1.4x the height of every event bar and named
+    `Actual:` / `Deserved:` in their row labels, so the reading never rests on
+    the colour alone either way.
     """
     ink = PALETTE["text"]
-    if all(colour_distance(ink, colour) >= CLASH_DISTANCE for colour in (home_colour, away_colour)):
-        return ink
-    return PALETTE["anchor"]
+    # Both clubs, not the nearer one: there is one ink for both ends, so the
+    # club that fails either rule is the club that decides.
+    return (
+        ink
+        if all(
+            colour_distance(ink, colour) >= CLASH_DISTANCE and separated(ink, colour)
+            for colour in (home_colour, away_colour)
+        )
+        else PALETTE["anchor"]
+    )
 
 
 def anchor_label(kind: str, margin: float, verdict: GameVerdict) -> str:

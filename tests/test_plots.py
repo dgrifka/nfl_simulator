@@ -1138,21 +1138,33 @@ def test_the_two_ends_are_ink_when_ink_is_legible_against_both_clubs():
     )
 
 
-def test_a_team_whose_primary_is_black_is_still_told_apart_from_the_totals():
+@pytest.mark.parametrize(
+    "colors", [("#E31837", "#000000"), ("#AA0000", "#000000"), ("#0B2265", "#5A1414")]
+)
+def test_the_two_ends_are_told_apart_from_every_event_bar(colors):
     """`LV_KC_9-48--0-100_luck_ledger.png`: the Raiders' #000000 event bars and
     the waterfall's totals were the same colour, and the figure could not say
     which bar was a total.
 
-    Round 4 asked for the ends in ink, and ink is 0.18 from that same black.
-    The ends therefore step to the neutral on a matchup where ink would clash,
-    by the rule document 42 §3 already owns — so this defect stays closed.
+    The defect is that the ends are indistinguishable from the bars, and that is
+    what this asserts, in the RGB terms the defect was found and closed in.
+    Round 7 changed which colour the ends reach for on one of these three
+    matchups, so the assertion is on the outcome rather than on the colour:
+    whatever :func:`anchor_colour` returns has to stand off every event bar.
+
+    Not `separated` here, and knowingly. The neutral is 4.3 from Kansas City's
+    #E31837 for a protan reader, well under that rule's 6.0 floor — a real gap,
+    logged in `results-2026-08-28-exp11.md`, and one that predates this round
+    and cannot be closed by choosing between two existing colours.
     """
-    fig, ax = waterfall(colors=("#E31837", "#000000"))
+    from nfl_simulator.plots import anchor_colour
+
+    _fig, ax = waterfall(colors=colors)
     bars = [p for p in ax.patches if p.get_gid() != "side-span"]
+    ends = matplotlib.colors.to_hex(anchor_colour(*colors))
     faces = {matplotlib.colors.to_hex(p.get_facecolor()) for p in bars}
-    anchor = matplotlib.colors.to_hex(PALETTE["anchor"])
-    assert anchor in faces
-    assert all(colour_distance(colour, anchor) >= CLASH_DISTANCE for colour in faces - {anchor})
+    assert ends in faces
+    assert all(colour_distance(colour, ends) >= CLASH_DISTANCE for colour in faces - {ends})
 
 
 def test_the_waterfall_names_its_ends_in_derek_s_wording():
@@ -3608,3 +3620,61 @@ def test_the_waterfall_keeps_its_lower_case_grammar_after_a_mark():
     _fig, ax = plot_luck_ledger(reconciling(rows), rows, points_per_epa=PPE)
     labels = [label.get_text() for label in ax.get_yticklabels()]
     assert "GB drop · Dissly (95% catch)" in labels
+
+
+# --------------------------------------------------------------------------
+# figure round 7, part C — the anchors step aside by the module's own rule
+# --------------------------------------------------------------------------
+
+# nflverse's own hexes for the four clubs this section reasons about.
+WAS_HEX, NYG_HEX = "#5A1414", "#0B2265"
+MIN_HEX, DET_HEX = "#4F2683", "#0076B6"
+SF_HEX, NYJ_HEX = "#AA0000", "#000000"
+
+
+def test_the_anchors_step_aside_from_a_club_a_protan_reader_cannot_tell_ink_from():
+    """`2022_13_WAS_NYG`. Washington's #5A1414 is 0.28 from ink in RGB — well
+    past the 0.20 clash floor, so the old rule gave this game the ink — and 5.2
+    apart in OKLab for a protan reader, under document 42 §3's own 6.0 floor.
+    The RGB rule is blind to exactly this: it measures a distance no reader has."""
+    from nfl_simulator.plots import anchor_colour
+
+    assert colour_distance(PALETTE["text"], WAS_HEX) > 0.20, "the old rule really did pass it"
+    assert anchor_colour(NYG_HEX, WAS_HEX) == PALETTE["anchor"]
+
+
+def test_a_matchup_every_reader_separates_from_ink_still_gets_the_ink():
+    """`2025_17_DET_MIN`, which both rules agree on."""
+    from nfl_simulator.plots import anchor_colour
+    from nfl_simulator.style import PALETTE
+
+    assert anchor_colour(MIN_HEX, DET_HEX) == PALETTE["text"]
+
+
+def test_the_rgb_floor_still_refuses_the_ink_beside_a_club_in_pure_black():
+    """`2016_14_NYJ_SF`, and why the separation rule is added to the RGB floor
+    rather than swapped in for it.
+
+    OKLab reads pure black and the ink as 21.8 apart for every reader, past its
+    own 15.0 normal floor — a verdict calibrated for thin categorical marks, and
+    wrong for the two largest blocks on a waterfall. Rendered on `separated`
+    alone, this game's anchors and its three Jets bars were one black and the
+    figure could not say which bar was a total: document 42 §6's defect,
+    reopened. The RGB floor sees it, so both rules have to pass.
+    """
+    from nfl_simulator.plots import anchor_colour
+    from nfl_simulator.style import separated
+
+    assert separated(PALETTE["text"], NYJ_HEX), "OKLab alone would have allowed it"
+    assert colour_distance(PALETTE["text"], NYJ_HEX) < 0.20
+    assert anchor_colour(SF_HEX, NYJ_HEX) == PALETTE["anchor"]
+
+
+def test_the_anchors_are_judged_against_both_clubs_not_the_nearer_one():
+    """One legible club does not make a pair legible: the anchors are one ink
+    for both ends, so the club that fails the rule is the one that decides."""
+    from nfl_simulator.plots import anchor_colour
+    from nfl_simulator.style import PALETTE
+
+    assert anchor_colour(DET_HEX, WAS_HEX) == PALETTE["anchor"]
+    assert anchor_colour(WAS_HEX, DET_HEX) == PALETTE["anchor"]
