@@ -525,3 +525,78 @@ row reads `LAC drop · Dissly`, `HOU fumble on a run`; a cap reads
 `LAC Possession cap · Q4 drive 26`. The capital is the handoff's own settled
 wording and was not re-litigated, but it is visible in a column of otherwise
 lower-case rows. Parked.
+
+## 10. Round 9 — the arrow floor, the cap's case, and the 3,900-game read
+
+the maintainer's notes after the round-8 renders, executed on `fix/figure-round-9` from
+`handoff-2026-08-28-figures-r9.md`. Two one-line rule changes, both of them
+§9e's parked items, and one measurement round that rendered every game in both
+editions for the first time. Presentation only — hard constraint 1 was again
+that no statistic move, and both editions replay at **0.00e+00** on all nine
+renders after every part, and on all 3,900 game-editions in Part C.
+
+### 10a. What a reader sees now
+
+**A luck gap under a point keeps its sentence and loses its span.** §9e measured
+`2025_13_DEN_WAS` Full at 0.35 points and 17.8 px of drawn span, and parked the
+fix because a floor would be a new rule rather than a layout tweak. `ARROW_FLOOR
+= 1.0` is that rule: under it `_draw_luck_arrow` returns `(None, label)` and only
+the sentence is drawn, at the offset it always used. The floor is exclusive-below
+and inclusive-at — a gap of exactly 1.0 still draws its span — so the rule has one
+edge rather than a band of games that may or may not have an arrow.
+
+Part C measured what that costs: the span is suppressed on **465 game-editions**,
+333 Strict and 132 Full, which is one non-degenerate game in five and about 12%
+of every figure the product draws. It is not a corner case, and the sentence
+carries the number on every one of them.
+
+**The cap row joins the column's case.** `COMPONENT_NAMES["possession_cap"]` was
+the only component name with a capital, so `LAC Possession cap · Q4 drive 26` sat
+beside `LAC drop · Dissly` and read as the start of a sentence. It is now
+`possession cap`. The ledger card's cell is unaffected — it is sentence case and
+`sentence_case` puts the capital back — which is the general point the change
+records in a comment: **the case belongs to where a label is drawn, not to the
+label.** `POSSESSION_CAP_PLURAL` was already lower case, so `2 smaller possession
+caps (HOU)` needed nothing.
+
+### 10b. What the corpus said that nine games could not
+
+Document 63 is the record. Three findings bear on this document's own rules:
+
+1. **Stacking is the common case.** §9a's second row was built for a near-tie;
+   measured over 3,900 games it fires on **93.2% of Strict and 94.6% of Full**.
+   The mechanism works; the premise that it is rare does not survive the corpus.
+2. **The corner-text rule fired zero times in 3,900 games**, confirming §9e's
+   reasoning from nine renders across the whole population.
+3. **Two pairs of Strict games share a filename** and silently overwrite each
+   other — `figure_filename` carries no season or week, and the Raiders'
+   relocation alias puts a 2018 Oakland game and a 2023 Las Vegas game on the
+   same eleven characters. Eight PNGs of 11,044 were lost to it.
+
+### 10c. What was rendered
+
+Nine share sets, re-rendered after each of Parts A and B, all replaying at
+`0.00e+00`; then every game in both editions — **15,600 PNGs**, 4 × 3,900,
+matching the expected count exactly, in 20.3 minutes on 12 workers, with a worst
+replay gap of `0.00e+00` across the whole corpus.
+
+### 10d. Register — closed this round
+
+| Item | Where |
+|---|---|
+| A very small gap draws a very small arrow (round 8 §9e, parked) | 10a — `ARROW_FLOOR = 1.0` |
+| `Possession cap` is the only row label opening with a capital (round 8 §9e, parked) | 10a — the column's case |
+
+**Open, carried forward.** Everything in §8c's "Open" table is unchanged, plus
+every entry in document 63 §3 and the two structural findings in 63 §2.
+
+### 10e. Raised this round, not acted on
+
+Document 63 §3 is the list, with a game id and a severity per row. The three
+that reach past layout and into a rule are the filename collision (a lost file,
+not a cosmetic), the title running under the credit stamp on 84–89% of
+distribution figures, and the dashed zero rule printing through a waterfall's
+corner label on a lopsided game — that last one because the waterfall passes
+`shield=False` where the distribution passes `shield=True`, which §7's comment
+justifies on the grounds that the waterfall has nothing crossing that band. It
+has: its own zero rule.

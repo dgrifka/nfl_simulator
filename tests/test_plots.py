@@ -28,9 +28,11 @@ from matplotlib.patches import FancyArrowPatch  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from nfl_simulator.plots import (  # noqa: E402
+    ARROW_FLOOR,
     BAND_HIGH,
     BAND_LOW,
     CLEAR_FLIP,
+    COMPONENT_NAMES,
     CORNER_CLEARANCE,
     LEDGER_BOX_HEIGHT,
     LEDGER_BOXES_Y,
@@ -41,10 +43,12 @@ from nfl_simulator.plots import (  # noqa: E402
     TOO_CLOSE,
     GameVerdict,
     OvertimeToss,
+    _draw_luck_arrow,
     attach_overtime_sidebar,
     band_sweep,
     bucket_label,
     event_phrase,
+    group_rows,
     luck_bars,
     margin_sentence,
     net_luck,
@@ -3708,7 +3712,7 @@ def test_a_possession_cap_row_names_the_drive_it_bounded():
     """The component's name, then the drive verbatim. `Q3 drive 7 possession
     cap` is what the unknown-component fallback would have printed, and it reads
     as a drive that owns a cap rather than a cap that bounded a drive."""
-    assert event_phrase(cap_row()) == "Possession cap · Q3 drive 7"
+    assert event_phrase(cap_row()) == "possession cap · Q3 drive 7"
 
 
 def test_a_possession_cap_row_names_no_player_and_quotes_no_probability():
@@ -3717,7 +3721,7 @@ def test_a_possession_cap_row_names_no_player_and_quotes_no_probability():
     are the identity's bookkeeping, and printing them as a branch would invent
     an event that never happened."""
     label = plain_label(cap_row())
-    assert label == "LAC Possession cap · Q3 drive 7"
+    assert label == "LAC possession cap · Q3 drive 7"
     assert "%" not in label
 
 
@@ -4008,3 +4012,91 @@ def test_the_header_only_makes_way_on_a_game_that_stacks():
         subtitle = next(t for t in ax.texts if t.get_text() == game.subtitle_line())
         heights.append(subtitle.get_window_extent().y0 - ax.get_window_extent().y1)
     assert heights[1] > heights[0]
+
+
+# --------------------------------------------------------------------------
+# round 9: a floor on the drawn arrow
+# --------------------------------------------------------------------------
+
+
+def _tiny_gap_game(**kwargs) -> GameVerdict:
+    """A game whose luck gap is 0.3 pt — the DEN_WAS Full case from round 8."""
+    defaults = {
+        "actual_margin": 3.0,
+        "deserved_margin": 2.7,
+        "dtw_home": 0.55,
+        "draws": np.linspace(-6.0, 12.0, 512),
+    }
+    return branded(**(defaults | kwargs))
+
+
+def test_a_gap_under_a_point_keeps_its_sentence_and_loses_its_span():
+    """At 0.3 pt the span is ~18 px and reads as a stray `>` under the axis.
+    The sentence already carries the number, so the span is what goes."""
+    _fig, ax = plot_bootstrap_distribution(_tiny_gap_game(), arrow=True)
+    assert not _spans(ax)
+    assert _arrow_sentence(ax).get_text() == "luck moved the margin 0.3 points toward DET"
+
+
+def test_the_floored_sentence_sits_where_a_drawn_arrow_s_sentence_sits():
+    """Losing the span must not move the words: two games side by side put
+    their sentence on the same line under the axis."""
+    tiny = _tiny_gap_game()
+    wide = branded()
+    offsets = []
+    for game in (tiny, wide):
+        fig, ax = plot_bootstrap_distribution(game, arrow=True)
+        fig.canvas.draw()
+        sentence = _arrow_sentence(ax)
+        offsets.append(sentence.get_window_extent().y1 - ax.get_window_extent().y0)
+    assert offsets[0] == pytest.approx(offsets[1], abs=1.0)
+
+
+def test_a_gap_of_exactly_a_point_still_draws_its_span():
+    """The floor is exclusive: 1.0 is drawn, so the rule has one edge, not a
+    band of games that may or may not have an arrow."""
+    _fig, ax = plot_bootstrap_distribution(_tiny_gap_game(deserved_margin=2.0), arrow=True)
+    assert len(_spans(ax)) == 1
+    assert _arrow_sentence(ax).get_text() == "luck moved the margin 1.0 points toward DET"
+
+
+def test_the_arrow_helper_returns_no_span_under_the_floor():
+    """The helper's own contract: `(None, label)`, so a caller can tell a
+    floored figure from one that never asked for an arrow."""
+    fig, ax = plot_bootstrap_distribution(_tiny_gap_game())
+    span, label = _draw_luck_arrow(ax, _tiny_gap_game())
+    assert span is None
+    assert label.get_text().startswith("luck moved the margin")
+    assert ARROW_FLOOR == 1.0
+
+
+# --------------------------------------------------------------------------
+# round 9: the cap row in the column's case
+# --------------------------------------------------------------------------
+
+
+def test_the_cap_row_is_lowercase_like_every_other_component_name():
+    """`LAC Possession cap · Q4 drive 26` beside `LAC drop · Dissly` was the
+    only row label with a capital after the team code. The column's case is
+    lowercase; the cap joins it."""
+    assert COMPONENT_NAMES["possession_cap"] == "possession cap"
+    assert all(name == name.lower() for name in COMPONENT_NAMES.values())
+
+
+def test_the_folded_cap_row_reads_in_the_same_case():
+    bars = [
+        luck_bars([cap_row(luck_epa=-0.02, event_class=f"Q1 drive {i}")], points_per_epa=PPE)[0]
+        for i in range(1, 3)
+    ]
+    (grouped,) = group_rows(bars)
+    assert grouped.label == "2 smaller possession caps (LAC)"
+
+
+def test_the_ledger_card_still_lifts_the_cap_row_s_first_letter():
+    """The card's cells are sentence case and the waterfall's rows are not, so
+    the same event is `Possession cap · Q3 drive 7` in one and `possession cap
+    · Q3 drive 7` in the other. Lowercasing the constant must not lowercase the
+    cell — `sentence_case` is what puts the capital back."""
+    from nfl_simulator.plots import sentence_case
+
+    assert sentence_case(event_phrase(cap_row())) == "Possession cap · Q3 drive 7"
