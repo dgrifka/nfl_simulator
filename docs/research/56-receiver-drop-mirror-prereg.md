@@ -64,6 +64,41 @@ large debits.
   instrument, `DATASETS = 400`, seed `20260827`): null bound and power at
   5 / 12.5 / 25 / 50% relative of the **4.95%** rate (12.5% = 0.62 pp), at
   receiver-season, team-season and defence-season grains.
+
+  **Computed 2026-08-27, before any verdict fit** (`research/71`, 400 datasets
+  per cell, seed 20260827, guards exact at 56,211 / 2,781 / 128). The gate arm,
+  on the conditioned residual:
+
+  | Grain | Null bound (threshold) | 5% | 12.5% | 25% | 50% | Resolvable |
+  |---|---|---|---|---|---|---|
+  | receiver-season | 1.009 pp | 0.15 | **0.40** | 1.00 | 1.00 | **No** |
+  | team-season | 0.634 pp | 0.19 | **0.88** | 1.00 | 1.00 | **Yes** |
+  | defence-season | 0.632 pp | 0.26 | **0.88** | 1.00 | 1.00 | **Yes** |
+
+  Gate D-1's power, on the raw drop-rate spreads (beta-binomial grid, arm 1's
+  own instrument; the receiver row is the ≥ 100-target unit of this section):
+
+  | Grain | Entities | Null bound | 5% | 12.5% | 25% | 50% | Resolvable |
+  |---|---|---|---|---|---|---|---|
+  | receiver-season | 67 | 1.540 pp | 0.13 | **0.20** | 0.65 | 1.00 | **No** |
+  | team-season | 128 | 0.714 pp | 0.20 | **0.87** | 1.00 | 1.00 | **Yes** |
+  | defence-season | 128 | 0.701 pp | 0.17 | **0.90** | 1.00 | 1.00 | **Yes** |
+
+  This reproduces document 09 §4's ordering on a different instrument — team
+  grain powered, receiver grain not — which §0's table anticipated at 0.87 and
+  0.37. The receiver grain is thin rather than absent: 1,931 receiver-seasons
+  share 54,160 modelled targets, a **median of 17 each**, against 422 per
+  team-season.
+
+  **The clause-1 grain rule below therefore fires on its second branch: only
+  team-season clears C-3, so the component charges the team-season — the
+  receiving corps — and says so.** Two consequences follow from the rule rather
+  than from a choice made after seeing it: the component's entity effect
+  `r[s]` in §2 is the **team-season** effect, so arm 2 is fitted a second time
+  with a team-season term in place of the receiver-season one (clause 2 needs
+  posterior draws over the charged entity, and a receiver-season fit cannot
+  supply them for a corps); and §0's `r_i` notation is read as "the charged
+  offensive entity", not specifically the individual receiver.
 - **Gates C-1 / C-2 / C-3** as document 43 §7. **Clause-1 grain rule,
   pre-committed:** the component charges the **receiver-season** if that
   grain clears C-3; if only team-season clears, the component charges the
