@@ -28,6 +28,7 @@ from matplotlib.patches import FancyArrowPatch  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from nfl_simulator.plots import (  # noqa: E402
+    ARROW_FLOOR,
     BAND_HIGH,
     BAND_LOW,
     CLEAR_FLIP,
@@ -41,6 +42,7 @@ from nfl_simulator.plots import (  # noqa: E402
     TOO_CLOSE,
     GameVerdict,
     OvertimeToss,
+    _draw_luck_arrow,
     attach_overtime_sidebar,
     band_sweep,
     bucket_label,
@@ -4008,3 +4010,59 @@ def test_the_header_only_makes_way_on_a_game_that_stacks():
         subtitle = next(t for t in ax.texts if t.get_text() == game.subtitle_line())
         heights.append(subtitle.get_window_extent().y0 - ax.get_window_extent().y1)
     assert heights[1] > heights[0]
+
+
+# --------------------------------------------------------------------------
+# round 9: a floor on the drawn arrow
+# --------------------------------------------------------------------------
+
+
+def _tiny_gap_game(**kwargs) -> GameVerdict:
+    """A game whose luck gap is 0.3 pt — the DEN_WAS Full case from round 8."""
+    defaults = {
+        "actual_margin": 3.0,
+        "deserved_margin": 2.7,
+        "dtw_home": 0.55,
+        "draws": np.linspace(-6.0, 12.0, 512),
+    }
+    return branded(**(defaults | kwargs))
+
+
+def test_a_gap_under_a_point_keeps_its_sentence_and_loses_its_span():
+    """At 0.3 pt the span is ~18 px and reads as a stray `>` under the axis.
+    The sentence already carries the number, so the span is what goes."""
+    _fig, ax = plot_bootstrap_distribution(_tiny_gap_game(), arrow=True)
+    assert not _spans(ax)
+    assert _arrow_sentence(ax).get_text() == "luck moved the margin 0.3 points toward DET"
+
+
+def test_the_floored_sentence_sits_where_a_drawn_arrow_s_sentence_sits():
+    """Losing the span must not move the words: two games side by side put
+    their sentence on the same line under the axis."""
+    tiny = _tiny_gap_game()
+    wide = branded()
+    offsets = []
+    for game in (tiny, wide):
+        fig, ax = plot_bootstrap_distribution(game, arrow=True)
+        fig.canvas.draw()
+        sentence = _arrow_sentence(ax)
+        offsets.append(sentence.get_window_extent().y1 - ax.get_window_extent().y0)
+    assert offsets[0] == pytest.approx(offsets[1], abs=1.0)
+
+
+def test_a_gap_of_exactly_a_point_still_draws_its_span():
+    """The floor is exclusive: 1.0 is drawn, so the rule has one edge, not a
+    band of games that may or may not have an arrow."""
+    _fig, ax = plot_bootstrap_distribution(_tiny_gap_game(deserved_margin=2.0), arrow=True)
+    assert len(_spans(ax)) == 1
+    assert _arrow_sentence(ax).get_text() == "luck moved the margin 1.0 points toward DET"
+
+
+def test_the_arrow_helper_returns_no_span_under_the_floor():
+    """The helper's own contract: `(None, label)`, so a caller can tell a
+    floored figure from one that never asked for an arrow."""
+    fig, ax = plot_bootstrap_distribution(_tiny_gap_game())
+    span, label = _draw_luck_arrow(ax, _tiny_gap_game())
+    assert span is None
+    assert label.get_text().startswith("luck moved the margin")
+    assert ARROW_FLOOR == 1.0
