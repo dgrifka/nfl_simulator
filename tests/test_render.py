@@ -342,11 +342,32 @@ def test_the_context_maps_each_edition_to_the_handles_it_simulates_with():
 
     handles = edition_handles("dp-model", "rd-model")
     assert set(handles) == {"strict", "full"}
-    assert handles["strict"] == {"dropped_pick_model": None, "receiver_drop_model": None}
+    assert handles["strict"] == {
+        "dropped_pick_model": None,
+        "receiver_drop_model": None,
+        "edition": "strict",
+    }
     assert handles["full"] == {
         "dropped_pick_model": "dp-model",
         "receiver_drop_model": "rd-model",
+        "edition": "full",
     }
+
+
+def test_each_handle_names_its_own_edition_so_the_possession_cap_switches_on():
+    """Round 8's defect. `simulate_game` keys document 61's cap on its `edition`
+    **argument** — not on the variant the ledger came out carrying — and this
+    map never passed one, so a Full render replayed uncapped and stopped against
+    the capped summary it was checked against.
+
+    `tests/test_simulator.py` owns what the argument then does; what this map
+    owes is the argument itself.
+    """
+    from nfl_simulator.render import edition_handles
+
+    handles = edition_handles(None, None)
+    assert handles["full"]["edition"] == "full"
+    assert handles["strict"]["edition"] == "strict"
 
 
 def test_a_missing_trace_leaves_its_edition_handle_none_rather_than_failing():
@@ -354,7 +375,11 @@ def test_a_missing_trace_leaves_its_edition_handle_none_rather_than_failing():
     from nfl_simulator.render import edition_handles
 
     handles = edition_handles(None, None)
-    assert handles["full"] == {"dropped_pick_model": None, "receiver_drop_model": None}
+    assert handles["full"] == {
+        "dropped_pick_model": None,
+        "receiver_drop_model": None,
+        "edition": "full",
+    }
 
 
 # --------------------------------------------------------------------------

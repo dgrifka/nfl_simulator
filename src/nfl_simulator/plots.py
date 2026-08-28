@@ -1391,7 +1391,22 @@ COMPONENT_NAMES = {
     "extra_point": "extra point",
     "dropped_pick": "dropped pick",
     "receiver_drop": "receiver drop",
+    "possession_cap": "Possession cap",
 }
+
+# Document 61's clip, which the Full edition books as a ledger row of its own.
+# The string is written here rather than imported from `simulator` so this stays
+# a presentation layer with no data dependency — the same reason the two
+# amendment A-3 components are bare strings above.
+POSSESSION_CAP = "possession_cap"
+
+# What a fold of cap rows is counted in. The cap is not one of amendment A-3's
+# hands-on-the-ball components and does not share their grammar: `12 smaller LAC
+# possession caps` reads as caps Los Angeles performed, and nobody performs a
+# cap — it is arithmetic the adjudication did to Los Angeles's possessions. The
+# club goes in parentheses at the end instead, where it qualifies the count
+# rather than the noun.
+POSSESSION_CAP_PLURAL = "possession caps"
 
 # Amendment A-3's hands-on-the-ball class, the two components the Full edition
 # adds. They are named together because they are the two things a game has
@@ -1426,6 +1441,13 @@ VARIANT_PLURALS = {"dropped_pick": "dropped picks", "receiver_drop": "drops"}
 # and a relative floor would fold different events in two games a reader is
 # comparing.
 GROUP_THRESHOLD = 1.0
+
+# The components a fold keeps apart, per component and per club, rather than
+# tipping into the one un-teamed `events under 1 pt` row. All three come in
+# dozens under the Full edition — a median ledger carries about fifty drops and,
+# since document 61, a cap row for every possession the clip bit — and a heap
+# that mixes them says only that something small happened many times.
+FOLD_BY_TEAM = (*VARIANT_COMPONENTS, POSSESSION_CAP)
 
 # The ledger's fumble classes are `{play type}/{live|aborted}`, which is the
 # simulator's vocabulary rather than a reader's. "aborted" is nflverse's word
@@ -1548,6 +1570,13 @@ def event_phrase(row: dict) -> str:
         return _with_kicker("extra point", row)
     if component == "fumble":
         return f"fumble on {_fumble_phrase(row['event_class'])}"
+    if component == POSSESSION_CAP:
+        # The drive label verbatim, and nothing else. A cap is not a branch —
+        # nothing was flipped, a possession's booked luck was bounded — so there
+        # is no player who did it and no probability it was priced at. The
+        # `event_class` is already a reader's phrase (`Q3 drive 7`), which is
+        # why it is printed rather than translated.
+        return f"{COMPONENT_NAMES[POSSESSION_CAP]} \u00b7 {row['event_class']}"
     if component in VARIANT_NAMED_BY:
         # No yardage class here, unlike a fumble or a kick. Under the Full
         # edition these rows come in dozens, and `34-66 yd, early down receiver
@@ -1743,6 +1772,8 @@ def _group_label(component: str | None, actor: str | None, count: int, threshold
     """
     if component in VARIANT_PLURALS and actor:
         return f"{count} smaller {actor} {VARIANT_PLURALS[component]}"
+    if component == POSSESSION_CAP and actor:
+        return f"{count} smaller {POSSESSION_CAP_PLURAL} ({actor})"
     return f"{count} events under {threshold:g} pt"
 
 
@@ -1775,7 +1806,7 @@ def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> l
         # the one un-teamed bucket, including a row that is already a fold.
         key = (
             (bar.component, bar.team)
-            if bar.component in VARIANT_PLURALS and bar.team
+            if bar.component in FOLD_BY_TEAM and bar.team
             else (None, None)
         )
         buckets.setdefault(key, []).append(bar)

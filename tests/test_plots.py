@@ -3678,3 +3678,104 @@ def test_the_anchors_are_judged_against_both_clubs_not_the_nearer_one():
 
     assert anchor_colour(DET_HEX, WAS_HEX) == PALETTE["anchor"]
     assert anchor_colour(WAS_HEX, DET_HEX) == PALETTE["anchor"]
+
+
+# ---- round 8: the possession cap is a row like any other -------------------
+
+
+def cap_row(luck_epa: float = -1.8, **kwargs) -> dict:
+    """Document 61 §5's cap row, as `simulator._cap_entry` writes it.
+
+    Not a branch: nothing was flipped, a possession's booked luck was bounded.
+    `actual = 1` against `expected = 0` is how the entry states that, and the
+    label the row wears is the drive's — `Q3 drive 7` — charged to the offence
+    that possessed it.
+    """
+    return {
+        "play_id": 1500.0,
+        "component": "possession_cap",
+        "event_class": "Q3 drive 7",
+        "charged_team": "LAC",
+        "opponent": "HOU",
+        "actual": 1.0,
+        "expected": 0.0,
+        "luck_epa": luck_epa,
+        **kwargs,
+    }
+
+
+def test_a_possession_cap_row_names_the_drive_it_bounded():
+    """The component's name, then the drive verbatim. `Q3 drive 7 possession
+    cap` is what the unknown-component fallback would have printed, and it reads
+    as a drive that owns a cap rather than a cap that bounded a drive."""
+    assert event_phrase(cap_row()) == "Possession cap · Q3 drive 7"
+
+
+def test_a_possession_cap_row_names_no_player_and_quotes_no_probability():
+    """A cap is arithmetic on a possession, not a coin somebody flipped. There
+    is no kicker, no passer and no per-cent to quote — `actual` and `expected`
+    are the identity's bookkeeping, and printing them as a branch would invent
+    an event that never happened."""
+    label = plain_label(cap_row())
+    assert label == "LAC Possession cap · Q3 drive 7"
+    assert "%" not in label
+
+
+def test_a_possession_cap_wears_the_mark_of_the_offence_it_is_charged_to():
+    """`_cap_entry` charges the clip to the drive's offence, so the logo column
+    is the charged team — unlike a dropped pick, the club that did the thing and
+    the club whose luck it was are the same one here."""
+    (bar,) = luck_bars([cap_row()], points_per_epa=PPE)
+    assert bar.team == "LAC"
+    assert bar.actor == "LAC"
+
+
+def test_smaller_possession_caps_fold_under_their_own_name_and_team():
+    """A Full-edition game bites a dozen possessions by a tenth of a point
+    each. Folded into the un-teamed `events under 1 pt` row they would be
+    indistinguishable from a stray extra point; folded by name they stay a fact
+    about one club's afternoon."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [cap_row(luck_epa=-0.3, play_id=float(i)) for i in range(1, 13)]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert grouped.label == "12 smaller possession caps (LAC)"
+    assert grouped.team == "LAC"
+    assert grouped.n_events == 12
+
+
+def test_a_fold_of_possession_caps_carries_their_exact_sum():
+    """Folding is not dropping — the waterfall still has to reconcile its two
+    ends over a row that hides twelve."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [cap_row(luck_epa=-0.3, play_id=float(i)) for i in range(1, 13)]
+    bars = luck_bars(rows, points_per_epa=PPE)
+    (grouped,) = group_rows(bars)
+    assert grouped.points == pytest.approx(sum(bar.points for bar in bars))
+
+
+def test_two_clubs_caps_fold_into_one_row_each_not_one_row_between_them():
+    from nfl_simulator.plots import group_rows
+
+    rows = [cap_row(luck_epa=-0.3, play_id=float(i)) for i in range(1, 4)] + [
+        cap_row(luck_epa=0.3, charged_team="HOU", opponent="LAC", play_id=float(i))
+        for i in range(10, 13)
+    ]
+    labels = {bar.label for bar in group_rows(luck_bars(rows, points_per_epa=PPE))}
+    assert labels == {"3 smaller possession caps (LAC)", "3 smaller possession caps (HOU)"}
+
+
+def test_a_cap_row_is_drawn_in_the_colour_of_the_team_its_clip_helped():
+    """No new colour for the cap. Every bar on the waterfall is already coloured
+    by the club the break helped, and a cap row is a break like the rest — the
+    label is what says it is a cap, not a third hue nobody has a key for."""
+    cap = cap_row(luck_epa=-3.0, play_id=1.0)
+    fumble = ledger_row(-3.0, charged_team="GB", play_id=2.0)
+    rows = [cap, fumble]
+    _fig, ax = waterfall(reconciling(rows), rows)
+    # Two rows and two anchors: the anchor ink, and one team colour the two
+    # rows share because both clips moved the margin the same way. The
+    # half-plane tints behind them are not bars and are filtered out.
+    colours = {tuple(patch.get_facecolor()) for patch in _bars_of(ax)}
+    assert len(colours) == 2

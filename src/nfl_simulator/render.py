@@ -422,12 +422,23 @@ def edition_handles(dropped_pick_model, receiver_drop_model) -> dict[str, dict]:
     class, which amendment A-3 clause 3 admits together or not at all. A handle
     that failed to load stays `None`: a checkout without the traces still
     renders Strict, and asks for Full at whatever coverage it has.
+
+    Each handle also names its own edition, because document 61's possession cap
+    is keyed on `simulate_game`'s `edition` **argument** rather than on the
+    variant the ledger comes out carrying — the audit arms deliberately reach it
+    with `edition=None`. Without the name here a Full render replayed uncapped
+    and stopped against the capped summary `research/76` writes.
     """
     return {
-        "strict": {"dropped_pick_model": None, "receiver_drop_model": None},
+        "strict": {
+            "dropped_pick_model": None,
+            "receiver_drop_model": None,
+            "edition": "strict",
+        },
         "full": {
             "dropped_pick_model": dropped_pick_model,
             "receiver_drop_model": receiver_drop_model,
+            "edition": "full",
         },
     }
 
