@@ -3779,3 +3779,232 @@ def test_a_cap_row_is_drawn_in_the_colour_of_the_team_its_clip_helped():
     # half-plane tints behind them are not bars and are filtered out.
     colours = {tuple(patch.get_facecolor()) for patch in _bars_of(ax)}
     assert len(colours) == 2
+
+
+# --------------------------------------------------------------------------
+# round 8: one annotation band above the bars, the arrow under the axis
+# --------------------------------------------------------------------------
+
+
+def _wins_by_labels(ax) -> list:
+    return [text for text in ax.texts if " wins by" in text.get_text()]
+
+
+def _arrow_sentence(ax):
+    return next(t for t in ax.texts if t.get_text().startswith("luck moved the margin"))
+
+
+def _caveat(ax):
+    return next(t for t in ax.texts if t.get_text().startswith("The 89% interval"))
+
+
+def test_each_rule_label_sits_centred_over_its_own_rule():
+    """Round 7 hung each label to the right of its rule, which is what put
+    `Actual:` under `Deserved:` on a lopsided game. Centred, a label says which
+    line it names without a reader tracing back along it."""
+    fig, ax = plot_bootstrap_distribution(branded())
+    fig.canvas.draw()
+    for label in _callouts(ax):
+        box = label.get_window_extent()
+        rule = ax.transData.transform((label.xy[0], 0.0))[0]
+        assert box.x0 < rule < box.x1
+        assert (box.x0 + box.x1) / 2.0 == pytest.approx(rule, abs=2.0)
+
+
+def test_the_rule_labels_sit_above_the_top_spine_rather_than_over_the_bars():
+    """One band, above the plot. Inside it, the labels compete with the bars,
+    the corner marks and — until this round — a callout and an arrow."""
+    fig, ax = plot_bootstrap_distribution(branded())
+    fig.canvas.draw()
+    top = ax.get_window_extent().y1
+    for label in _callouts(ax):
+        assert label.get_window_extent().y0 >= top
+
+
+def test_the_rule_labels_are_bold_the_way_the_waterfalls_anchor_rows_are():
+    _fig, ax = plot_bootstrap_distribution(branded())
+    assert {label.get_fontweight() for label in _callouts(ax)} == {"bold"}
+
+
+def test_a_near_tie_stacks_the_two_rule_labels_on_two_rows():
+    """`deserved 0.2` against `actual 1` puts two centred labels at the same x.
+    The deserved one goes up a row; the actual one holds the lower row, which is
+    the one a reader's eye lands on first."""
+    game = branded(deserved_margin=0.2, actual_margin=1.0, draws=np.linspace(-6.0, 8.0, 512))
+    fig, ax = plot_bootstrap_distribution(game)
+    fig.canvas.draw()
+    deserved = next(t for t in _callouts(ax) if t.get_text().startswith("Deserved"))
+    actual = next(t for t in _callouts(ax) if t.get_text().startswith("Actual"))
+    assert not deserved.get_window_extent().overlaps(actual.get_window_extent())
+    assert deserved.get_window_extent().y0 > actual.get_window_extent().y0
+
+
+def test_a_corner_label_a_rule_label_lands_on_loses_its_words_not_its_mark():
+    """The corner text is a key the `← GB wins by` line under the axis already
+    carries, so it is the half that gives way. The mark stays: it is the club's
+    identity, and a corner with neither would say nothing at all."""
+    from nfl_simulator.plots import _clear_corner_labels
+
+    fig, ax = plot_bootstrap_distribution(branded(), logos={"GB": synthetic_mark()})
+    fig.canvas.draw()
+    corner = next(t for t in ax.texts if t.get_text() == "GB wins")
+    # A rule label put straight on top of that corner, which is what
+    # `2021_14_LV_KC`'s rule at 39 on an axis that stops at 51 used to do.
+    landed = ax.annotate(
+        "Actual: GB by 39",
+        xy=corner.xy,
+        xycoords=corner.xycoords,
+        xytext=corner.xyann,
+        textcoords="offset points",
+        ha=corner.get_horizontalalignment(),
+        va=corner.get_verticalalignment(),
+        fontsize=9,
+    )
+    _clear_corner_labels(fig, landed, [corner])
+    assert corner.get_text() == ""
+    assert [a for a in ax.artists if a.get_gid() == "side-header-logo"]
+
+
+def test_a_corner_label_no_rule_label_reaches_keeps_its_words():
+    """The rule is geometric, so a corner nothing landed on is left alone."""
+    from nfl_simulator.plots import _clear_corner_labels
+
+    fig, ax = plot_bootstrap_distribution(branded())
+    fig.canvas.draw()
+    corner = next(t for t in ax.texts if t.get_text() == "GB wins")
+    far = next(t for t in _callouts(ax) if t.get_text().startswith("Actual"))
+    _clear_corner_labels(fig, far, [corner])
+    assert corner.get_text() == "GB wins"
+
+
+def test_the_luck_arrow_is_drawn_below_the_axis():
+    """Round 8. Above the bars it shared a strip with two rule labels and a
+    callout; below the axis it spans the same two margins over the ticks that
+    number them."""
+    fig, ax = plot_bootstrap_distribution(branded(), arrow=True)
+    fig.canvas.draw()
+    (span,) = _spans(ax)
+    assert span.arrow_patch.get_window_extent().y1 <= ax.get_window_extent().y0
+
+
+def test_the_arrow_still_spans_the_two_margins_with_its_head_at_the_actual_one():
+    _fig, ax = plot_bootstrap_distribution(branded(), arrow=True)
+    (span,) = _spans(ax)
+    assert span.xyann[0] == pytest.approx(8.0)
+    assert span.xy[0] == pytest.approx(-8.28)
+
+
+def test_the_arrow_clears_the_axis_tick_labels_it_is_drawn_under():
+    fig, ax = plot_bootstrap_distribution(branded(), arrow=True)
+    fig.canvas.draw()
+    (span,) = _spans(ax)
+    ticks = [t.get_window_extent() for t in ax.get_xticklabels() if t.get_text()]
+    assert span.arrow_patch.get_window_extent().y1 <= min(box.y0 for box in ticks)
+
+
+def test_the_arrow_sentence_sits_centred_under_its_own_span():
+    fig, ax = plot_bootstrap_distribution(branded(), arrow=True)
+    fig.canvas.draw()
+    (span,) = _spans(ax)
+    sentence = _arrow_sentence(ax).get_window_extent()
+    patch = span.arrow_patch.get_window_extent()
+    assert sentence.y1 <= patch.y0
+    assert (sentence.x0 + sentence.x1) / 2.0 == pytest.approx((patch.x0 + patch.x1) / 2.0, abs=3.0)
+
+
+def test_the_wins_by_line_drops_below_the_arrow_to_make_room_for_it():
+    fig, ax = plot_bootstrap_distribution(branded(), arrow=True)
+    fig.canvas.draw()
+    sentence = _arrow_sentence(ax).get_window_extent()
+    for label in _wins_by_labels(ax):
+        assert label.get_window_extent().y1 <= sentence.y0
+
+
+def test_the_caveat_follows_the_wins_by_line_down_by_the_same_amount():
+    """The band the arrow now occupies is made, not borrowed: everything under
+    it moves down together, or the footnote lands on the direction labels."""
+    fig, ax = plot_bootstrap_distribution(branded(), arrow=True)
+    fig.canvas.draw()
+    floor = min(label.get_window_extent().y0 for label in _wins_by_labels(ax))
+    assert _caveat(ax).get_window_extent().y1 <= floor
+
+
+def test_a_degenerate_game_still_draws_nothing_under_the_axis_but_its_key():
+    game = branded(dtw_home=1.0, draws=np.linspace(15.0, 40.0, 512))
+    fig, ax = plot_bootstrap_distribution(game, arrow=True)
+    fig.canvas.draw()
+    assert not _spans(ax)
+    assert _wins_by_labels(ax)
+
+
+def test_the_arrow_no_longer_buys_headroom_above_the_bars_it_does_not_use():
+    """It moved out from over them, so the band it used to need is dead space."""
+    game = branded(draws=np.linspace(-20.0, 6.0, 4000))
+    plain = plot_bootstrap_distribution(game)[1].get_ylim()[1]
+    arrowed = plot_bootstrap_distribution(game, arrow=True)[1].get_ylim()[1]
+    assert arrowed == pytest.approx(plain)
+
+
+BAND_MARGINS = [
+    (8.0, -8.28),  # the worked clear flip
+    (0.2, 1.0),  # the constructed near-tie
+    (20.0, -0.9),  # `2024_19_LAC_HOU`, lopsided
+    (39.0, 33.0),  # `2021_14_LV_KC`, both margins hard against one frame edge
+    (-1.0, -3.3),  # `2025_13_DEN_WAS`, the pair that collided in round 6
+]
+
+
+@pytest.mark.parametrize(("actual", "deserved"), BAND_MARGINS)
+def test_nothing_in_the_annotation_band_prints_through_anything_else(actual, deserved):
+    """The band's whole rule, asserted where a reader would see it break."""
+    span = max(abs(actual), abs(deserved)) + 12.0
+    game = branded(
+        actual_margin=actual,
+        deserved_margin=deserved,
+        draws=np.linspace(min(actual, deserved) - span, max(actual, deserved) + span, 2048),
+    )
+    fig, ax = plot_bootstrap_distribution(game, arrow=True, logos={"DET": synthetic_mark()})
+    fig.canvas.draw()
+    boxes = [label.get_window_extent() for label in _callouts(ax)]
+    boxes += [t.get_window_extent() for t in ax.texts if t.get_text().endswith(" wins")]
+    boxes += [_arrow_sentence(ax).get_window_extent()]
+    for first in range(len(boxes)):
+        for second in range(first + 1, len(boxes)):
+            assert not boxes[first].overlaps(boxes[second])
+
+
+def _header_boxes(ax, game) -> list:
+    """The subtitle and the verdict pill, the two things a lifted label meets."""
+    wanted = {game.subtitle_line(), game.bucket}
+    return [t.get_window_extent() for t in ax.texts if t.get_text() in wanted]
+
+
+def test_a_lifted_rule_label_never_lands_in_the_header():
+    """`2025_13_DEN_WAS` at 1.3 and 1 stacks the two labels, and the row the
+    deserved one goes up into is the subtitle's — unless the header makes way
+    for it. The room is made rather than hoped for, as everywhere else here."""
+    game = branded(deserved_margin=0.2, actual_margin=1.0, draws=np.linspace(-6.0, 8.0, 512))
+    fig, ax = plot_bootstrap_distribution(game)
+    fig.canvas.draw()
+    boxes = _header_boxes(ax, game)
+    assert len(boxes) == 2, "the subtitle and the pill"
+    # The same clearance a rule label keeps off a corner label: a box edge a
+    # pixel under a subtitle reads as a clipped line, not as two rows.
+    clearance = CORNER_CLEARANCE / 72.0 * fig.dpi
+    for label in _callouts(ax):
+        for box in boxes:
+            assert not label.get_window_extent().overlaps(box.padded(clearance))
+
+
+def test_the_header_only_makes_way_on_a_game_that_stacks():
+    """A figure whose two labels sit side by side keeps the header it had — the
+    lift is paid for by the game that needs it, not by all of them."""
+    stacked = branded(deserved_margin=0.2, actual_margin=1.0, draws=np.linspace(-6.0, 8.0, 512))
+    apart = branded()
+    heights = []
+    for game in (apart, stacked):
+        fig, ax = plot_bootstrap_distribution(game)
+        fig.canvas.draw()
+        subtitle = next(t for t in ax.texts if t.get_text() == game.subtitle_line())
+        heights.append(subtitle.get_window_extent().y0 - ax.get_window_extent().y1)
+    assert heights[1] > heights[0]

@@ -397,6 +397,7 @@ def draw_header(
     caption: str | None = None,
     left_points: float = 0.0,
     subtitle_extra: str | None = None,
+    lift: float = 0.0,
 ):
     """The title block every per-game figure wears: heading, rule, subtitle, pill.
 
@@ -413,6 +414,13 @@ def draw_header(
     should be. The pill does not move — it belongs to the plot's right edge,
     which is where the figure's right edge is.
 
+    ``lift`` raises the whole block, in points. The distribution's two rule
+    labels sit in the band between the plot and this header, and a near-tie
+    stacks them on a second row that would otherwise be the subtitle's — see
+    :func:`_lift_colliding_label`. The block moves as one, pill included, so the
+    header still reads as a block rather than as a heading that lost its
+    subtitle.
+
     Returns ``(heading_text, pill_text)`` so a caller can measure them.
     """
     left_px = left_points / 72.0 * ax.figure.dpi
@@ -423,7 +431,7 @@ def draw_header(
             text,
             xy=(0, 1),
             xycoords="axes fraction",
-            xytext=(left_points, y_points),
+            xytext=(left_points, y_points + lift),
             textcoords="offset points",
             va="bottom",
             **kwargs,
@@ -442,7 +450,7 @@ def draw_header(
     # block with the figure under it rather than as a caption floating above.
     # Offset in points off the top spine, like everything else here.
     lifted = ax.transAxes + mpl.transforms.ScaledTranslation(
-        0, RULE_OFFSET / 72, ax.figure.dpi_scale_trans
+        0, (RULE_OFFSET + lift) / 72, ax.figure.dpi_scale_trans
     )
     ax.plot(
         [left_px / plot_width if plot_width else 0.0, 1],
@@ -467,7 +475,7 @@ def draw_header(
         verdict.bucket,
         xy=(1, 1),
         xycoords="axes fraction",
-        xytext=(0, SUBTITLE_OFFSET - 4),
+        xytext=(0, SUBTITLE_OFFSET - 4 + lift),
         textcoords="offset points",
         ha="right",
         va="bottom",
@@ -547,27 +555,37 @@ def _wrap_to_width(fig, text: Text, width_px: float) -> None:
     text.set_text("\n".join(lines))
 
 
-def _lift_colliding_label(fig, first: Annotation, second: Annotation) -> None:
-    """Separate two rule labels that print on top of each other.
+def _lift_colliding_label(fig, lifted: Annotation, held: Annotation) -> float:
+    """Stack two rule labels that print on top of each other, on two rows.
 
-    Both labels hang inside the top of the plot off their own rule, so a game
-    whose deserved and actual margins are close prints one through the other —
-    `2025_13_DEN_WAS` at −3.3 and −1 was unreadable. The **left-hand** label moves
-    *above* the top spine, into the empty band between the plot and its subtitle.
+    Since round 8 both labels sit centred over their own rule in the band above
+    the top spine, so a game whose deserved and actual margins are close puts
+    two centred boxes at nearly the same x — `2025_13_DEN_WAS` at −3.3 and −1,
+    and the constructed near-tie at 0.2 and 1.0. The band is a band rather than
+    a line, so the answer is a second row rather than a nudge sideways.
 
-    Two choices are load-bearing. It is the left-hand label because a label runs
-    to the right of its own rule: lifting that one also takes it off the other
-    rule, which it was otherwise struck through by. And it goes above the spine
-    rather than onto a second row inside the plot, because the rules stop at the
-    spine and the band above it is empty, whereas a second row lands the text on
-    whatever bar is tallest at that margin.
+    ``lifted`` goes up; ``held`` keeps the lower row. Which is which is the
+    caller's choice and not a measurement: `Deserved:` is the one that moves,
+    because the lower row is the one a reader's eye meets first coming up off
+    the plot and `Actual:` is the scoreboard they already know.
+
+    One row is the held label's own rendered height plus the gap a label keeps
+    off the spine, so the two rows are as far apart as a row is tall whatever
+    the font or the dpi turns out to be.
+
+    Returns the points it lifted, ``0.0`` if it did not: the second row is cut
+    out of the band the header sits above, so the caller has to give the header
+    the same room back.
     """
     renderer = _renderer(fig)
-    if not first.get_window_extent(renderer).overlaps(second.get_window_extent(renderer)):
-        return
-    lifted = min((first, second), key=lambda label: label.xy[0])
-    lifted.set_verticalalignment("bottom")
-    lifted.xyann = (4, 3)
+    clearance = CORNER_CLEARANCE / 72.0 * fig.dpi
+    room = held.get_window_extent(renderer).padded(clearance)
+    if not lifted.get_window_extent(renderer).overlaps(room):
+        return 0.0
+    row = held.get_window_extent(renderer).height / fig.dpi * 72.0 + RULE_LABEL_GAP
+    x_points, y_points = lifted.xyann
+    lifted.xyann = (x_points, y_points + row)
+    return row
 
 
 # The gap a rule label keeps from a corner label, in points. A bare
@@ -578,38 +596,33 @@ CORNER_CLEARANCE = 8.0
 
 
 def _clear_corner_labels(fig, label: Annotation, corners: Sequence[Text]) -> None:
-    """Move a rule label out from under the corner label it landed on.
+    """Take the words off a corner a rule label landed on, and leave the mark.
 
     The two corner labels are the axis's key — `GB wins` over one half of it,
-    `DET wins` over the other — and they sit in the band the two rule labels
-    have hung in since document 37. A rule at either extreme of the axis puts
-    its label straight through one of them; `2021_14_LV_KC`, whose actual margin
+    `DET wins` over the other — and a rule at either extreme of the axis can put
+    its centred label across one of them; `2021_14_LV_KC`, whose actual margin
     is 39 on an axis that stops at 51, is the case that found this.
 
-    The label is flipped to the other side of its own rule first. That is the
-    cheaper move: it keeps the label on the row it belongs to and beside the
-    rule it names. A rule so close to a frame edge that the flip does not clear
-    the corner either is lifted above the top spine instead — where
-    :func:`_lift_colliding_label` already sends a label with nowhere else to be.
+    Round 8 changed which one gives way. Moving the rule label was the cheaper
+    move while the labels hung inside the plot, but the band above the spine has
+    one row and a label pushed off it lands nowhere. The corner text is the half
+    that can go: the `← GB wins by` / `DET wins by →` line under the axis says
+    the same thing, and the club's mark stays in the corner, so nothing is lost
+    but a repetition.
     """
     renderer = _renderer(fig)
     clearance = CORNER_CLEARANCE / 72.0 * fig.dpi
+    box = label.get_window_extent(renderer)
+    for corner in corners:
+        if not corner.get_text():
+            continue
+        if box.overlaps(corner.get_window_extent(renderer).padded(clearance)):
+            corner.set_text("")
 
-    def collides() -> bool:
-        box = label.get_window_extent(renderer)
-        return any(
-            box.overlaps(corner.get_window_extent(renderer).padded(clearance)) for corner in corners
-        )
 
-    if not collides():
-        return
-    label.set_horizontalalignment("right")
-    label.xyann = (-4, label.xyann[1])
-    if not collides():
-        return
-    label.set_horizontalalignment("left")
-    label.set_verticalalignment("bottom")
-    label.xyann = (4, 3)
+# How far above the top spine a rule label's box sits, in points, and the gap
+# between the two rows when a near-tie stacks them.
+RULE_LABEL_GAP = 5.0
 
 
 def _rule(
@@ -617,10 +630,17 @@ def _rule(
 ) -> Annotation:
     """A vertical reference rule with its label attached, never colour alone.
 
+    Round 8 put the label **centred above its own rule**, in the band over the
+    top spine, and set it bold the way the waterfall's two anchor rows are. It
+    used to hang inside the plot and to the right of the rule, which is two
+    problems: a label to one side of the line it names is read as belonging to
+    whatever it sits over, and inside the plot it shared a strip with the corner
+    marks, the callout and the luck arrow. `LAC_HOU_12-32--52-48_full_dtw.png`
+    is the render where all four met.
+
     ``boxed`` puts the label in a cream-filled rounded box edged in the rule's
-    own colour — the baseball chart's `(Actual)` callout. The fill matters: a
-    bare label printed over the tallest part of a histogram is unreadable, and
-    the box gives it a surface without hiding the bar it sits on.
+    own colour — the baseball chart's `(Actual)` callout. The fill still matters
+    above the spine: the band is empty on most games and is not on all of them.
     """
     ax.plot(
         [x, x],
@@ -636,13 +656,15 @@ def _rule(
         label,
         xy=(x, 1.0),
         xycoords=ax.get_xaxis_transform(),
-        xytext=(4, -2),
+        xytext=(0, RULE_LABEL_GAP),
         textcoords="offset points",
-        ha="left",
-        va="top",
+        ha="center",
+        va="bottom",
         fontsize=9,
+        fontweight="bold",
         color=color,
         zorder=5,
+        annotation_clip=False,
         bbox=(
             {
                 "boxstyle": "round,pad=0.3",
@@ -663,18 +685,26 @@ def _rule(
     return annotation
 
 
-# Where the three annotations that share the top of the plot sit, in axes
-# fractions. The rule callouts hang off the top spine and own everything above
-# 0.95, so the arrow and the deserved-to-win line are stacked under them rather
-# than beside them: a game whose two rules are far apart would otherwise put the
-# arrow straight through both labels.
-ARROW_Y = 0.855
+# Where the callout sits, in axes fractions. It is the last thing left inside
+# the top of the plot: round 8 moved the two rule labels above the spine and the
+# luck arrow under the axis, because on `2024_19_LAC_HOU` all four met in one
+# strip and the callout repeated the subtitle and the verdict pill besides.
 CALLOUT_Y = 0.76
+
+# The band under the axis, in points from it, in the order a reader meets it
+# going down: the tick labels own everything above ``ARROW_OFFSET``, then the
+# arrow's span, then its sentence, then the two direction labels, then the
+# footnote. ``UNDER_AXIS_BAND`` is what the arrow costs, and everything below it
+# moves down by exactly that — a band that is borrowed rather than made puts the
+# sentence on the `wins by` line.
+ARROW_OFFSET = -28.0
+ARROW_LABEL_OFFSET = -33.0
+UNDER_AXIS_BAND = 30.0
 
 # How much taller than its tallest bar the plot is drawn. The annotations above
 # are placed by rule rather than by inspection, so the room they need is made
-# rather than hoped for: an annotated figure reserves the whole band they sit
-# in, and a bare one reserves only what the two rule callouts want.
+# rather than hoped for: a figure carrying the callout reserves the whole band
+# it sits in, and one without reserves only what the corner marks want.
 ANNOTATED_HEADROOM = 1.62
 PLAIN_HEADROOM = 1.18
 
@@ -753,25 +783,45 @@ def _draw_callout(ax, verdict: GameVerdict, home_colour: str, away_colour: str) 
     )
 
 
+def _under_axis(ax, points: float):
+    """The x axis's own transform, shifted ``points`` down the figure.
+
+    A blended transform rather than a negative axes fraction: the band under the
+    axis is measured in points off the spine — the tick labels above it and the
+    direction labels below it both are — and an axes fraction would resize it
+    with the plot and slide the arrow into whichever of the two is nearer.
+    """
+    from matplotlib.transforms import offset_copy
+
+    return offset_copy(ax.get_xaxis_transform(), fig=ax.figure, x=0, y=points, units="points")
+
+
 def _draw_luck_arrow(ax, verdict: GameVerdict):
-    """The span between the two rules, labelled with the luck it measures.
+    """The span between the two rules, under the axis, labelled with what it measures.
 
     The patch runs from the actual margin to the deserved one, and its head is
     at the **actual** end — that is the direction luck pushed the game, and the
     label says so in the same words. An arrowhead on the deserved end would
-    point one way while the sentence above it pointed the other.
+    point one way while the sentence under it pointed the other.
+
+    Round 8 moved it below the axis. Above the bars it was the third thing in a
+    strip that already held two rule labels and a callout, and on a lopsided
+    game it ran through both of them. Under the axis it spans the same two
+    margins directly over the ticks that number them, which is where the
+    distance it measures is already written down.
 
     Sign convention: ``actual - deserved`` is what luck added to the home team's
     margin, so a positive gap is luck that helped the home team.
     """
     gap = verdict.actual_margin - verdict.deserved_margin
     toward = verdict.home_team if gap > 0 else verdict.away_team
+    rail = _under_axis(ax, ARROW_OFFSET)
     span = ax.annotate(
         "",
-        xy=(verdict.deserved_margin, ARROW_Y),
-        xycoords=("data", "axes fraction"),
-        xytext=(verdict.actual_margin, ARROW_Y),
-        textcoords=("data", "axes fraction"),
+        xy=(verdict.deserved_margin, 0.0),
+        xycoords=rail,
+        xytext=(verdict.actual_margin, 0.0),
+        textcoords=rail,
         arrowprops={
             "arrowstyle": "<-",
             "color": PALETTE["text_muted"],
@@ -784,15 +834,15 @@ def _draw_luck_arrow(ax, verdict: GameVerdict):
     )
     label = ax.text(
         (verdict.actual_margin + verdict.deserved_margin) / 2.0,
-        ARROW_Y + 0.015,
+        0.0,
         f"luck moved the margin {abs(gap):.1f} points toward {toward}",
-        transform=ax.get_xaxis_transform(),
+        transform=_under_axis(ax, ARROW_LABEL_OFFSET),
         ha="center",
-        va="bottom",
+        va="top",
         fontsize=9,
         color=PALETTE["text_muted"],
         zorder=7,
-        bbox=_shielded(),
+        clip_on=False,
     )
     return span, label
 
@@ -839,7 +889,12 @@ def _draw_logo_legend(ax, entries, *, template: str = "{team} wins") -> None:
 
 # How far under the axis the two direction labels sit, in points: clear of the
 # tick labels, and close enough to them to read as a key to the numbers rather
-# than as a caption under the figure.
+# than as a caption under the figure. The waterfall keeps this offset — nothing
+# is drawn between its ticks and its labels. The distribution passes the same
+# offset dropped by ``UNDER_AXIS_BAND``, because since round 8 the luck arrow
+# sits in between; it drops them on every game rather than only on one that has
+# an arrow, since a figure whose furniture moves between games is one a reader
+# cannot put beside another.
 WINS_BY_OFFSET = -30
 
 
@@ -880,7 +935,15 @@ def _part_labels(fig, left: Annotation, right: Annotation) -> None:
         right.xyann = (x_points + overlap / fig.dpi * 72.0, y_points)
 
 
-def _draw_wins_by_labels(fig, ax, verdict: GameVerdict, home_colour: str, away_colour: str) -> list:
+def _draw_wins_by_labels(
+    fig,
+    ax,
+    verdict: GameVerdict,
+    home_colour: str,
+    away_colour: str,
+    *,
+    offset: float = WINS_BY_OFFSET,
+) -> list:
     """`← GB wins by` and `DET wins by →`, flanking the zero they are measured from.
 
     The axis title was `final margin (DET − GB)` and the ticks were signed, so
@@ -907,7 +970,7 @@ def _draw_wins_by_labels(fig, ax, verdict: GameVerdict, home_colour: str, away_c
                 text,
                 xy=(zero, 0.0),
                 xycoords=ax.get_xaxis_transform(),
-                xytext=(gap, WINS_BY_OFFSET),
+                xytext=(gap, offset),
                 textcoords="offset points",
                 ha=align,
                 va="top",
@@ -1023,9 +1086,9 @@ def plot_bootstrap_distribution(
             # Headroom first: everything placed in axes fractions above depends
             # on where the bars stop, and `set_ylim` after the fact would move
             # them relative to a plot they were measured against.
-            ax.set_ylim(
-                0.0, counts.max() * (ANNOTATED_HEADROOM if callout or arrow else PLAIN_HEADROOM)
-            )
+            # The callout alone. Round 8 took the arrow out from over the bars,
+            # so the band it used to be given up here is dead space.
+            ax.set_ylim(0.0, counts.max() * (ANNOTATED_HEADROOM if callout else PLAIN_HEADROOM))
             ax.set_ylabel("% of simulations", fontsize=9, color=PALETTE["text_muted"])
             # Round 1's review: the figure "makes sense the more you read it".
             # A y axis with nothing on it is one of the reasons — the reader is
@@ -1074,7 +1137,23 @@ def plot_bootstrap_distribution(
             mpl.ticker.FuncFormatter(lambda value, _pos: f"{abs(value):g}")
         )
         ax.set_xlabel("")
-        _draw_wins_by_labels(fig, ax, verdict, home_colour, away_colour)
+        _draw_wins_by_labels(
+            fig,
+            ax,
+            verdict,
+            home_colour,
+            away_colour,
+            offset=WINS_BY_OFFSET - UNDER_AXIS_BAND,
+        )
+
+        # The band above the spine is settled before the header is drawn over
+        # it. Corners first, then the two labels against each other: a label
+        # moved off a corner can land on the other rule's label, and the lift is
+        # the move that always works. What the lift costs is handed to the
+        # header, which gives the same room back rather than being printed into.
+        for rule_label in (deserved_label, actual_label):
+            _clear_corner_labels(fig, rule_label, corners)
+        lift = _lift_colliding_label(fig, deserved_label, actual_label)
 
         # The count is the number of re-adjudications actually drawn — 200
         # posterior draws x 800 coin draws on the shipped settings — not the
@@ -1083,13 +1162,18 @@ def plot_bootstrap_distribution(
         heading = "Deserve-to-Win"
         if not verdict.is_point_mass:
             heading = f"{heading} — {len(verdict.margin_draws):,} simulations"
-        draw_header(ax, verdict, heading)
+        draw_header(ax, verdict, heading, lift=lift)
+
+        from matplotlib.transforms import offset_copy
 
         caveat = ax.text(
             0,
             -0.42,
             verdict.interval_note(coverage=coverage),
-            transform=ax.transAxes,
+            # Down by the arrow band, exactly as the direction labels above it
+            # are. Borrowing the room instead of making it lands the footnote on
+            # `← GB wins by`.
+            transform=offset_copy(ax.transAxes, fig=fig, x=0, y=-UNDER_AXIS_BAND, units="points"),
             fontsize=8,
             color=PALETTE["text_muted"],
             va="top",
@@ -1106,11 +1190,6 @@ def plot_bootstrap_distribution(
         # say the ledger is one event short on purpose.
         for line in footer_lines(verdict):
             caveat.set_text(f"{caveat.get_text()}\n{line}")
-        # Corners first, then each other: a label moved off a corner can land on
-        # the other rule's label, and the lift is the move that always works.
-        for rule_label in (deserved_label, actual_label):
-            _clear_corner_labels(fig, rule_label, corners)
-        _lift_colliding_label(fig, deserved_label, actual_label)
 
         if callout:
             _draw_callout(ax, verdict, home_colour, away_colour)
