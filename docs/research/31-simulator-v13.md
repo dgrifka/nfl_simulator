@@ -253,6 +253,19 @@ populations narrowed and both record that a blocked kick is `core`.
 | The empirical class tables were fitted on the narrowed population | **Closed by this release** — the masks are shared, so the table and the ledger cannot drift apart |
 | Everything document 05 §5 and 05b §7 already carry | **Unchanged** |
 
+## 9a. Successor — v1.3 is now the **Strict** edition
+
+*Added 2026-08-28.* Amendment A-3 was enacted on that date by ruling R-4
+(document 58 §1), and the adjudication this document describes acquired a
+public name. **Strict** is exactly v1.3 — fumbles, field goals and extra
+points, 2016–2025, byte for byte, and every audit in documents 49–59 reprints
+its replay gap as 0.00e+00 to prove it. **Full** is Strict plus two
+hands-on-the-ball components, dropped picks and receiver drops, over the
+2022–2025 seasons FTN charting reaches. Nothing in v1.3 changed; a second
+edition was added beside it. The trail runs documents 49–50 (the dropped-pick
+variant), 52–55 (amendment A-3 and its gates), 56–57 (the receiver mirror),
+58 (the ruling and the editions) and 59 (the enactment).
+
 ## 10. What the maintainer is being asked
 
 **Nothing.** All four decisions were made on 2026-08-18 and this is the record of

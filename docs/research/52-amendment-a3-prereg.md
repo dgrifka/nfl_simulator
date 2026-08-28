@@ -44,12 +44,27 @@ what the definition implies.
 
 ## 3. The amendment text
 
+**Amended 2026-08-28 by ruling R-4 (document 58 §1).** The preamble below no
+longer says "near-random". the maintainer's ruling, quoted:
+
+> **The gates govern.** Document 52 §3's preamble — "whose finish is
+> near-random" — is rewritten to: *"whose outcome the entity's persistent
+> skill explains only a small, measured share of."* Under that reading a
+> 1-in-20 drop with a 0.088% persistent share qualifies, as does a coin-flip
+> finish with a 1.4% share. Gate C-2 failing at the charged grain (receiving
+> corps genuinely differ) is not a bar: clause 2 already prices each event at
+> the corps' shrunk posterior rate, so a good corps keeps its edge.
+
+The ruling changes the wording of the door, not the gates behind it: every
+numbered clause below is the text rounds 5–7 were gated against, unchanged.
+
 > ### Amendment A-3 — the hands-on-the-ball class
 >
-> A component whose outcome a player controls, but whose finish is
-> near-random, may be neutralized **partially, at the entity's shrunk
-> posterior rate**, if and only if all of the following hold, each
-> pre-registered before the component's fit:
+> A component whose outcome a player controls, but **of whose outcome the
+> entity's persistent skill explains only a small, measured share**, may be
+> neutralized **partially, at the entity's shrunk posterior rate**, if and
+> only if all of the following hold, each pre-registered before the
+> component's fit:
 >
 > 1. **A powered measurement of the entity spread**, at the grain the
 >    component charges (Gate C-3 ≥ 0.80 at the 12.5% reference), with the
@@ -153,6 +168,27 @@ mirror)`.
 ---
 
 ## 8. Outcome
+
+**Enacted 2026-08-28 (round 8), by ruling R-4.** the maintainer ruled on §3's wording —
+the half of enactment no round could compute — and the gates govern. A-3 is
+enacted for the hands-on-the-ball class in **both directions**; document 05 §3's
+two rows read **`partial (A-3)`**; the two editions are named **Strict**
+(2016–2025, fumbles + FG + XP) and **Full** (2022–2025, Strict + dropped picks
++ receiver drops). The ruling, the editions and two reported sensitivities are
+document 58; the round's record is document 59.
+
+| Enactment artifact | Commit |
+|---|---|
+| Ruling R-4 and the enactment plan (document 58) | `1080760` |
+| §3 preamble rewritten, treatment table, status (Part A) | `<A>` |
+| Editions in code — `strict` / `full` strings and `edition=` (Part B) | `<B>` |
+| Sensitivities S-1 and S-2, reported (Part C) | `<C>` |
+| Record, results, queue (document 59, Part D) | `<D>` |
+
+*Everything below this line was written before the ruling and is kept as it
+was written.*
+
+---
 
 Round 5 ran 2026-08-27 on `feat/dropped-pick-variant` (document 53); **round 6**
 re-ran G-1 the same day at document 54's amended fold spec (document 55);
