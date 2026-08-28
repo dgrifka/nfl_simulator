@@ -1388,7 +1388,26 @@ COMPONENT_NAMES = {
     "fumble": "fumble",
     "field_goal": "field goal",
     "extra_point": "extra point",
+    "dropped_pick": "dropped pick",
+    "receiver_drop": "receiver drop",
 }
+
+# Amendment A-3's hands-on-the-ball class, the two components the Full edition
+# adds. They are named together because they are the two things a game has
+# dozens of: a median Full ledger carries 48 receiver-drop rows and about three
+# dropped picks beside Strict's handful, and everything below that has to fold
+# them by name rather than into one anonymous heap.
+VARIANT_COMPONENTS = ("dropped_pick", "receiver_drop")
+
+# The plural each folded row counts in.
+VARIANT_PLURALS = {"dropped_pick": "dropped picks", "receiver_drop": "receiver drops"}
+
+# Below a point a bar is a step a reader cannot see, and under the Full edition
+# there are forty of them. One point rather than a share of the game's total: a
+# point of margin is a point of margin whether the game was a blowout or a tie,
+# and a relative floor would fold different events in two games a reader is
+# comparing.
+GROUP_THRESHOLD = 1.0
 
 # The ledger's fumble classes are `{play type}/{live|aborted}`, which is the
 # simulator's vocabulary rather than a reader's. "aborted" is nflverse's word
@@ -1419,6 +1438,10 @@ class LuckBar:
     # ``None`` on the folded row: a sum of several teams' slivers is nobody's
     # event, and stamping one club on it would say it was.
     team: str | None = None
+    # Which component booked it, so :func:`group_rows` can fold forty receiver
+    # drops under their own name instead of into an anonymous count. ``None``
+    # on a row that is already a fold of several kinds.
+    component: str | None = None
 
 
 def _fumble_phrase(event_class: str) -> str:
@@ -1429,6 +1452,16 @@ def _fumble_phrase(event_class: str) -> str:
 
 
 KICKS = ("field_goal", "extra_point")
+
+# Who a row names, per component. A kick names its kicker, a dropped pick the
+# quarterback who threw it, a drop the receiver it was thrown to. `_with_kicker`
+# already had the kick case; these two are the same idea for the class amendment
+# A-3 admits, and the name is presentation only — the pricing used the defence's
+# and the receiving corps' shrunk rates, not the individual's.
+VARIANT_NAMED_BY = {
+    "dropped_pick": ("passer", "thrown by {name}"),
+    "receiver_drop": ("receiver", "{name}"),
+}
 
 
 def _with_kicker(phrase: str, row: dict) -> str:
@@ -1464,6 +1497,16 @@ def event_phrase(row: dict) -> str:
         return _with_kicker("extra point", row)
     if component == "fumble":
         return f"fumble on {_fumble_phrase(row['event_class'])}"
+    if component in VARIANT_NAMED_BY:
+        # No yardage class here, unlike a fumble or a kick. Under the Full
+        # edition these rows come in dozens, and `34-66 yd, early down receiver
+        # drop · Watson` is a label nothing on the figure has room for — the
+        # name is what tells two of one team's drops apart, and the class is in
+        # the ledger for anyone auditing it.
+        key, template = VARIANT_NAMED_BY[component]
+        name = row.get(key)
+        phrase = COMPONENT_NAMES[component]
+        return f"{phrase} \u00b7 {template.format(name=name)}" if name else phrase
     # An unfamiliar component still gets a row rather than a crash: the ledger
     # is allowed to grow a fourth kind of event before this function knows it.
     name = COMPONENT_NAMES.get(component, component.replace("_", " "))
@@ -1505,6 +1548,23 @@ def outcome_phrase(row: dict) -> str:
             return "retained"
         opponent = row.get("opponent")
         return f"recovered by {opponent}" if opponent else "lost"
+    if component in VARIANT_COMPONENTS:
+        # Both branches are quoted at the **catch** probability, which is the
+        # one number a reader can hold in their head across the two components:
+        # a 96% catch that was dropped and a 48% catch that escaped are the same
+        # kind of statement about how likely the ball was to be caught. The
+        # dropped pick's own `expected` is the probability it *escaped*, so it
+        # is turned round here rather than quoted as it is stored.
+        expected = row.get("expected")
+        if component == "dropped_pick":
+            happened = "escaped" if made else "intercepted"
+            catch = None if expected is None else 1.0 - float(expected)
+        else:
+            happened = "caught" if made else "dropped"
+            catch = None if expected is None else float(expected)
+        if catch is None:
+            return happened
+        return f"{happened} ({round(catch * 100)}% catch)"
     return ""
 
 
@@ -1545,6 +1605,7 @@ def luck_bars(
             points=-float(row["luck_epa"]) * points_per_epa,
             play_id=float(row["play_id"]),
             team=row.get("charged_team"),
+            component=row.get("component"),
         )
         for row in rows
     ]
@@ -1570,6 +1631,68 @@ def luck_bars(
             )
         )
     return kept
+
+
+def _group_label(component: str | None, team: str | None, count: int, threshold: float) -> str:
+    """What a folded row is called, which depends on what was folded into it."""
+    if component in VARIANT_PLURALS and team:
+        return f"{count} smaller {VARIANT_PLURALS[component]} ({team})"
+    return f"{count} events under {threshold:g} pt"
+
+
+def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> list[LuckBar]:
+    """Fold the sub-threshold bars so a Full-edition waterfall stays a figure.
+
+    A median Full ledger holds about fifty events. Fifty bars is a table with a
+    dashed line down it, and the reader who came to see what moved the verdict
+    has to find the four rows that did among forty-six that moved it by a tenth
+    of a point each.
+
+    Two kinds of fold, because the two kinds of remainder answer different
+    questions. The hands-on-the-ball components fold **per component and per
+    team** — `12 smaller receiver drops (GB)` is a fact about Green Bay's
+    afternoon and wears Green Bay's mark — while the Strict components keep the
+    single un-teamed row they have always had, since a game has a handful of
+    them rather than dozens.
+
+    Folding is not dropping. Every folded row carries the **exact sum** of what
+    went into it, so the waterfall still reconciles its two ends, and a lone
+    small event is left where it is: `1 smaller receiver drops (GB)` is a worse
+    row than the drop it hides.
+    """
+    big = [bar for bar in bars if abs(bar.points) >= threshold]
+    small = [bar for bar in bars if abs(bar.points) < threshold]
+
+    buckets: dict[tuple[str | None, str | None], list[LuckBar]] = {}
+    for bar in small:
+        # Everything that is not one of amendment A-3's two components shares
+        # the one un-teamed bucket, including a row that is already a fold.
+        key = (
+            (bar.component, bar.team)
+            if bar.component in VARIANT_PLURALS and bar.team
+            else (None, None)
+        )
+        buckets.setdefault(key, []).append(bar)
+
+    folded = []
+    for (component, team), group in buckets.items():
+        if len(group) < 2:
+            folded.extend(group)
+            continue
+        count = sum(bar.n_events for bar in group)
+        folded.append(
+            LuckBar(
+                label=_group_label(component, team, count, threshold),
+                points=sum(bar.points for bar in group),
+                play_id=None,
+                n_events=count,
+                team=team,
+                component=component,
+            )
+        )
+
+    order = sorted(big + folded, key=lambda bar: abs(bar.points), reverse=True)
+    return order
 
 
 def running_totals(bars: Sequence[LuckBar], start: float) -> list[tuple[float, float]]:
@@ -1878,6 +2001,11 @@ def plot_luck_ledger(
     ends_colour = anchor_colour(home_colour, away_colour)
     logos = logos or {}
     bars = luck_bars(rows, points_per_epa=points_per_epa, floor=floor, chronological=chronological)
+    # Chronological order is the game's story and grouping would break it: a
+    # folded row has no place on a timeline. Every other reading is the
+    # adjudication's, and there the fold is what keeps fifty events a figure.
+    if not chronological:
+        bars = group_rows(bars)
     gap = verdict.deserved_margin - verdict.actual_margin
     drift = abs(sum(bar.points for bar in bars) - gap)
     if drift > 1e-6:

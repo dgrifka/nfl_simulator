@@ -512,3 +512,57 @@ def test_the_filename_carries_the_edition_so_two_of_them_never_collide(game):
 def test_a_game_with_no_score_still_names_its_edition(game):
     unscored = replace(game, home_score=None, away_score=None, edition="full")
     assert figure_filename(unscored, "card") == "2018_05_GB_DET_full_card.png"
+
+
+def test_a_prepared_variant_row_carries_the_thrower_and_the_receiver(game):
+    """The two names the Full edition's rows are read by, from the play-by-play.
+
+    Presentation only, exactly as the kicker's name is: the dropped pick was
+    priced at the defence's shrunk rate and the drop at the receiving corps'.
+    Neither name moves a number, and a play without one keeps its bare label."""
+    from nfl_simulator.plots import plain_label
+
+    frame = pl.DataFrame(
+        {
+            "play_id": [55.0, 61.0],
+            "component": ["dropped_pick", "receiver_drop"],
+            "event_class": ["34-66 yd, early down", "1-33 yd, late down"],
+            "charged_team": ["GB", "GB"],
+            "actual": [1.0, 0.0],
+            "expected": [0.52, 0.96],
+            "swing": [-2.0, -1.4],
+            "luck_epa": [0.96, 1.34],
+        }
+    )
+    rows = prepare_rows(frame, game, passers={55.0: "Goff"}, receivers={61.0: "Watson"})
+    assert [plain_label(row) for row in rows] == [
+        "GB dropped pick · thrown by Goff, escaped (48% catch)",
+        "GB receiver drop · Watson, dropped (96% catch)",
+    ]
+
+
+def test_a_variant_row_with_nobody_on_file_keeps_its_bare_label(game):
+    from nfl_simulator.plots import event_phrase
+
+    frame = pl.DataFrame(
+        {
+            "play_id": [55.0],
+            "component": ["receiver_drop"],
+            "event_class": ["1-33 yd, late down"],
+            "charged_team": ["GB"],
+            "actual": [0.0],
+            "expected": [0.96],
+            "swing": [-1.4],
+            "luck_epa": [1.34],
+        }
+    )
+    (row,) = prepare_rows(frame, game)
+    assert row["receiver"] is None
+    assert event_phrase(row) == "receiver drop"
+
+
+def test_the_simulation_frame_carries_the_two_names_those_rows_are_read_by():
+    """Added the way `kicker_player_name` was in round 4 — presentation only."""
+    from nfl_simulator.render import simulation_columns
+
+    assert {"passer_player_name", "receiver_player_name"} <= set(simulation_columns())

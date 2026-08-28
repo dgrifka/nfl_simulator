@@ -50,7 +50,9 @@ from nfl_simulator.render import (
     kick_distances,
     kicker_names,
     load_sources,
+    passer_names,
     prepare_rows,
+    receiver_names,
     render_game,
     replay,
 )
@@ -121,7 +123,14 @@ def main() -> None:
                 if edition == "full"
                 else sources.ledger.filter(sources.ledger["game_id"] == game_id).drop("game_id")
             )
-            rows = prepare_rows(ledger, verdict, kick_distances(game_id), kicker_names(game_id))
+            rows = prepare_rows(
+                ledger,
+                verdict,
+                kick_distances(game_id),
+                kicker_names(game_id),
+                passer_names(game_id),
+                receiver_names(game_id),
+            )
             bars = luck_bars(rows, points_per_epa=sources.slope)
             home_colour, away_colour = pair_colors(verdict.home_team, verdict.away_team)
             records.append(

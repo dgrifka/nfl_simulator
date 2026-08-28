@@ -155,6 +155,8 @@ def prepare_rows(
     verdict: GameVerdict,
     distances: dict | None = None,
     kickers: dict | None = None,
+    passers: dict | None = None,
+    receivers: dict | None = None,
 ) -> list[dict]:
     """Ledger rows with the three extra keys :func:`plots.plain_label` can use.
 
@@ -166,16 +168,22 @@ def prepare_rows(
     absent rather than guessed when the play is not found: the ledger stores a
     five-yard class, and printing its midpoint as the distance would be making
     a number up. ``kicker`` is the surname on the same play, and is absent the
-    same way.
+    same way — as are ``passer`` and ``receiver``, the two names the Full
+    edition's rows are read by.
     """
     distances = distances or {}
     kickers = kickers or {}
+    passers = passers or {}
+    receivers = receivers or {}
     rows = with_actual(frame).to_dicts()
     for row in rows:
         charged = row.get("charged_team")
         row["opponent"] = verdict.away_team if charged == verdict.home_team else verdict.home_team
-        row["kick_distance"] = distances.get(row.get("play_id"))
-        row["kicker"] = kickers.get(row.get("play_id"))
+        play_id = row.get("play_id")
+        row["kick_distance"] = distances.get(play_id)
+        row["kicker"] = kickers.get(play_id)
+        row["passer"] = passers.get(play_id)
+        row["receiver"] = receivers.get(play_id)
     return rows
 
 
@@ -342,6 +350,15 @@ def simulation_columns() -> list[str]:
                 # The defence the dropped pick is charged against; v1.3 never
                 # needed it, because a fumble is charged to whoever fumbled.
                 "defteam",
+                # Presentation only, added in figure round 6 the way
+                # `kicker_player_name` was added in round 4: a Full-edition row
+                # is read by who threw the ball and who it was thrown to.
+                # Nothing prices on either — the dropped pick was priced at the
+                # defence's shrunk rate and the drop at the receiving corps' —
+                # and the seven example games still replay at 0.00e+00 with both
+                # loaded.
+                "passer_player_name",
+                "receiver_player_name",
                 *DROPPED_PICK_COLUMNS,
                 *RECEIVER_COLUMNS,
                 *PBP_SWING_COLUMNS,
@@ -554,6 +571,33 @@ def kicker_names(game_id: str) -> dict:
         return {}
 
 
+def _player_names(game_id: str, column: str) -> dict:
+    """`play_id -> surname` for one play-by-play name column.
+
+    Degrades exactly as :func:`kick_distances` does — a missing column or an
+    unreadable cache costs the labels their names, never the render.
+    """
+    try:
+        plays = _simulation_context()["pbp"].filter(pl.col("game_id") == game_id)
+        if column not in plays.columns:
+            return {}
+        named = plays.select("play_id", column).drop_nulls(column)
+        return {float(play): kicker_surname(name) for play, name in named.iter_rows()}
+    except Exception as error:  # pragma: no cover - the labels degrade, not the render
+        print(f"Warning: no {column} for {game_id}: {error}")
+        return {}
+
+
+def passer_names(game_id: str) -> dict:
+    """`play_id -> the quarterback's surname`, for the dropped-pick rows."""
+    return _player_names(game_id, "passer_player_name")
+
+
+def receiver_names(game_id: str) -> dict:
+    """`play_id -> the target's surname`, for the receiver-drop rows."""
+    return _player_names(game_id, "receiver_player_name")
+
+
 # --------------------------------------------------------------------------
 # the render
 # --------------------------------------------------------------------------
@@ -629,7 +673,14 @@ def render_game(
         if edition == "full"
         else sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
     )
-    rows = prepare_rows(ledger, verdict, kick_distances(game_id), kicker_names(game_id))
+    rows = prepare_rows(
+        ledger,
+        verdict,
+        kick_distances(game_id),
+        kicker_names(game_id),
+        passer_names(game_id),
+        receiver_names(game_id),
+    )
     colours = pair_colors(verdict.home_team, verdict.away_team)
     sides = (verdict.home_team, verdict.away_team)
     logos = {team: team_logo(team) for team in sides}

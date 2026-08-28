@@ -2686,10 +2686,16 @@ def test_every_value_label_carries_a_surface_so_a_rule_cannot_strike_it_through(
 
 
 def test_a_sub_half_point_bar_hangs_its_label_off_a_leader():
+    """Round 6 grouping folds this game's two slivers into one -0.4 row.
+
+    Round 4 saw two leadered labels here, `-0.3` and a folded `-0.01`; both are
+    under a point, so `group_rows` now folds them together and the single row
+    they make is still narrower than its own label. The fix D-4 shipped is what
+    is under test, not the number of rows it applies to."""
     fig, ax = det_min_waterfall()
     fig.canvas.draw()
     leaders = [t for t in _value_labels(ax) if t.arrow_patch is not None]
-    assert {t.get_text() for t in leaders} == {"-0.3", "-0.01"}
+    assert {t.get_text() for t in leaders} == {"-0.4"}
 
 
 def test_no_two_value_labels_print_through_each_other_on_det_min():
@@ -2838,3 +2844,202 @@ def test_the_verdict_pill_is_the_rendered_editions_bucket_not_the_other_ones():
     card = plot_game_card(full)[0]
     assert TOO_CLOSE in flat_text(card)
     assert SCOREBOARD_HOLDS not in flat_text(card)
+
+
+# --------------------------------------------------------------------------
+# the ledger under Full: grouping and drop wording — figure round 6, part C
+# --------------------------------------------------------------------------
+
+
+def drop_row(luck_epa: float, play_id: float, team: str = "DET", **kwargs) -> dict:
+    """One receiver-drop ledger row, in the shape the simulator books it."""
+    return {
+        "play_id": play_id,
+        "component": "receiver_drop",
+        "event_class": "34-66 yd, early down",
+        "charged_team": team,
+        "luck_epa": luck_epa,
+        "actual": 1.0,
+        "expected": 0.96,
+        **kwargs,
+    }
+
+
+def test_an_event_worth_a_point_or_more_keeps_its_own_row():
+    from nfl_simulator.plots import group_rows
+
+    bars = luck_bars([drop_row(-2.0, 1.0), drop_row(-1.6, 2.0)], points_per_epa=PPE)
+    assert [bar.label for bar in group_rows(bars)] == [bar.label for bar in bars]
+
+
+def test_the_small_receiver_drops_of_one_team_become_one_counted_row():
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-0.4, float(i), team="GB") for i in range(1, 6)]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert grouped.label == "5 smaller receiver drops (GB)"
+    assert grouped.n_events == 5
+    assert grouped.points == pytest.approx(5 * 0.4 * PPE)
+
+
+def test_the_two_teams_small_drops_stay_two_rows():
+    """A sum of two clubs' luck is nobody's row, and would wear nobody's mark."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-0.4, float(i), team="GB") for i in range(1, 4)]
+    rows += [drop_row(0.4, float(i), team="DET") for i in range(4, 7)]
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert {bar.label for bar in grouped} == {
+        "3 smaller receiver drops (GB)",
+        "3 smaller receiver drops (DET)",
+    }
+
+
+def test_the_small_dropped_picks_are_counted_under_their_own_name():
+    from nfl_simulator.plots import group_rows
+
+    rows = [
+        drop_row(-0.3, float(i), team="DET", component="dropped_pick", expected=0.52)
+        for i in range(1, 5)
+    ]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert grouped.label == "4 smaller dropped picks (DET)"
+
+
+def test_the_strict_components_keep_the_row_they_have_always_had():
+    """Fumbles and kicks fold into one un-teamed row, as they did before Full."""
+    from nfl_simulator.plots import GROUP_THRESHOLD, group_rows
+
+    rows = [ledger_row(0.5, play_id=1.0), ledger_row(-0.4, play_id=2.0, component="field_goal")]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert grouped.label == f"2 events under {GROUP_THRESHOLD:g} pt"
+    assert grouped.team is None
+
+
+def test_grouping_never_loses_a_point_of_luck():
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-3.0, 1.0), drop_row(-0.4, 2.0), drop_row(0.2, 3.0, team="GB")]
+    rows += [ledger_row(0.3, play_id=4.0), ledger_row(-0.9, play_id=5.0)]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    assert sum(bar.points for bar in group_rows(bars)) == pytest.approx(
+        sum(bar.points for bar in bars), abs=1e-9
+    )
+
+
+def test_a_lone_small_event_is_left_as_itself():
+    """`1 smaller receiver drops (GB)` is a worse row than the event it hides."""
+    from nfl_simulator.plots import group_rows
+
+    bars = luck_bars([drop_row(-3.0, 1.0), drop_row(-0.4, 2.0)], points_per_epa=PPE, floor=0.0)
+    assert [bar.label for bar in group_rows(bars)][-1] == bars[-1].label
+
+
+def test_grouped_rows_are_ordered_biggest_mover_first_like_every_other_row():
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-0.2, float(i), team="GB") for i in range(1, 4)]
+    rows += [drop_row(0.9, float(i), team="DET") for i in range(4, 7)]
+    points = [abs(bar.points) for bar in group_rows(luck_bars(rows, points_per_epa=PPE))]
+    assert points == sorted(points, reverse=True)
+
+
+WATERFALL_MAX_EVENT_ROWS = 16
+
+
+def test_a_full_edition_waterfall_of_fifty_events_is_still_a_figure():
+    """A median Full game carries 48 receiver-drop rows. Fifty rows is a table.
+
+    The bound is on the **event** rows; the two anchors are the figure's ends
+    and are always drawn. Sixteen is what the seven round-6 games produce at
+    their worst — `2022_13_WAS_NYG` and `2024_19_LAC_HOU`, both exactly
+    sixteen, from 77 and 63 events."""
+    rows = [
+        drop_row(-0.3 if i % 2 else 0.3, float(i), team="GB" if i % 3 else "DET") for i in range(50)
+    ]
+    rows += [ledger_row(2.0, play_id=100.0), ledger_row(-1.5, play_id=101.0)]
+    total = sum(r["luck_epa"] for r in rows)
+    game = verdict(actual_margin=7.0, deserved_margin=7.0 - total * PPE)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert len(ax.get_yticklabels()) - 2 <= WATERFALL_MAX_EVENT_ROWS
+
+
+# ---- the wording the two new components wear ------------------------------
+
+
+def test_a_dropped_pick_names_the_thrower_and_what_the_ball_did():
+    row = {
+        "component": "dropped_pick",
+        "event_class": "34-66 yd, early down",
+        "charged_team": "GB",
+        "actual": 1.0,
+        "expected": 0.52,
+        "passer": "Goff",
+    }
+    assert event_phrase(row) == "dropped pick · thrown by Goff"
+    assert outcome_phrase(row) == "escaped (48% catch)"
+    assert plain_label(row) == "GB dropped pick · thrown by Goff, escaped (48% catch)"
+
+
+def test_a_pick_that_was_caught_says_so_at_the_same_probability():
+    row = {
+        "component": "dropped_pick",
+        "event_class": "34-66 yd, early down",
+        "charged_team": "GB",
+        "actual": 0.0,
+        "expected": 0.52,
+        "passer": "Goff",
+    }
+    assert outcome_phrase(row) == "intercepted (48% catch)"
+
+
+def test_a_receiver_drop_names_the_receiver_and_the_catch_probability():
+    row = {
+        "component": "receiver_drop",
+        "event_class": "1-33 yd, late down",
+        "charged_team": "GB",
+        "actual": 0.0,
+        "expected": 0.96,
+        "receiver": "Watson",
+    }
+    assert event_phrase(row) == "receiver drop · Watson"
+    assert outcome_phrase(row) == "dropped (96% catch)"
+    assert plain_label(row) == "GB receiver drop · Watson, dropped (96% catch)"
+
+
+def test_a_catch_is_said_the_same_way_the_drop_is():
+    row = {
+        "component": "receiver_drop",
+        "event_class": "1-33 yd, late down",
+        "charged_team": "GB",
+        "actual": 1.0,
+        "expected": 0.96,
+        "receiver": "Watson",
+    }
+    assert outcome_phrase(row) == "caught (96% catch)"
+
+
+@pytest.mark.parametrize("component", ["dropped_pick", "receiver_drop"])
+def test_a_play_with_no_name_on_file_is_not_given_one(component):
+    row = {
+        "component": component,
+        "event_class": "1-33 yd, late down",
+        "charged_team": "GB",
+        "actual": 1.0,
+        "expected": 0.6,
+    }
+    assert event_phrase(row) == component.replace("_", " ")
+
+
+def test_the_card_box_headline_still_sums_every_own_play_event_it_folded():
+    """The card truncates to five rows and folds the rest into `and n more`;
+    the headline over it is the whole team's luck, grouped rows included."""
+    rows = [drop_row(-0.3, float(i), team="MIN") for i in range(1, 12)]
+    rows += [ledger_row(2.0, play_id=100.0, charged_team="MIN")]
+    game = verdict()
+    _away, home = team_ledgers(game, rows, points_per_epa=PPE)
+    assert home.team == "MIN"
+    assert home.net_points == pytest.approx(
+        sum(r["luck_epa"] for r in rows if r["charged_team"] == "MIN") * PPE
+    )
+    assert sum(row.points for row in table_rows(home)) == pytest.approx(home.net_points)
