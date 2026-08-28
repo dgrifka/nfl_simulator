@@ -3043,3 +3043,176 @@ def test_the_card_box_headline_still_sums_every_own_play_event_it_folded():
         sum(r["luck_epa"] for r in rows if r["charged_team"] == "MIN") * PPE
     )
     assert sum(row.points for row in table_rows(home)) == pytest.approx(home.net_points)
+
+
+# --------------------------------------------------------------------------
+# intervals on the row labels, and the waterfall's axis — round 6, part D
+# --------------------------------------------------------------------------
+
+
+def kick_row_with_spread(**kwargs) -> dict:
+    return {
+        "component": "field_goal",
+        "event_class": "40-44 yd",
+        "charged_team": "GB",
+        "actual": 0.0,
+        "expected": 0.88,
+        "expected_low": 0.83,
+        "expected_high": 0.92,
+        **kwargs,
+    }
+
+
+def test_a_kick_label_can_carry_the_spread_of_its_own_make_probability():
+    """88% is a posterior mean. Without its spread two kicks priced at 88% look
+    equally certain, and one of them may be a kicker nobody has 30 kicks on."""
+    assert outcome_phrase(kick_row_with_spread(), interval=True) == "missed (88% kick, 83–92)"
+
+
+def test_the_short_form_is_still_what_a_caller_gets_by_default():
+    assert outcome_phrase(kick_row_with_spread()) == "missed (88% kick)"
+
+
+def test_a_receiver_drop_carries_its_catch_interval_the_same_way():
+    row = {
+        "component": "receiver_drop",
+        "event_class": "1-33 yd, late down",
+        "charged_team": "GB",
+        "actual": 0.0,
+        "expected": 0.96,
+        "expected_low": 0.94,
+        "expected_high": 0.98,
+        "receiver": "Watson",
+    }
+    assert outcome_phrase(row, interval=True) == "dropped (96% catch, 94–98)"
+
+
+def test_a_dropped_picks_interval_is_mirrored_onto_the_catch_branch():
+    """The stored probability is that the ball **escaped**; the label quotes the
+    catch. Quoting the stored bounds unmirrored would put the escape interval
+    under a catch percentage — a 40–55 catch printed as 45–60."""
+    row = {
+        "component": "dropped_pick",
+        "event_class": "34-66 yd, early down",
+        "charged_team": "GB",
+        "actual": 1.0,
+        "expected": 0.52,
+        "expected_low": 0.45,
+        "expected_high": 0.60,
+        "passer": "Goff",
+    }
+    assert outcome_phrase(row, interval=True) == "escaped (48% catch, 40–55)"
+
+
+def test_a_row_with_no_spread_on_file_keeps_the_bare_probability():
+    row = kick_row_with_spread()
+    del row["expected_low"]
+    assert outcome_phrase(row, interval=True) == "missed (88% kick)"
+
+
+def test_a_grouped_row_carries_no_interval():
+    """A fold of twelve drops has no one probability to put a spread on."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [
+        drop_row(-0.3, float(i), team="GB", expected_low=0.94, expected_high=0.98)
+        for i in range(1, 6)
+    ]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, interval=True))
+    assert grouped.label == "5 smaller receiver drops (GB)"
+    assert "catch" not in grouped.label and "\u2013" not in grouped.label
+
+
+def test_the_waterfall_labels_carry_the_interval_and_the_card_does_not():
+    rows = [
+        drop_row(-2.0, 1.0, team="MIN", expected_low=0.94, expected_high=0.98),
+        drop_row(-1.6, 2.0, team="DET", expected_low=0.90, expected_high=0.99),
+    ]
+    total = sum(r["luck_epa"] for r in rows)
+    game = verdict(actual_margin=7.0, deserved_margin=7.0 - total * PPE)
+    waterfall, _ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    card, _cax = plot_luck_ledger_card(game, rows, points_per_epa=PPE)
+    assert "94–98" in flat_text(waterfall)
+    assert "94–98" not in flat_text(card)
+    assert "96% catch" in flat_text(card)
+
+
+# ---- the axis reads like the distribution's -------------------------------
+
+
+def waterfall_axis(**kwargs):
+    rows = [ledger_row(3.0, play_id=1.0), ledger_row(-2.0, play_id=2.0)]
+    total = sum(r["luck_epa"] for r in rows)
+    game = verdict(actual_margin=7.0, deserved_margin=7.0 - total * PPE, **kwargs)
+    return plot_luck_ledger(game, rows, points_per_epa=PPE)
+
+
+def test_the_waterfall_axis_has_no_subtraction_in_its_title():
+    """`final margin (MIN − DET)` was arithmetic the reader had to perform."""
+    _fig, ax = waterfall_axis()
+    assert ax.get_xlabel() == ""
+
+
+def test_the_waterfall_ticks_are_unsigned_like_the_distributions():
+    _fig, ax = waterfall_axis()
+    _fig.canvas.draw()
+    assert all(not label.get_text().startswith("−") for label in ax.get_xticklabels())
+    assert all(not label.get_text().startswith("-") for label in ax.get_xticklabels())
+
+
+def test_the_waterfall_says_which_half_of_the_axis_is_whose():
+    _fig, ax = waterfall_axis()
+    texts = {t.get_text() for t in ax.texts}
+    assert "← DET wins by" in texts
+    assert "MIN wins by →" in texts
+
+
+def test_the_two_direction_labels_wear_the_two_clubs_colours():
+    colours = ("#4F2683", "#0076B6")
+    _fig, ax = plot_luck_ledger(
+        verdict(actual_margin=7.0, deserved_margin=7.0 - 1.0 * PPE),
+        [ledger_row(1.0, play_id=1.0)],
+        points_per_epa=PPE,
+        colors=colours,
+    )
+    by_text = {t.get_text(): t.get_color() for t in ax.texts}
+    assert by_text["MIN wins by →"] == colours[0]
+    assert by_text["← DET wins by"] == colours[1]
+
+
+def test_nothing_under_the_waterfall_axis_prints_through_anything_else():
+    """Three things now live under the axis — the two direction labels, the
+    colour key and the footer — where round 5 had two. They were laid out at
+    offsets chosen when the direction labels did not exist, and seven of the
+    nine round-6 renders had the key's box crossing a label's band."""
+    fig, ax = waterfall_axis(went_to_overtime=True)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    boxes = [t.get_window_extent(renderer) for t in ax.texts if "wins by" in t.get_text()]
+    boxes.append(ax.get_legend().get_window_extent(renderer))
+    boxes.append(
+        next(t for t in ax.texts if "not a sequence" in t.get_text()).get_window_extent(renderer)
+    )
+    for index, box in enumerate(boxes):
+        for other in boxes[index + 1 :]:
+            assert not box.overlaps(other)
+
+
+def test_the_overtime_sidebar_names_the_edition_its_toss_number_belongs_to():
+    """Hard constraint 2: no image mixes editions in one number.
+
+    The per-game toss move was measured on simulator v1.1 against v1.3 — which
+    is now called Strict — and the sidebar said it was measured "against the
+    v1.3 share above". On a Full-edition article figure the share above is the
+    Full share, so the sentence attributed a Strict-measured move to a number it
+    was never measured against."""
+    from nfl_simulator.plots import overtime_lines
+
+    _strict, full = strict_and_full(went_to_overtime=True)
+    line = next(
+        text
+        for text in overtime_lines(full, OvertimeToss("HOU", 2024, -0.14))
+        if "toss is worth" in text
+    )
+    assert "Strict" in line
+    assert "share above" not in line

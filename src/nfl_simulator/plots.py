@@ -1514,7 +1514,28 @@ def event_phrase(row: dict) -> str:
     return name if event_class == name else f"{event_class} {name}"
 
 
-def outcome_phrase(row: dict) -> str:
+def _spread(row: dict, *, mirrored: bool = False) -> str:
+    """`", 83–92"` — the row's own 89% interval on the probability it quotes.
+
+    Empty when the row does not carry one: the shipped ledger artifact stores
+    the posterior **mean** and nothing else, so a figure drawn from it alone has
+    no spread to state and states none. `render.replay` is what supplies them,
+    from the draws each `LuckEvent` carries.
+
+    ``mirrored`` turns the bounds round for a probability quoted as its
+    complement — the dropped pick stores the chance the ball escaped and the
+    label quotes the chance it was caught, so the low bound of one is the high
+    bound of the other.
+    """
+    low, high = row.get("expected_low"), row.get("expected_high")
+    if low is None or high is None:
+        return ""
+    if mirrored:
+        low, high = 1.0 - float(high), 1.0 - float(low)
+    return f", {round(float(low) * 100)}\u2013{round(float(high) * 100)}"
+
+
+def outcome_phrase(row: dict, *, interval: bool = False) -> str:
     """What happened: `"missed (88% kick)"`, `"retained"`, `"recovered by DET"`.
 
     Empty when the ledger row does not carry its branch — :func:`ledger.with_actual`
@@ -1527,6 +1548,11 @@ def outcome_phrase(row: dict) -> str:
     rather than two kicks of different difficulty. The percentage is the row's
     own ``expected`` — the shrunk rate the luck was priced at, not a new number
     — and a row that does not carry one keeps the bare word.
+
+    ``interval=True`` adds that probability's own 89% bounds — `88% kick, 83–92`.
+    It is off by default and on only in the waterfall: the mean alone is what a
+    share card has room for, and a spread on a card nobody can act on is a
+    third number competing with the two the card is about.
     """
     branch = row.get("actual")
     if branch is None:
@@ -1538,7 +1564,8 @@ def outcome_phrase(row: dict) -> str:
         expected = row.get("expected")
         if expected is None:
             return happened
-        return f"{happened} ({round(float(expected) * 100)}% kick)"
+        spread = _spread(row) if interval else ""
+        return f"{happened} ({round(float(expected) * 100)}% kick{spread})"
     if component == "fumble":
         # Asymmetric on purpose. A fumble the fumbling team recovered is
         # "retained" — "DET fumble, recovered by DET" says the same thing twice
@@ -1564,11 +1591,12 @@ def outcome_phrase(row: dict) -> str:
             catch = None if expected is None else float(expected)
         if catch is None:
             return happened
-        return f"{happened} ({round(catch * 100)}% catch)"
+        spread = _spread(row, mirrored=component == "dropped_pick") if interval else ""
+        return f"{happened} ({round(catch * 100)}% catch{spread})"
     return ""
 
 
-def plain_label(row: dict) -> str:
+def plain_label(row: dict, *, interval: bool = False) -> str:
     """One luck event in plain words: `"GB 42-yd field goal, made"`.
 
     The ledger's own vocabulary is the simulator's — `"40-44 yd field goal — GB"`,
@@ -1576,7 +1604,7 @@ def plain_label(row: dict) -> str:
     and exactly wrong on a figure somebody reads once. This is the same row said
     the way it would be said out loud: the team, the event, and what happened.
     """
-    outcome = outcome_phrase(row)
+    outcome = outcome_phrase(row, interval=interval)
     head = f"{row['charged_team']} {event_phrase(row)}"
     return f"{head}, {outcome}" if outcome else head
 
@@ -1587,6 +1615,7 @@ def luck_bars(
     points_per_epa: float,
     floor: float = POINTS_FLOOR,
     chronological: bool = False,
+    interval: bool = False,
 ) -> list[LuckBar]:
     """One bar per ledger row: the points neutralizing that event takes off the margin.
 
@@ -1601,7 +1630,7 @@ def luck_bars(
     """
     bars = [
         LuckBar(
-            label=plain_label(row),
+            label=plain_label(row, interval=interval),
             points=-float(row["luck_epa"]) * points_per_epa,
             play_id=float(row["play_id"]),
             team=row.get("charged_team"),
@@ -1840,6 +1869,14 @@ def _draw_ledger_arrow(ax, verdict: GameVerdict, rows_y, x_rail: float) -> None:
 # apart on the clash scale, under the 0.20 floor — so the ends carry a second,
 # non-colour channel. Height is the one that survives a black club, a very dark
 # green one, and a greyscale print.
+# What sits under the waterfall's axis, in points below the bottom spine.
+# Round 5 had two things down here — the colour key and the footer — and round
+# 6 added the two direction labels between them. The three offsets are named
+# rather than written at their call sites because they are one stack: moving
+# any of them without the others is what put the key's box through a label.
+WATERFALL_LEGEND_OFFSET = 50
+WATERFALL_FOOTER_OFFSET = -80
+
 ANCHOR_HEIGHT = 1.4
 
 # Below this a bar is narrower than its own label, so the label is pushed clear
@@ -2000,7 +2037,15 @@ def plot_luck_ledger(
     home_colour, away_colour = colors or (HOME_HUE, AWAY_HUE)
     ends_colour = anchor_colour(home_colour, away_colour)
     logos = logos or {}
-    bars = luck_bars(rows, points_per_epa=points_per_epa, floor=floor, chronological=chronological)
+    bars = luck_bars(
+        rows,
+        points_per_epa=points_per_epa,
+        floor=floor,
+        chronological=chronological,
+        # The waterfall is the article figure and has room for the spread; the
+        # card is the share image and does not.
+        interval=True,
+    )
     # Chronological order is the game's story and grouping would break it: a
     # folded row has no place on a timeline. Every other reading is the
     # adjudication's, and there the fold is what keeps fifty events a figure.
@@ -2165,7 +2210,11 @@ def plot_luck_ledger(
                 loc="upper center",
                 # Same reason as the titles: a fixed fraction of a height that
                 # changes with the row count is not a fixed gap.
-                bbox_to_anchor=(0.5, -34 / (ax.get_position().height * fig.get_figheight() * 72)),
+                bbox_to_anchor=(
+                    0.5,
+                    -WATERFALL_LEGEND_OFFSET
+                    / (ax.get_position().height * fig.get_figheight() * 72),
+                ),
                 ncol=2,
                 frameon=False,
                 fontsize=9,
@@ -2190,11 +2239,17 @@ def plot_luck_ledger(
 
             ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
             ax.set_axisbelow(True)
-            ax.set_xlabel(
-                f"final margin ({verdict.home_team} \u2212 {verdict.away_team})",
-                fontsize=9,
-                color=PALETTE["text_muted"],
+            # Round 6: the same axis the distribution has read since round 5.
+            # Both figures put a margin on an x axis, and until now one of them
+            # asked the reader to subtract — `final margin (MIN − DET)` over
+            # signed ticks — while the other did the arithmetic for them. Two
+            # conventions for one quantity is one more than a reader can hold,
+            # and the helpers below are the distribution's own, unchanged.
+            ax.xaxis.set_major_formatter(
+                mpl.ticker.FuncFormatter(lambda value, _pos: f"{abs(value):g}")
             )
+            ax.set_xlabel("")
+            _draw_wins_by_labels(fig, ax, verdict, home_colour, away_colour)
             _draw_ledger_arrow(ax, verdict, rows_y, x_rail)
             _stamp_row_logos(ax, bars, rows_y, logos)
 
@@ -2219,7 +2274,7 @@ def plot_luck_ledger(
             "\n".join(footer),
             xy=(0, 0),
             xycoords="axes fraction",
-            xytext=(0, -58),
+            xytext=(0, WATERFALL_FOOTER_OFFSET),
             textcoords="offset points",
             va="top",
             fontsize=8,
@@ -3351,9 +3406,15 @@ def overtime_lines(verdict: GameVerdict, toss: OvertimeToss) -> list[str]:
         # away team. Mirroring it is the same correction `interval_note` makes.
         move = toss.delta_dtw_home if favoured == verdict.home_team else -toss.delta_dtw_home
         lines.append(
-            f"Here the toss is worth {move * 100:+.0f} pp of {favoured}'s share — "
-            f"measured on simulator {OVERTIME_IMPACT_VERSION} against the "
-            "v1.3 share above, so it sizes the toss rather than correcting it."
+            # The edition is named rather than left as "the share above",
+            # because on a Full-edition article figure the share above is the
+            # Full one and this move was never measured against it. Document 16
+            # measured it on simulator v1.1 against v1.3, which ruling R-4
+            # renamed Strict — so the sentence names Strict on both editions and
+            # is true on both.
+            f"Here the toss is worth {move * 100:+.0f} pp of {favoured}'s share in the "
+            f"Strict edition — measured on simulator {OVERTIME_IMPACT_VERSION} against "
+            "Strict (v1.3), so it sizes the toss rather than correcting it."
         )
 
     if toss.season >= OVERTIME_NEW_RULES_SEASON:

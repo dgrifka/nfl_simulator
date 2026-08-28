@@ -566,3 +566,81 @@ def test_the_simulation_frame_carries_the_two_names_those_rows_are_read_by():
     from nfl_simulator.render import simulation_columns
 
     assert {"passer_player_name", "receiver_player_name"} <= set(simulation_columns())
+
+
+def test_the_simulation_keeps_the_events_the_intervals_are_read_from():
+    """`LedgerEntry` stores the posterior mean; the draws live on the event.
+
+    Nothing on disk carries them — the shipped ledger has one number per row —
+    so the only place a figure can get an interval is the replay it is already
+    running, and the result has to hand the events back for that."""
+    from nfl_simulator.simulator import LuckEvent, SimulationResult
+
+    assert "events" in SimulationResult.__dataclass_fields__
+    event = LuckEvent(
+        play_id=1.0,
+        component="field_goal",
+        event_class="40-44 yd",
+        charged_team="GB",
+        actual=0.0,
+        expected_draws=np.linspace(0.80, 0.95, 200),
+        swing=-4.0,
+    )
+    assert event.to_entry().expected == pytest.approx(event.expected_draws.mean())
+
+
+def test_the_intervals_are_keyed_by_the_play_and_the_component_on_it():
+    """A blocked field goal books a fumble row on the same play id. Keying on
+    the play alone would give one of the two rows the other's probability."""
+    from nfl_simulator.render import expected_intervals
+    from nfl_simulator.simulator import LuckEvent, SimulationResult
+
+    def event(component, draws):
+        return LuckEvent(
+            play_id=7.0,
+            component=component,
+            event_class="x",
+            charged_team="GB",
+            actual=0.0,
+            expected_draws=draws,
+            swing=-1.0,
+        )
+
+    result = SimulationResult(
+        game_id="2018_05_GB_DET",
+        actual_margin=8.0,
+        deserved_margin=8.0,
+        dtw_home=0.5,
+        dtw_interval=(0.4, 0.6),
+        margin_draws=np.zeros(3),
+        ledger=None,
+        total_luck_epa=0.0,
+        events=(
+            event("field_goal", np.linspace(0.80, 0.96, 200)),
+            event("fumble", np.linspace(0.40, 0.60, 200)),
+        ),
+    )
+    intervals = expected_intervals(result)
+    assert set(intervals) == {(7.0, "field_goal"), (7.0, "fumble")}
+    assert intervals[(7.0, "field_goal")][0] == pytest.approx(0.8088, abs=1e-3)
+
+
+def test_a_prepared_row_takes_the_interval_of_its_own_play_and_component(game):
+    frame = pl.DataFrame(
+        {
+            "play_id": [834.0],
+            "component": ["field_goal"],
+            "event_class": ["40-44 yd"],
+            "charged_team": ["GB"],
+            "expected": [0.88],
+            "swing": [-4.29],
+            "luck_epa": [3.76],
+        }
+    )
+    (row,) = prepare_rows(frame, game, intervals={(834.0, "field_goal"): (0.83, 0.92)})
+    assert (row["expected_low"], row["expected_high"]) == (0.83, 0.92)
+
+
+def test_a_prepared_row_with_no_interval_on_file_carries_none(game):
+    (row,) = prepare_rows(ledger_frame().head(1), game)
+    assert row["expected_low"] is None

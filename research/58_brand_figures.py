@@ -146,7 +146,7 @@ def main() -> None:
                     },
                     "replay_worst": worst,
                     "n_events": len(rows),
-                    "labels": [plain_label(r) for r in rows],
+                    "labels": [plain_label(r, interval=True) for r in rows],
                 }
             )
 

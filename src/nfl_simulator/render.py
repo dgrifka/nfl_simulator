@@ -157,6 +157,7 @@ def prepare_rows(
     kickers: dict | None = None,
     passers: dict | None = None,
     receivers: dict | None = None,
+    intervals: dict | None = None,
 ) -> list[dict]:
     """Ledger rows with the three extra keys :func:`plots.plain_label` can use.
 
@@ -164,6 +165,11 @@ def prepare_rows(
     predates the column (see :func:`ledger.with_actual`). ``opponent`` is the
     other team in *this* game, which is what makes "recovered by GB" sayable —
     the ledger records who fumbled, not who ended up with the ball. And
+    ``intervals`` is `render.expected_intervals`' map, and is what lets a
+    waterfall label say how sure a probability was. It is absent from every
+    artifact on disk, which is why it is threaded from the replay rather than
+    read: a row without one keeps the bare probability.
+
     ``kick_distance`` is the kick's real yardage from the play-by-play, left
     absent rather than guessed when the play is not found: the ledger stores a
     five-yard class, and printing its midpoint as the distance would be making
@@ -175,6 +181,7 @@ def prepare_rows(
     kickers = kickers or {}
     passers = passers or {}
     receivers = receivers or {}
+    intervals = intervals or {}
     rows = with_actual(frame).to_dicts()
     for row in rows:
         charged = row.get("charged_team")
@@ -184,6 +191,8 @@ def prepare_rows(
         row["kicker"] = kickers.get(play_id)
         row["passer"] = passers.get(play_id)
         row["receiver"] = receivers.get(play_id)
+        low, high = intervals.get((play_id, row.get("component")), (None, None))
+        row["expected_low"], row["expected_high"] = low, high
     return rows
 
 
@@ -463,6 +472,27 @@ def _receiver_drop_pieces():
         return None
 
 
+def expected_intervals(result) -> dict[tuple[float, str], tuple[float, float]]:
+    """`(play_id, component) -> the 89% bounds on that branch's probability`.
+
+    Document 03's 5.5/94.5 convention, the same one the DTW interval uses, taken
+    over the posterior draws each :class:`LuckEvent` carries. The key is the
+    play **and** the component because they are not the same thing: four blocked
+    field goals in the shipped population also book a fumble row on their own
+    play id, and a map keyed on the play alone would hand one of those two rows
+    the other's probability.
+    """
+    from nfl_simulator.simulator import ETI_HIGH, ETI_LOW
+
+    return {
+        (float(event.play_id), str(event.component)): (
+            float(np.percentile(event.expected_draws, ETI_LOW)),
+            float(np.percentile(event.expected_draws, ETI_HIGH)),
+        )
+        for event in result.events
+    }
+
+
 def replay_gaps(result, row: dict) -> dict[str, float]:
     """How far a re-simulation lands from the summary row it is checked against.
 
@@ -680,6 +710,7 @@ def render_game(
         kicker_names(game_id),
         passer_names(game_id),
         receiver_names(game_id),
+        expected_intervals(result),
     )
     colours = pair_colors(verdict.home_team, verdict.away_team)
     sides = (verdict.home_team, verdict.away_team)
