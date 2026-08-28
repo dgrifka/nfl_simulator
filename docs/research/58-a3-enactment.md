@@ -80,3 +80,33 @@ Product rendering of the editions (figure round 6); the docx update
 (`docs/pre-publication-checklist.md` §5 — note `defence_season` and
 similar identifiers are renamed then, not now, so the audit scripts keep
 reproducing).
+
+---
+
+## 6. Outcome
+
+**Round 8 ran 2026-08-28 on `feat/dropped-pick-variant`, and everything §4
+listed shipped.** The record is **document 59**; the results file is
+`results-2026-08-28-exp8.md`; the log is `log-2026-08-27-dropped-picks.md`
+under "Round 8". Still **unmerged** — the maintainer merges.
+
+- **The enactment.** Document 52 §3's preamble carries R-4's wording with the
+  ruling quoted above it; §8 carries the enactment block and this round's
+  commits. Document 05 §3's two rows read `partial (A-3)`. Document 31 gained a
+  successor note; `CLAUDE.md` names both editions.
+- **The code.** `"strict"`, `"full"`, `"strict+dp"`, `"strict+rd"`;
+  `SimulationResult.edition` returns the public name and `None` for the two
+  audit arms; `simulate_game(..., edition=...)` switches over the model handles;
+  `render.edition_handles` and `_simulation_context["editions"]` expose both.
+  586 → **594 tests**, ruff clean, **V-1 0.00e+00** over 2,761 games.
+- **S-1 — the reading holds.** `+rd` bucket moves under the 95th-percentile cap
+  (4.02 EPA) are **157 of 162, 96.9%** of uncapped, against the 80% bar. The 14%
+  is the event, not the dropped touchdowns, and the uncapped pricing ships.
+  `full` behaves the same: 192 of 200, 96.0%.
+- **S-2 — the two halves disagree and the pre-registered trigger does not
+  fire.** Marginally a contested target is charted catchable **66.8%** against
+  **74.4%** uncontested, the direction the mechanism predicts; but §3's actual
+  trigger, the incompletion split, runs the other way — contested incompletions
+  are charted uncatchable **62.3%** against **81.1%**. Document 05 §3's `Drops`
+  row therefore carries this as an **open caveat**, not as a measured floor.
+  Nothing in the component changed, as §3 pre-committed.
