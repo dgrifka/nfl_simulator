@@ -26,7 +26,7 @@ so a game with no luck events returns its own result exactly.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -524,19 +524,107 @@ def _replayed_adjustment(
     return (actual[None, None, :] - replayed) * swing[None, None, :]
 
 
+# Document 61 §5's row: the possession cap is a ledger entry like any other, so
+# the waterfall can draw it and the round trip still closes on it.
+POSSESSION_CAP_COMPONENT = "possession_cap"
+
+
+def _cap_entry(label: str, luck_epa: float, *, offence: str, play_id: float) -> LedgerEntry:
+    """One possession's clip, as a ledger row.
+
+    A cap row is not a branch — nothing was flipped, a sum was bounded — so the
+    three columns `LedgerEntry` insists on are used to state exactly that: the
+    clip is certain (`actual = 1`) against a counterfactual in which the drive
+    kept everything it booked (`expected = 0`), and the whole row is worth
+    `swing`. The module's identity, `luck_epa = (actual − expected) × swing`,
+    then reads literally true of a cap row as it does of a fumble, which is what
+    keeps `Ledger.total_luck_epa` a sum nobody has to special-case.
+
+    `play_id` is the drive's largest-swing event — the play that *set* `C_d` —
+    so a reader who follows the row back lands on the "what if" the bound was
+    taken from rather than on an arbitrary snap.
+    """
+    return LedgerEntry(
+        play_id=play_id,
+        component=POSSESSION_CAP_COMPONENT,
+        event_class=label,
+        charged_team=offence,
+        actual=1.0,
+        expected=0.0,
+        swing=luck_epa,
+    )
+
+
+def _apply_possession_cap(
+    adjustment: np.ndarray,
+    events: Sequence[LuckEvent],
+    drive_of: Callable[[LuckEvent], object],
+) -> dict[object, float]:
+    """Document 61 §2's clip, applied **in place** to a replayed adjustment.
+
+    Per replicate, a possession's booked luck is bounded by the largest single
+    "what if" on it::
+
+        A_d = clip( Σ_i a_i , −C_d , +C_d )      C_d = max_i |swing_i|
+
+    Two facts make this the right shape rather than an arbitrary shrink.
+
+    **It is applied per replicate, not to the point estimate.** Document 61 §0's
+    defect is two-headed: the sum over-counts, *and* flipping every event
+    independently makes the deserved-margin distribution wider than a possession
+    could ever be. Clipping inside the bootstrap answers both at once.
+
+    **It is applied proportionally within the drive.** The excess is not taken
+    off one nominated event; every event on the possession is scaled by the same
+    per-replicate factor ``clipped / total`` in ``[0, 1]``. That is what lets
+    :func:`_split_points` keep working on the result — ``home − away`` is still
+    the margin this same replay produced — and it is why the clip can never grow
+    a replicate or turn one team's good fortune into the other's.
+
+    A one-event possession is skipped outright: ``|a_i| ≤ |swing_i| = C_d`` is
+    arithmetic, so document 61 §6's P-5 is a property of the code rather than a
+    result it happens to produce. A possession no replicate clips books no row.
+
+    Returns ``{drive key: mean(clipped) − mean(unclipped)}`` — document 61 §5's
+    cap row, one per bitten possession, in event order.
+    """
+    members: dict[object, list[int]] = {}
+    for index, event in enumerate(events):
+        members.setdefault(drive_of(event), []).append(index)
+
+    cap_rows: dict[object, float] = {}
+    for key, indices in members.items():
+        if len(indices) == 1:
+            continue
+        cap = max(abs(events[index].swing) for index in indices)
+        total = adjustment[:, :, indices].sum(axis=2)
+        clipped = np.clip(total, -cap, cap)
+        if np.array_equal(clipped, total):
+            continue
+        scale = np.divide(clipped, total, out=np.ones_like(total), where=total != 0.0)
+        adjustment[:, :, indices] *= scale[:, :, None]
+        cap_rows[key] = float(clipped.mean() - total.mean())
+    return cap_rows
+
+
 def _bootstrap(
     events: Sequence[LuckEvent],
     actual_margin: float,
     points_per_epa: float,
     n_coin_draws: int,
     rng: np.random.Generator,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    *,
+    drive_of: Callable[[LuckEvent], object] | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[object, float]]:
     """The bootstrap, plus the per-event adjustment it was computed from."""
     adjustment = _replayed_adjustment(events, n_coin_draws, rng)
+    # The cap runs after the whole replay and consumes no draws of its own, which
+    # is what makes `drive_of=None` the function this was before it (P-2).
+    cap_rows = {} if drive_of is None else _apply_possession_cap(adjustment, events, drive_of)
     margins = actual_margin - adjustment.sum(axis=2) * points_per_epa
     # DTW per posterior draw, so the interval is a genuine credible interval on
     # the probability rather than a spread of coin-flip noise.
-    return margins, (margins > 0).mean(axis=1), adjustment
+    return margins, (margins > 0).mean(axis=1), adjustment, cap_rows
 
 
 def bootstrap_margins(
@@ -545,6 +633,8 @@ def bootstrap_margins(
     points_per_epa: float,
     n_coin_draws: int,
     rng: np.random.Generator,
+    *,
+    drive_of: Callable[[LuckEvent], object] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Document 05 §4's two-layer bootstrap, as a callable.
 
@@ -555,9 +645,14 @@ def bootstrap_margins(
     simulator's own arithmetic rather than a re-implementation that could drift
     from it — a calibration check on a copy of the code would prove nothing about
     the code that ships.
+
+    ``drive_of`` maps an event to the possession it sat on and switches on
+    document 61's cap (:func:`_apply_possession_cap`). Left ``None`` — the
+    default, and what the Strict edition always passes — this is the function it
+    was before round 9, draw for draw.
     """
-    margins, dtw_per_draw, _adjustment = _bootstrap(
-        events, actual_margin, points_per_epa, n_coin_draws, rng
+    margins, dtw_per_draw, _adjustment, _cap_rows = _bootstrap(
+        events, actual_margin, points_per_epa, n_coin_draws, rng, drive_of=drive_of
     )
     return margins, dtw_per_draw
 
@@ -596,6 +691,7 @@ def team_point_draws(
     points_per_epa: float,
     n_coin_draws: int,
     rng: np.random.Generator,
+    drive_of: Callable[[LuckEvent], object] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Each team's deserved points across the bootstrap, on the scoreboard's scale.
 
@@ -611,7 +707,85 @@ def team_point_draws(
     if not events:
         return np.full(1, float(home_points)), np.full(1, float(away_points))
     adjustment = _replayed_adjustment(events, n_coin_draws, rng)
+    if drive_of is not None:
+        _apply_possession_cap(adjustment, events, drive_of)
     return _split_points(adjustment, events, home_team, home_points, away_points, points_per_epa)
+
+
+def possessions(plays: pl.DataFrame) -> tuple[dict[float, str], dict[str, str]]:
+    """One game's plays, read as possessions: `play_id -> label` and `label -> offence`.
+
+    Document 61 §2 groups events by ``(game_id, fixed_drive)``; `plays` is
+    already one game, so `fixed_drive` alone is the key. The label a cap row
+    wears is `"Q3 drive 7"`, and it is computed once per drive from that drive's
+    **first** play rather than per play — a drive that crosses a quarter break
+    is one possession, and labelling its plays separately would split it.
+
+    The offence is likewise the team possessing on the drive's first play — its
+    first play that **has** one. A kickoff carries a null `posteam`, so reading
+    the first row outright leaves the opening drive of a game charged to nobody,
+    and `LedgerEntry` would then carry a `None` where a club belongs. It is also
+    not always the only `posteam` on the drive: a would-be touchdown dropped and
+    returned for a score puts the other team's extra point on the same
+    `fixed_drive`. A drive with no `posteam` at all is left out, and the caller
+    falls back to the charged team of the event that set `C_d`.
+
+    A frame without `fixed_drive` returns empty maps, and the caller then leaves
+    every event on a possession of its own — document 61 §2's guard, under which
+    the cap is inert by P-5 rather than silently wrong.
+    """
+    if "fixed_drive" not in plays.columns:
+        return {}, {}
+    columns = ["play_id", "fixed_drive", "posteam"]
+    if "qtr" in plays.columns:
+        columns.append("qtr")
+    ordered = plays.select(columns).sort("play_id")
+
+    label_by_drive: dict[object, str] = {}
+    offence: dict[str, str] = {}
+    for row in ordered.iter_rows(named=True):
+        drive = row["fixed_drive"]
+        if drive is None:
+            continue
+        if drive not in label_by_drive:
+            quarter = row.get("qtr")
+            label_by_drive[drive] = (
+                f"drive {int(drive)}" if quarter is None else f"Q{int(quarter)} drive {int(drive)}"
+            )
+        label = label_by_drive[drive]
+        if label not in offence and row["posteam"] is not None:
+            offence[label] = row["posteam"]
+
+    labels = {
+        float(row["play_id"]): label_by_drive[row["fixed_drive"]]
+        for row in ordered.iter_rows(named=True)
+        if row["fixed_drive"] is not None
+    }
+    return labels, offence
+
+
+def _possession_cap_handles(
+    plays: pl.DataFrame, events: Sequence[LuckEvent]
+) -> tuple[Callable[[LuckEvent], object], dict[str, str]]:
+    """`drive_of` for :func:`_apply_possession_cap`, and the offence each label names."""
+    labels, offence = possessions(plays)
+    if not labels:
+        warnings.warn(
+            f"{plays['game_id'][0]} carries no `fixed_drive`, so the Full edition's "
+            "possession cap (document 61) has no possessions to group by and every "
+            "event is left on one of its own. Load `fixed_drive` with the play-by-play "
+            "to switch the cap on.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    def drive_of(event: LuckEvent) -> object:
+        # An event whose play is not in the frame's drive map keeps a key of its
+        # own — document 61 §2's guard. Two events on the *same* play share one,
+        # because they are on the same possession by construction.
+        return labels.get(float(event.play_id), ("no-drive", float(event.play_id)))
+
+    return drive_of, offence
 
 
 def simulate_game(
@@ -698,13 +872,14 @@ def simulate_game(
     else:
         variant = "strict" + ("+dp" if dropped_picks else "") + ("+rd" if receiver_drops else "")
 
-    ledger = Ledger(tuple(event.to_entry() for event in events))
-    total_luck_epa = ledger.total_luck_epa()
-    deserved_margin = actual_margin - total_luck_epa * points_per_epa
+    entries = tuple(event.to_entry() for event in events)
 
     if not events:
         # Nothing to adjudicate. The distribution is degenerate at the actual
         # result, and DTW is 1 or 0 — correctly, since no coin was involved.
+        ledger = Ledger(entries)
+        total_luck_epa = ledger.total_luck_epa()
+        deserved_margin = actual_margin - total_luck_epa * points_per_epa
         dtw = 1.0 if actual_margin > 0 else 0.0
         has_score = home_points is not None and away_points is not None
         return SimulationResult(
@@ -722,13 +897,45 @@ def simulate_game(
             events=tuple(events),
         )
 
+    # Document 61's possession cap, on the Full edition and nowhere else — hard
+    # constraint P-1. It is keyed on the `edition` **argument**, not on the
+    # `variant` the ledger came out carrying: `"full"` is the adjudication the maintainer
+    # named, and the audit arms reached with `edition=None` are deliberately the
+    # uncapped comparison the cap has to be measured against.
+    drive_of, offence = (None, {})
+    if edition == "full":
+        drive_of, offence = _possession_cap_handles(plays, events)
+
     # One replay. `bootstrap_margins` is still the public arithmetic document 10
     # checks; this asks the same helper for the per-event adjustment as well, so
     # the two teams' point distributions come out of the coins the margin was
     # already computed from rather than out of a second stream.
-    margins, dtw_per_draw, adjustment = _bootstrap(
-        events, actual_margin, points_per_epa, n_coin_draws, rng
+    margins, dtw_per_draw, adjustment, cap_rows = _bootstrap(
+        events, actual_margin, points_per_epa, n_coin_draws, rng, drive_of=drive_of
     )
+
+    # The cap rows join the ledger before the total is taken, because the
+    # deserved margin is the ledger's sum by definition (document 61 §5's
+    # reconciliation, and gate P-3's round trip).
+    largest = {}
+    for event in events:
+        key = drive_of(event) if drive_of is not None else None
+        if key is not None and (key not in largest or abs(event.swing) > abs(largest[key].swing)):
+            largest[key] = event
+    ledger = Ledger(
+        entries
+        + tuple(
+            _cap_entry(
+                str(label),
+                luck_epa,
+                offence=offence.get(str(label), largest[label].charged_team),
+                play_id=largest[label].play_id,
+            )
+            for label, luck_epa in cap_rows.items()
+        )
+    )
+    total_luck_epa = ledger.total_luck_epa()
+    deserved_margin = actual_margin - total_luck_epa * points_per_epa
 
     home_draws = away_draws = None
     if home_points is not None and away_points is not None:

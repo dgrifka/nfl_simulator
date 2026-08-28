@@ -88,12 +88,18 @@ SUMMARY_COLUMNS = (
 )
 
 
-def full_pass(ctx) -> tuple[pl.DataFrame, pl.DataFrame]:
+def full_pass(
+    ctx, *, edition: str | None = None, label: str = "full"
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     """The Full edition over 2022-2025, at v1.3's settings.
 
     `73`'s `+dp+rd` arm under its public name. The models are the shipped fits;
     the arm is `variant_pass`, unchanged, so this pass and round 7's audit are
     the same computation and can be compared line for line.
+
+    ``edition`` is round 9's addition (document 61) and defaults to ``None`` —
+    the uncapped arm rounds 7 and 8 ran. `research/78` asks for ``"full"`` to put
+    the possession cap on.
     """
     dropped_pick_model = DroppedPickModel.from_posterior(
         paths.RESEARCH_OUTPUT_DIR / _audit.TRACE_NAME,
@@ -104,11 +110,15 @@ def full_pass(ctx) -> tuple[pl.DataFrame, pl.DataFrame]:
         paths.RESEARCH_OUTPUT_DIR / _receiver_audit.SUMMARY_NAME,
     )
     return _audit.variant_pass(
-        ctx, dropped_pick_model, receiver_drop_model=receiver_drop_model, label="full"
+        ctx,
+        dropped_pick_model,
+        receiver_drop_model=receiver_drop_model,
+        edition=edition,
+        label=label,
     )
 
 
-def reproduction(strict: pl.DataFrame, full: pl.DataFrame) -> dict:
+def reproduction(strict: pl.DataFrame, full: pl.DataFrame, *, enforce: bool = True) -> dict:
     """Document 59 §4's two numbers, recomputed from this pass.
 
     The bucket sets are compared **element-wise** — document 33's lesson, which
@@ -142,10 +152,18 @@ def reproduction(strict: pl.DataFrame, full: pl.DataFrame) -> dict:
         f"{median_pp:.2f} pp against {DOC59_MEDIAN_ABS_DELTA_DTW_PP:.2f} (tolerance "
         f"±{DTW_TOLERANCE_PP:.1f}) -> {'PASS' if report['pass'] else 'FAIL'}"
     )
-    if not report["pass"]:
+    if not report["pass"] and enforce:
         raise SystemExit(
             "the Full pass does not reproduce document 59 §4. Stop rather than write a "
             "summary the published record does not agree with."
+        )
+    if not enforce:
+        # Round 9: the capped arm is *expected* to miss these numbers — that is
+        # what the cap does — so the line is printed and compared rather than
+        # gated, and document 62 §4 replaces document 59's if it moved.
+        print(
+            "  (reported, not gated: document 61's possession cap is on, so a change "
+            "here is the finding rather than a failure)"
         )
     return report
 

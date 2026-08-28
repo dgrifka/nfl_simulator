@@ -70,6 +70,12 @@ SIM_COLUMNS = [
     "roof",
     "temp",
     "wind",
+    # Round 9, so document 61's possession cap has possessions to group by, and
+    # `qtr` so a cap row can name one the way a reader does: "Q3 drive 7".
+    # Presentation and grouping only — nothing prices on either — and V-1 is
+    # still 0.00e+00 over 2,761 games with both loaded (`research/78`).
+    "fixed_drive",
+    "qtr",
 ]
 
 # Document 27 §14f, on the shipped population and the incumbent posterior: the

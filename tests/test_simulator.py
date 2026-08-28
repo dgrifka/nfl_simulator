@@ -1014,3 +1014,148 @@ def test_the_point_distributions_are_absent_when_no_score_was_supplied(baselines
     result = run(rows, baselines, fg_model, n_coin_draws=100)
     assert result.home_point_draws is None
     assert result.away_point_draws is None
+
+
+# --------------------------------------------------------------------------
+# the possession cap reaches the ledger — docs/research/61
+# --------------------------------------------------------------------------
+
+
+def drive_play(play_id: float, drive: int, quarter: int, **overrides) -> dict:
+    return play(play_id, fixed_drive=drive, qtr=quarter, **overrides)
+
+
+def two_fumbles_on_one_drive() -> list[dict]:
+    """A possession that books two fumbles, which is what the cap exists to bound."""
+    return [
+        drive_play(1.0, 7, 3),
+        drive_play(
+            2.0,
+            7,
+            3,
+            posteam=HOME,
+            play_type="run",
+            epa=-4.0,
+            fumble=1,
+            fumbled_1_team=HOME,
+            fumble_recovery_1_team=AWAY,
+        ),
+        drive_play(
+            3.0,
+            7,
+            3,
+            posteam=HOME,
+            play_type="run",
+            epa=-4.5,
+            fumble=1,
+            fumbled_1_team=HOME,
+            fumble_recovery_1_team=AWAY,
+        ),
+        drive_play(4.0, 8, 4, posteam=AWAY),
+    ]
+
+
+def test_the_full_edition_books_a_cap_row_for_a_possession_it_clips(baselines, fg_model):
+    from nfl_simulator.simulator import POSSESSION_CAP_COMPONENT
+
+    result = run(two_fumbles_on_one_drive(), baselines, fg_model, edition="full")
+    caps = [row for row in result.ledger if row.component == POSSESSION_CAP_COMPONENT]
+    assert len(caps) == 1
+    assert caps[0].event_class == "Q3 drive 7"
+    assert caps[0].charged_team == HOME
+
+
+def test_p1_the_strict_edition_never_books_a_cap_row(baselines, fg_model):
+    """Hard constraint P-1, at the unit level: v1.3's numbers cannot move."""
+    from nfl_simulator.simulator import POSSESSION_CAP_COMPONENT
+
+    strict = run(two_fumbles_on_one_drive(), baselines, fg_model, edition="strict")
+    default = run(two_fumbles_on_one_drive(), baselines, fg_model)
+    assert not [row for row in strict.ledger if row.component == POSSESSION_CAP_COMPONENT]
+    assert not [row for row in default.ledger if row.component == POSSESSION_CAP_COMPONENT]
+    assert strict.total_luck_epa == default.total_luck_epa
+    assert np.array_equal(strict.margin_draws, default.margin_draws)
+
+
+def test_p3_the_ledger_still_sums_to_the_margin_shift_with_a_cap_row_in_it(baselines, fg_model):
+    """Document 61 §6's P-3 — the round trip, with the new row inside it."""
+    result = run(two_fumbles_on_one_drive(), baselines, fg_model, edition="full")
+    booked = sum(row.luck_epa for row in result.ledger)
+    assert booked == pytest.approx(result.total_luck_epa, abs=1e-12)
+    assert result.deserved_margin == pytest.approx(
+        result.actual_margin - result.total_luck_epa * 0.6, abs=1e-9
+    )
+    assert result.ledger.to_frame()["luck_epa"].sum() == pytest.approx(booked, abs=1e-9)
+
+
+def test_the_cap_pulls_the_possessions_luck_back_toward_the_scoreboard(baselines, fg_model):
+    """Two fumbles by one team on one drive book less together than apart."""
+    capped = run(two_fumbles_on_one_drive(), baselines, fg_model, edition="full")
+    uncapped = run(two_fumbles_on_one_drive(), baselines, fg_model, edition="strict")
+    assert abs(capped.total_luck_epa) < abs(uncapped.total_luck_epa)
+    assert abs(capped.deserved_margin - capped.actual_margin) < abs(
+        uncapped.deserved_margin - uncapped.actual_margin
+    )
+
+
+def test_two_fumbles_on_separate_possessions_are_not_capped(baselines, fg_model):
+    """The bound is per possession. Move the second fumble and it comes back."""
+    rows = two_fumbles_on_one_drive()
+    rows[2] = rows[2] | {"fixed_drive": 9, "qtr": 4}
+    result = run(rows, baselines, fg_model, edition="full")
+    uncapped = run(rows, baselines, fg_model, edition="strict")
+    assert result.total_luck_epa == pytest.approx(uncapped.total_luck_epa)
+
+
+def test_a_possession_label_reads_the_way_a_reader_says_it(baselines, fg_model):
+    from nfl_simulator.simulator import possessions
+
+    labels, offence = possessions(frame(two_fumbles_on_one_drive()))
+    assert labels == {1.0: "Q3 drive 7", 2.0: "Q3 drive 7", 3.0: "Q3 drive 7", 4.0: "Q4 drive 8"}
+    assert offence == {"Q3 drive 7": HOME, "Q4 drive 8": AWAY}
+
+
+def test_a_drive_that_crosses_a_quarter_keeps_one_label(baselines, fg_model):
+    """One possession, one bar — labelling per play would split the group."""
+    from nfl_simulator.simulator import possessions
+
+    rows = [drive_play(1.0, 7, 2), drive_play(2.0, 7, 3)]
+    labels, _ = possessions(frame(rows))
+    assert set(labels.values()) == {"Q2 drive 7"}
+
+
+def test_a_frame_with_no_drive_column_warns_and_leaves_the_cap_inert(baselines, fg_model):
+    """Document 61 §2's guard: every event on a possession of its own."""
+    from nfl_simulator.simulator import POSSESSION_CAP_COMPONENT
+
+    rows = [row for row in two_fumbles_on_one_drive()]
+    for row in rows:
+        del row["fixed_drive"]
+        del row["qtr"]
+    with pytest.warns(UserWarning, match="no `fixed_drive`"):
+        result = run(rows, baselines, fg_model, edition="full")
+    assert not [row for row in result.ledger if row.component == POSSESSION_CAP_COMPONENT]
+
+
+def test_a_drive_that_opens_with_a_kickoff_is_still_charged_to_somebody(baselines, fg_model):
+    """A kickoff carries no `posteam`; the drive belongs to whoever received it."""
+    from nfl_simulator.simulator import possessions
+
+    rows = [
+        drive_play(1.0, 1, 1, posteam=None, play_type="kickoff"),
+        drive_play(2.0, 1, 1, posteam=AWAY),
+    ]
+    _, offence = possessions(frame(rows))
+    assert offence == {"Q1 drive 1": AWAY}
+
+
+def test_a_cap_row_falls_back_to_the_charged_team_when_a_drive_has_no_offence(baselines, fg_model):
+    """No `posteam` anywhere on the drive: the row still names a club."""
+    from nfl_simulator.simulator import POSSESSION_CAP_COMPONENT
+
+    rows = two_fumbles_on_one_drive()
+    for row in rows[:3]:
+        row["posteam"] = None if row["fumble"] == 0 else row["posteam"]
+    result = run(two_fumbles_on_one_drive(), baselines, fg_model, edition="full")
+    caps = [row for row in result.ledger if row.component == POSSESSION_CAP_COMPONENT]
+    assert all(row.charged_team is not None for row in caps)
