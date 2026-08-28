@@ -86,15 +86,22 @@ ARTICLE_SUFFIX = "dtw_article"
 
 # The distribution's shipped reading, chosen by looking at the eight variants
 # `research/59_dtw_variants.py` renders (document 42 §1). Three-point bins pool
-# the reachable margins without smoothing between them; the callout states the
-# verdict in a sentence; and the arrow says what luck moved and toward whom.
-# Round 5 dropped the legend switch: the axis's own tints and corner labels are
-# the key now, on every figure this function draws.
+# the reachable margins without smoothing between them, and the arrow says what
+# luck moved and toward whom. Round 5 dropped the legend switch: the axis's own
+# tints and corner labels are the key now, on every figure this function draws.
 #
-# The share image and the article figure are the same figure at this reading and
-# differ in one thing — `coverage`, below — so the two call sites pass it
-# explicitly rather than leaving the difference to a default.
-DTW_FIGURE = {"bin_width": 3.0, "callout": True, "arrow": True}
+# Round 8 dropped the callout from the share image. `HOU 55% · LAC 45% — too
+# close to call` restated the subtitle's own `DTW:` line and the verdict pill
+# beside it, in the strip the two rule labels and the arrow were already
+# competing for on `2024_19_LAC_HOU`.
+DTW_FIGURE = {"bin_width": 3.0, "arrow": True}
+
+# The article figure keeps it. It is the one with the overtime sidebar beside
+# it, drawn for a reader who has already asked for the methodology, and it has
+# both the room for the sentence and an audience with a use for it. `coverage`
+# is the other difference and is passed at each call site rather than here, so
+# neither reading can inherit the other's by accident.
+DTW_ARTICLE_FIGURE = DTW_FIGURE | {"callout": True}
 
 
 # --------------------------------------------------------------------------
@@ -422,12 +429,23 @@ def edition_handles(dropped_pick_model, receiver_drop_model) -> dict[str, dict]:
     class, which amendment A-3 clause 3 admits together or not at all. A handle
     that failed to load stays `None`: a checkout without the traces still
     renders Strict, and asks for Full at whatever coverage it has.
+
+    Each handle also names its own edition, because document 61's possession cap
+    is keyed on `simulate_game`'s `edition` **argument** rather than on the
+    variant the ledger comes out carrying — the audit arms deliberately reach it
+    with `edition=None`. Without the name here a Full render replayed uncapped
+    and stopped against the capped summary `research/76` writes.
     """
     return {
-        "strict": {"dropped_pick_model": None, "receiver_drop_model": None},
+        "strict": {
+            "dropped_pick_model": None,
+            "receiver_drop_model": None,
+            "edition": "strict",
+        },
         "full": {
             "dropped_pick_model": dropped_pick_model,
             "receiver_drop_model": receiver_drop_model,
+            "edition": "full",
         },
     }
 
@@ -760,7 +778,7 @@ def render_game(
         # The one difference from the share image: document 10's measured
         # coverage, for a reader who has already asked for the methodology.
         fig, ax = plot_bootstrap_distribution(
-            verdict, colors=colours, logos=logos, coverage=True, **DTW_FIGURE
+            verdict, colors=colours, logos=logos, coverage=True, **DTW_ARTICLE_FIGURE
         )
         attach_overtime_sidebar(fig, ax, verdict, toss)
         written.append(

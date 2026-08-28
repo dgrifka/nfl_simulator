@@ -342,11 +342,32 @@ def test_the_context_maps_each_edition_to_the_handles_it_simulates_with():
 
     handles = edition_handles("dp-model", "rd-model")
     assert set(handles) == {"strict", "full"}
-    assert handles["strict"] == {"dropped_pick_model": None, "receiver_drop_model": None}
+    assert handles["strict"] == {
+        "dropped_pick_model": None,
+        "receiver_drop_model": None,
+        "edition": "strict",
+    }
     assert handles["full"] == {
         "dropped_pick_model": "dp-model",
         "receiver_drop_model": "rd-model",
+        "edition": "full",
     }
+
+
+def test_each_handle_names_its_own_edition_so_the_possession_cap_switches_on():
+    """Round 8's defect. `simulate_game` keys document 61's cap on its `edition`
+    **argument** — not on the variant the ledger came out carrying — and this
+    map never passed one, so a Full render replayed uncapped and stopped against
+    the capped summary it was checked against.
+
+    `tests/test_simulator.py` owns what the argument then does; what this map
+    owes is the argument itself.
+    """
+    from nfl_simulator.render import edition_handles
+
+    handles = edition_handles(None, None)
+    assert handles["full"]["edition"] == "full"
+    assert handles["strict"]["edition"] == "strict"
 
 
 def test_a_missing_trace_leaves_its_edition_handle_none_rather_than_failing():
@@ -354,7 +375,11 @@ def test_a_missing_trace_leaves_its_edition_handle_none_rather_than_failing():
     from nfl_simulator.render import edition_handles
 
     handles = edition_handles(None, None)
-    assert handles["full"] == {"dropped_pick_model": None, "receiver_drop_model": None}
+    assert handles["full"] == {
+        "dropped_pick_model": None,
+        "receiver_drop_model": None,
+        "edition": "full",
+    }
 
 
 # --------------------------------------------------------------------------
@@ -646,3 +671,28 @@ def test_a_prepared_row_takes_the_interval_of_its_own_play_and_component(game):
 def test_a_prepared_row_with_no_interval_on_file_carries_none(game):
     (row,) = prepare_rows(ledger_frame().head(1), game)
     assert row["expected_low"] is None
+
+
+# --------------------------------------------------------------------------
+# the annotation band — figure round 8
+# --------------------------------------------------------------------------
+
+
+def test_the_share_figure_asks_for_no_callout():
+    """`HOU 55% · LAC 45% — too close to call` restated the subtitle's own
+    `DTW:` line and the verdict pill beside it, in the strip the two rule labels
+    and the luck arrow were already competing for."""
+    from nfl_simulator.render import DTW_FIGURE
+
+    assert DTW_FIGURE.get("callout", False) is False
+    assert DTW_FIGURE["arrow"] is True
+
+
+def test_the_article_figure_keeps_the_callout_the_share_image_drops():
+    """A reader who has come for the methodology has room for the sentence, and
+    the article figure is the one with the sidebar beside it."""
+    from nfl_simulator.render import DTW_ARTICLE_FIGURE, DTW_FIGURE
+
+    assert DTW_ARTICLE_FIGURE["callout"] is True
+    assert DTW_ARTICLE_FIGURE["bin_width"] == DTW_FIGURE["bin_width"]
+    assert DTW_ARTICLE_FIGURE["arrow"] == DTW_FIGURE["arrow"]
