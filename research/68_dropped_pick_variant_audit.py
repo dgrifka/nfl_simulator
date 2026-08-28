@@ -49,6 +49,12 @@ from nfl_simulator.components import (  # noqa: E402
 )
 from nfl_simulator.dropped_picks import PBP_COVARIATE_COLUMNS, DroppedPickModel  # noqa: E402
 from nfl_simulator.ingest import FTN_SEASONS, PBP_SEASONS, load_ftn, load_pbp  # noqa: E402
+from nfl_simulator.receiver_drops import (  # noqa: E402
+    PBP_COVARIATE_COLUMNS as RECEIVER_PBP_COLUMNS,
+)
+from nfl_simulator.receiver_drops import (  # noqa: E402
+    PBP_SWING_COLUMNS as RECEIVER_SWING_COLUMNS,
+)
 from nfl_simulator.simulator import points_per_epa, simulate_game  # noqa: E402
 
 # v1.3's shipped settings, quoted the way `render.py` and drivers 54 and 57
@@ -103,10 +109,18 @@ def simulate_all(
     slope: float,
     *,
     dropped_pick_model=None,
+    receiver_drop_model=None,
     ftn_by_game: dict | None = None,
     seasons: tuple[int, ...] | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """One arm: every game with a known margin, at v1.3's settings."""
+    """One arm: every game with a known margin, at v1.3's settings.
+
+    ``receiver_drop_model`` was added in round 7 (document 56) and is purely
+    additive: it defaults to ``None``, so every call rounds 4-6 made produces the
+    numbers it produced then, and `research/73` re-checks that against document
+    55's 136 bucket moves and 1.59 pp before reading anything new off this
+    function.
+    """
     rows, ledgers = [], []
     frame = pbp if seasons is None else pbp.filter(pl.col("season").is_in(seasons))
     for game_id, group in frame.group_by("game_id"):
@@ -121,6 +135,7 @@ def simulate_all(
             fg_model=fg_model,
             points_per_epa=slope,
             dropped_pick_model=dropped_pick_model,
+            receiver_drop_model=receiver_drop_model,
             ftn=(ftn_by_game or {}).get(game_id),
             n_posterior_draws=POSTERIOR_DRAWS,
             n_coin_draws=COIN_DRAWS,
@@ -128,6 +143,7 @@ def simulate_all(
             include_blocked=False,
         )
         dropped = [entry for entry in result.ledger if entry.component == "dropped_pick"]
+        drops = [entry for entry in result.ledger if entry.component == "receiver_drop"]
         rows.append(
             {
                 "game_id": result.game_id,
@@ -139,6 +155,7 @@ def simulate_all(
                 "total_luck_epa": result.total_luck_epa,
                 "n_luck_events": len(result.ledger),
                 "n_dropped_pick_events": len(dropped),
+                "n_receiver_drop_events": len(drops),
                 "variant": result.variant,
             }
         )
@@ -549,7 +566,17 @@ class AuditContext:
 def load_context(*, with_ftn: bool = True) -> AuditContext:
     """Round 4's `main` prologue, callable."""
     paths.ensure_data_dirs()
-    columns = list(dict.fromkeys([*_read_side.SIM_COLUMNS, "defteam", *PBP_COVARIATE_COLUMNS]))
+    columns = list(
+        dict.fromkeys(
+            [
+                *_read_side.SIM_COLUMNS,
+                "defteam",
+                *PBP_COVARIATE_COLUMNS,
+                *RECEIVER_PBP_COLUMNS,
+                *RECEIVER_SWING_COLUMNS,
+            ]
+        )
+    )
     pbp = load_pbp(PBP_SEASONS, columns=columns)
     fg_model, _ = _read_side.load_model("trace_fg_refit.nc", "fg_refit_summary.json")
     baselines = {
@@ -594,6 +621,7 @@ def variant_pass(
     *,
     models_by_week: dict | None = None,
     weeks_by_fold: dict | None = None,
+    receiver_drop_model=None,
     label: str = "variant",
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """The 2022-2025 variant arm, at v1.3's settings, with one model or nineteen.
@@ -616,6 +644,7 @@ def variant_pass(
             ctx.fg_model,
             ctx.slope,
             dropped_pick_model=model,
+            receiver_drop_model=receiver_drop_model,
             ftn_by_game=ctx.ftn_by_game,
             seasons=FTN_SEASONS,
         )
@@ -637,6 +666,7 @@ def variant_pass(
             ctx.fg_model,
             ctx.slope,
             dropped_pick_model=fold_model,
+            receiver_drop_model=receiver_drop_model,
             ftn_by_game=ctx.ftn_by_game,
         )
         tables.append(table)
