@@ -55,7 +55,11 @@ from nfl_simulator.receiver_drops import (  # noqa: E402
 from nfl_simulator.receiver_drops import (  # noqa: E402
     PBP_SWING_COLUMNS as RECEIVER_SWING_COLUMNS,
 )
-from nfl_simulator.simulator import points_per_epa, simulate_game  # noqa: E402
+from nfl_simulator.simulator import (  # noqa: E402
+    POSSESSION_CAP_COMPONENT,
+    points_per_epa,
+    simulate_game,
+)
 
 # v1.3's shipped settings, quoted the way `render.py` and drivers 54 and 57
 # quote them. Changing any of them changes the draws, and V-1 is what says so.
@@ -112,6 +116,7 @@ def simulate_all(
     receiver_drop_model=None,
     ftn_by_game: dict | None = None,
     seasons: tuple[int, ...] | None = None,
+    edition: str | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """One arm: every game with a known margin, at v1.3's settings.
 
@@ -120,6 +125,11 @@ def simulate_all(
     numbers it produced then, and `research/73` re-checks that against document
     55's 136 bucket moves and 1.59 pp before reading anything new off this
     function.
+
+    ``edition`` was added in round 9 (document 61) and is additive in the same
+    way. It defaults to ``None``, which is the uncapped arm every earlier round
+    ran; ``"full"`` switches on the possession cap, and `research/78` is the only
+    caller that asks for it.
     """
     rows, ledgers = [], []
     frame = pbp if seasons is None else pbp.filter(pl.col("season").is_in(seasons))
@@ -141,9 +151,11 @@ def simulate_all(
             n_coin_draws=COIN_DRAWS,
             seed=RANDOM_SEED,
             include_blocked=False,
+            edition=edition,
         )
         dropped = [entry for entry in result.ledger if entry.component == "dropped_pick"]
         drops = [entry for entry in result.ledger if entry.component == "receiver_drop"]
+        caps = [entry for entry in result.ledger if entry.component == POSSESSION_CAP_COMPONENT]
         rows.append(
             {
                 "game_id": result.game_id,
@@ -153,9 +165,14 @@ def simulate_all(
                 "dtw_low": result.dtw_interval[0],
                 "dtw_high": result.dtw_interval[1],
                 "total_luck_epa": result.total_luck_epa,
-                "n_luck_events": len(result.ledger),
+                # Branch rows only. Round 9's possession-cap rows are ledger rows
+                # like any other and are counted in their own column, so this one
+                # still means what it meant to rounds 4-8 and to the figures.
+                "n_luck_events": len(result.ledger) - len(caps),
                 "n_dropped_pick_events": len(dropped),
                 "n_receiver_drop_events": len(drops),
+                "n_possession_cap_rows": len(caps),
+                "possession_cap_epa": sum(entry.luck_epa for entry in caps),
                 "variant": result.variant,
             }
         )
@@ -622,6 +639,7 @@ def variant_pass(
     models_by_week: dict | None = None,
     weeks_by_fold: dict | None = None,
     receiver_drop_model=None,
+    edition: str | None = None,
     label: str = "variant",
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """The 2022-2025 variant arm, at v1.3's settings, with one model or nineteen.
@@ -647,6 +665,7 @@ def variant_pass(
             receiver_drop_model=receiver_drop_model,
             ftn_by_game=ctx.ftn_by_game,
             seasons=FTN_SEASONS,
+            edition=edition,
         )
         print(f"\n  {label}: {table.height:,} games over {FTN_SEASONS[0]}-{FTN_SEASONS[-1]}")
         return table, ledger
@@ -668,6 +687,7 @@ def variant_pass(
             dropped_pick_model=fold_model,
             receiver_drop_model=receiver_drop_model,
             ftn_by_game=ctx.ftn_by_game,
+            edition=edition,
         )
         tables.append(table)
         ledgers.append(ledger)

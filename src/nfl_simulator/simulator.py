@@ -721,10 +721,14 @@ def possessions(plays: pl.DataFrame) -> tuple[dict[float, str], dict[str, str]]:
     **first** play rather than per play — a drive that crosses a quarter break
     is one possession, and labelling its plays separately would split it.
 
-    The offence is likewise the team possessing on the drive's first play, which
-    is not always the only `posteam` on it: a would-be touchdown dropped and
+    The offence is likewise the team possessing on the drive's first play — its
+    first play that **has** one. A kickoff carries a null `posteam`, so reading
+    the first row outright leaves the opening drive of a game charged to nobody,
+    and `LedgerEntry` would then carry a `None` where a club belongs. It is also
+    not always the only `posteam` on the drive: a would-be touchdown dropped and
     returned for a score puts the other team's extra point on the same
-    `fixed_drive`.
+    `fixed_drive`. A drive with no `posteam` at all is left out, and the caller
+    falls back to the charged team of the event that set `C_d`.
 
     A frame without `fixed_drive` returns empty maps, and the caller then leaves
     every event on a possession of its own — document 61 §2's guard, under which
@@ -741,12 +745,16 @@ def possessions(plays: pl.DataFrame) -> tuple[dict[float, str], dict[str, str]]:
     offence: dict[str, str] = {}
     for row in ordered.iter_rows(named=True):
         drive = row["fixed_drive"]
-        if drive is None or drive in label_by_drive:
+        if drive is None:
             continue
-        quarter = row.get("qtr")
-        label = f"drive {int(drive)}" if quarter is None else f"Q{int(quarter)} drive {int(drive)}"
-        label_by_drive[drive] = label
-        offence[label] = row["posteam"]
+        if drive not in label_by_drive:
+            quarter = row.get("qtr")
+            label_by_drive[drive] = (
+                f"drive {int(drive)}" if quarter is None else f"Q{int(quarter)} drive {int(drive)}"
+            )
+        label = label_by_drive[drive]
+        if label not in offence and row["posteam"] is not None:
+            offence[label] = row["posteam"]
 
     labels = {
         float(row["play_id"]): label_by_drive[row["fixed_drive"]]

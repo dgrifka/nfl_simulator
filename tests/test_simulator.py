@@ -1135,3 +1135,27 @@ def test_a_frame_with_no_drive_column_warns_and_leaves_the_cap_inert(baselines, 
     with pytest.warns(UserWarning, match="no `fixed_drive`"):
         result = run(rows, baselines, fg_model, edition="full")
     assert not [row for row in result.ledger if row.component == POSSESSION_CAP_COMPONENT]
+
+
+def test_a_drive_that_opens_with_a_kickoff_is_still_charged_to_somebody(baselines, fg_model):
+    """A kickoff carries no `posteam`; the drive belongs to whoever received it."""
+    from nfl_simulator.simulator import possessions
+
+    rows = [
+        drive_play(1.0, 1, 1, posteam=None, play_type="kickoff"),
+        drive_play(2.0, 1, 1, posteam=AWAY),
+    ]
+    _, offence = possessions(frame(rows))
+    assert offence == {"Q1 drive 1": AWAY}
+
+
+def test_a_cap_row_falls_back_to_the_charged_team_when_a_drive_has_no_offence(baselines, fg_model):
+    """No `posteam` anywhere on the drive: the row still names a club."""
+    from nfl_simulator.simulator import POSSESSION_CAP_COMPONENT
+
+    rows = two_fumbles_on_one_drive()
+    for row in rows[:3]:
+        row["posteam"] = None if row["fumble"] == 0 else row["posteam"]
+    result = run(two_fumbles_on_one_drive(), baselines, fg_model, edition="full")
+    caps = [row for row in result.ledger if row.component == POSSESSION_CAP_COMPONENT]
+    assert all(row.charged_team is not None for row in caps)
