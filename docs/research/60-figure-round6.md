@@ -284,3 +284,103 @@ call*).
    on the colour; the rule is nonetheless one the repository already owns a
    better version of. Switching `anchor_colour` to `separated()` is ~15 min and
    changes which matchups get ink, so it is the maintainer's call rather than a round's.
+
+---
+
+## 8. Round 7 — the maintainer's notes on these figures
+
+*Appended 2026-08-28, on `fix/figure-round-7` off `main` at `27d29e8`. Handoff
+`handoff-2026-08-28-figures-r7.md`, results `results-2026-08-28-exp11.md`, log
+`log-2026-08-28-figures-r7.md`. Five settled changes from a Fable 5 chat after
+the maintainer read the round-6 PNGs. No statistic moves: all nine renders replay at
+`0.00e+00` before and after. 751 → **784 tests**, ruff clean.*
+
+### 8a. What a reader sees now
+
+**A row says whose luck it is and who did the thing, and those are not always
+the same club.** Round 6 put the charged team's name at the front of every row,
+which is right for a fumble and wrong for a dropped pick: the offence is charged
+— it threw an interceptable ball and got away with it — but the hands that
+dropped it were the defence's. The mark stays the charged club's and the
+sentence becomes the actor's, so `2024_19_LAC_HOU` now reads
+
+```
+[HOU mark]  LAC dropped pick · thrown by Stroud (58% catch)     +2.5
+[LAC mark]  LAC drop · Dissly (95% catch)                       −7.4
+```
+
+— Houston threw it, Los Angeles dropped it, and it is Houston's fortune. The
+folded rows follow: `5 smaller HOU drops`, `3 smaller NYG dropped picks`.
+
+**The branch is named once.** `receiver drop · Jefferson, caught (95% catch)`
+said the outcome twice and contradicted itself doing it — §7's first parked
+item. The noun now follows the branch: `interception` or `dropped pick`,
+`catch` or `drop`. `MIN catch · Jefferson (95% catch)` on the Full `DET_MIN`
+render is that fix visible. The card's What-happened column still states the
+verb, and the two agree by construction because both read `actual`.
+
+**The marks are a column.** Round 6 hung each mark off its own label's start;
+the labels are right-aligned and vary in length by a factor of three, so they
+came out on a diagonal. The labels are left-aligned on one x now with the marks
+just outside it, and the y ticks are gone — a tick that no longer touches its
+label is a stray dash.
+
+**The two anchors are bold and the rows carry the short probability.** Weight,
+not size. And `(88% kick)` on the waterfall as on the card: round 6's
+`(88% kick, 83–92)` made one number read two ways across two figures of one
+game. The interval survives behind `plot_luck_ledger(show_intervals=True)` for
+an article figure with room to ask for it, and its tests survive with it.
+
+**The card's cells are sentences.** `Drop · Dissly`, `Escaped (58% catch)`,
+`Recovered by LAC`, `Retained`; `41-yd field goal · Crosby` keeps its digit.
+
+### 8b. The anchor colour — §7's second parked item, with a correction
+
+`anchor_colour` now asks `style.separated()` **as well as** document 42 §3's RGB
+floor, and takes the ink only where both allow it.
+
+The swap as §7 proposed it was implemented first and rendered. It does step
+`2022_13_WAS_NYG` to the neutral, as predicted — and it also steps
+`2016_14_NYJ_SF` and `2021_14_LV_KC` the *other* way, to the ink, because OKLab
+reads `#000000` and the ink `#1A1A1A` as 21.8 apart for every reader while RGB
+reads them 0.177 apart. On the `NYJ_SF` render that verdict is wrong in the only
+way that matters: the two anchors and the three Jets bars came out one black and
+the figure could not say which bar was a total, which is the defect §7 of
+document 42 closed in round 2. `style.NORMAL_FLOOR = 15.0` is calibrated for
+thin categorical marks; these are the two largest blocks on the figure.
+
+Requiring both rules produces exactly the one affected render the handoff
+predicted. The two catch different failures — RGB the pair a full-colour reader
+loses at size, OKLab the pair a colourblind reader loses at any size.
+
+| pair | RGB (floor 0.20) | normal (15.0) | protan (6.0) | deutan | tritan |
+|---|---|---|---|---|---|
+| ink vs WAS `#5A1414` | 0.253 | 13.9 | **5.2** | 11.6 | 16.2 |
+| ink vs NYG `#0B2265` | 0.302 | **13.9** | 14.5 | 13.7 | 9.7 |
+| ink vs NYJ `#000000` | **0.177** | 21.8 | 21.8 | 21.8 | 21.8 |
+| neutral vs KC `#E31837` | 0.596 | 24.9 | **4.3** | 16.1 | 28.6 |
+
+Both Washington clubs fail, not only the navy §7 cited. The last row is new and
+is not this round's to fix — see 8d.
+
+### 8c. Register — closed this round
+
+| Item | Where |
+|---|---|
+| "receiver drop … caught" reads as a contradiction (§7, raised) | 8a — the noun follows the branch |
+| `anchor_colour` fails the module's colour-vision validator (§7, raised) | 8b — both rules now |
+
+**Open, carried forward.** Everything in §7's "Open" table is unchanged: **D-5**,
+document 42's other entries, `w = 0.285`, Gate C-2 at the receiver grain,
+`is_catchable_ball`, A-3 clause 7's sunset.
+
+### 8d. Raised this round, not acted on
+
+**The neutral the anchors fall back to is itself under the colour-vision floor
+against one club in the set.** `#5E5B55` is 4.3 from Kansas City's `#E31837` for
+a protan reader, against `style.CVD_FLOOR = 6.0`. This is the same class of
+defect 8b just fixed at the other end of the function, on a render that has
+always used the neutral, and it cannot be closed by choosing between the two
+colours `anchor_colour` already owns — it needs a third, or a non-colour
+encoding on the anchor bars. The anchors remain 1.4× the bar height and labelled
+`Actual:` / `Deserved:`, so nothing rests on the colour. In the queue as Parked.
