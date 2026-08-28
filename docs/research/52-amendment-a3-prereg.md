@@ -155,8 +155,41 @@ mirror)`.
 ## 8. Outcome
 
 Round 5 ran 2026-08-27 on `feat/dropped-pick-variant` (document 53); **round 6**
-re-ran G-1 the same day at document 54's amended fold spec (document 55).
-**Unmerged.**
+re-ran G-1 the same day at document 54's amended fold spec (document 55);
+**round 7** ran clause 3's receiver mirror the same day, pre-registered in
+document 56 and recorded in document 57. **Unmerged.**
+
+**As of round 7: every computed gate this amendment has ever set now passes.**
+G-1, G-2 and G-3 for the dropped pick; G-4a, G-4b, G-4c and G-4d for the
+receiver drop. Clause 3 is satisfied — both directions of the class have been
+built and gated, and they enter together or not at all.
+
+**A-3 is still not enacted, and no round can enact it.** §5's G-4 clause and
+document 56 §3 make enactment "G-4a–d pass **and** the maintainer rules on §0's
+wording", and the second half is a decision rather than a computation: is a
+1-in-20 event a "near-random" finish within the meaning of §3's preamble?
+Document 57 §1b restates the question with the arithmetic it now has — the
+receiving corps' persistent skill explains **0.088%** of the per-target
+variance, against the dropped pick's 1.4%, while Gate C-2 nonetheless **fails**
+at the charged grain, so corps do measurably differ. Both facts are on the
+record and neither settles it.
+
+The treatment table in document 05 §3 therefore reads **`variant (A-3 pending
+a wording ruling)`** on both rows — one step on from `variant (A-3 pending
+mirror)`, which described the state before round 7.
+
+| Gate | Round 7 result | Commit |
+|---|---|---|
+| **G-4a** — the study (clause 1) | **PASS.** C-3 power **0.877** at the charged grain. The clause-1 grain rule fired on its second branch: power was 0.40 at receiver-season, so the component charges the **team-season**, the receiving corps. Gate C-2 **fails** at that grain (0.87 pp against a 0.63 pp threshold) and is reported, which is what clause 1's "reported whichever way it lands" provides for — and what §6 predicted | `790cac0` |
+| **G-4b** — the component | **PASS.** V-1 0.00e+00 over 2,761 games, V-2 0.00e+00 on all three variant arms, V-6 (0 divergences, max r̂ 1.0018 over 276 parameters), V-8 ten of ten lines under both readings, read-side round trip 0.00e+00 over 54,160 rows. V-3, V-4, V-5, V-7 as tests | `109799f`, `e88a42f` |
+| **G-4c** — self-fulfilment (clause 5) | **PASS.** Nineteen folds at document 54 F-1's spec, **all nineteen clearing Gate C-1 with zero divergences**; worst r̂ 1.0036, thinnest ESS-tail 1,904. Bucket agreement **0.996** (1,134/1,139) against ≥ 0.90; median \|ΔDTW\| between the arms **0.04 pp** against < 1.0 pp. §5's consequence applies to this direction too: **production keeps the in-sample read.** The week-out arm moves 165 games against the in-sample arm's 162, so the 14% is not an in-sample artifact | `e774547` |
+| **G-4d** — materiality (clause 4) | **PASS.** On the 1,138 affected games, median \|ΔDTW\| **2.32 pp** against a median 89% half-width of **0.56 pp**, clear by 1.75 pp. The floor was not re-tuned | `e88a42f` |
+| **G-5** — the combined audit | Reported, never gated. `+dp` 136 bucket moves, `+rd` 162, `+dp+rd` 200. §6's predicted asymmetry shows up in the interval widening: `+dp` widens the mean 89% DTW interval 0.0383 → 0.0514, `+rd` only 0.0387 → 0.0405, because a team-season's catch rate rests on ~437 balls and a defence-season's finishing on ~22 chances | `e88a42f` |
+| **V-1** — v1.3 untouched | **PASS** again, 0.00e+00 over 2,761 games, at the start and end of both round-7 audit runs | round 7 |
+
+*The round-6 table below is kept as it was written.*
+
+---
 
 **As of round 6: G-1, G-2 and G-3 all pass. A-3 is not yet enacted, and the only
 thing it waits on is clause 3's receiver mirror (G-4, round 7).** The treatment

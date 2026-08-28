@@ -168,3 +168,53 @@ the maintainer rules on §0's wording. Then document 52 §4's two editions ship
 | V-8 bound | [0.85, 0.99] on a median target | `72` |
 | Swing source | `air_epa + xyac_epa` per play; bin fallback | `73` |
 | Seeds | 20260827 fits (+week for folds), 20260817 simulator | as before |
+
+---
+
+## 5. Outcome
+
+Round 7 ran 2026-08-27 on `feat/dropped-pick-variant`. Full record: **document
+57**. **Unmerged.** 550 → 586 tests, ruff clean.
+
+| Part | Result | Commit |
+|---|---|---|
+| A — power, then thresholds | Guards **exact** (56,211 / 2,781 / 128). §1's table filled above. **The clause-1 grain rule fired on its second branch**: C-3 is 0.400 at receiver-season and 0.877 at team-season, so the component charges the receiving corps. A third file was needed — §1's instrument costs 183.8 s per fit at the receiver grain, ~100 hours for this part; `research/_crossed_block_grid.py` computes the same posterior on the same grid in 0.17 s and reproduces it to 1.2e-15 | `048e614` |
+| B — the study, arms 1–3 | Gate C-1 PASS on all three arms, 0 divergences, worst r̂ 1.0022. **G-4a PASS** (C-3 0.877). Gate **C-2 FAILS** at the charged grain, 0.87 pp against 0.63 pp, and is reportable. Like-grain cross-check 0.01 pp. **V-8 PASS**, both readings, both reference rows stored | `790cac0` |
+| C — the component, TDD | `receiver_drops.py`, the default-off switch, composable `variant`. The defence-effect-excluded-on-read pin and the swing-sign guard are tests, as §2 and handoff constraint 3 asked | `109799f` |
+| D — G-4b, G-4d, G-5 | **G-4b PASS**, **G-4d PASS** (2.32 pp vs 0.56 pp). V-1 0.00e+00 twice; read-side round trip 0.00e+00 over 54,160 rows | `e88a42f` |
+| D — G-4c | **PASS.** 19/19 folds clear C-1; agreement 0.996, median \|ΔDTW\| 0.04 pp | `e774547` |
+| E — the record | Document 57, this section, document 52 §8, document 05 §3's two rows, the queue, `results-2026-08-27-exp7.md` | this commit |
+
+**§3's enactment rule is half satisfied.** G-4a–d all pass, so the computed
+half is done; the other half is the maintainer's ruling on §0's wording, and no round
+can supply it.
+
+**§3's pre-committed expectation on G-5 was wrong in a nameable way.** It
+expected the two directions to be roughly independent per game, with the
+cancelling share near 50%. On the 758 games carrying both kinds of event they
+move DTW the same way **64.6%** of the time, r = **+0.197** — a mild positive
+dependence, which §3 said would be "a finding to name". Named in document 57
+§5. It is far short of the two components reading one thing: `+dp+rd` moves 200
+games where `+dp` moves 136 and `+rd` 162, and 70 games that one alone moves the
+combined arm does not.
+
+**Two things §0 and §2 left open, disclosed rather than resolved silently.**
+
+1. **§0's magnitude expectation understated the receiver side.** §0 said
+   "magnitude per game is therefore comparable to picks". The median `+rd` move
+   is 2.32 pp against `+dp`'s 1.59 — **46% larger** — and the mean is 8.17 pp
+   against 1.59. Document 57 §5a checks the tail end to end and finds it is the
+   component's own arithmetic: a dropped touchdown prices at ~9 EPA, where the
+   dropped-pick bin table caps near 3.55.
+2. **§2's fallback clause is under-specified and was widened.** "Both `air_epa`
+   and `xyac_epa` null → bin table" does not say what to do when only one is.
+   The bin table is taken whenever either is missing — 2,038 rows both null,
+   2,359 `xyac_epa` alone — which uses the pre-registered fallback more often
+   and never invents a value.
+
+**And one substitute fired.** §1's contested-ball probe expected contested balls
+to be dropped "far higher" than uncontested ones. They are dropped **less**
+often — 4.29% against 5.04%, 0.85× — which is what `is_catchable_ball` being
+graded partly off the outcome would look like. Reported, never gated, and it
+caveats every drop number in the round; it biases toward finding *less* receiver
+skill, so the measured spread is a floor.
