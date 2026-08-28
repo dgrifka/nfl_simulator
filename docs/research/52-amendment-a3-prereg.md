@@ -180,10 +180,11 @@ document 58; the round's record is document 59.
 | Enactment artifact | Commit |
 |---|---|
 | Ruling R-4 and the enactment plan (document 58) | `1080760` |
-| §3 preamble rewritten, treatment table, status (Part A) | `<A>` |
-| Editions in code — `strict` / `full` strings and `edition=` (Part B) | `<B>` |
-| Sensitivities S-1 and S-2, reported (Part C) | `<C>` |
-| Record, results, queue (document 59, Part D) | `<D>` |
+| §3 preamble rewritten, treatment table, status (Part A) | `f2b8128` |
+| Editions in code — `strict` / `full` strings and `edition=` (Part B) | `b97624b` |
+| Sensitivities S-1 and S-2, reported (Part C) | `b8382f1` |
+| Record (document 59) and §6's Outcome | `b8382f1`, with Part C |
+| Results, log and queue (Part D) | this commit |
 
 *Everything below this line was written before the ruling and is kept as it
 was written.*
