@@ -214,6 +214,7 @@ def _simulation_context():
     pbp = load_pbp(PBP_SEASONS, columns=read_side.SIM_COLUMNS)
     fg_model, _ = read_side.load_model("trace_fg_refit.nc", "fg_refit_summary.json")
     dropped_pick_model, ftn = _dropped_pick_pieces()
+    receiver_drop_model = _receiver_drop_pieces()
     return {
         "pbp": pbp,
         "fg_model": fg_model,
@@ -221,13 +222,35 @@ def _simulation_context():
         "fg_baseline": fit_fg_baseline(pbp),
         "xp_baseline": fit_xp_baseline(pbp),
         "slope": points_per_epa(build_game_table(pbp).drop_nulls("margin")),
-        # Document 49's variant, loaded once for a batch and **used by nothing in
-        # this module**. `replay` below reproduces the shipped v1.3 summary, so it
-        # cannot pass these; they are here so a caller that wants the variant does
-        # not pay for the trace and the charting pull a second time. Nothing
-        # renders on the product figures this round (document 49 §8).
+        # Amendment A-3's two components, loaded once for a batch and **used by
+        # nothing in this module**. `replay` below reproduces the shipped Strict
+        # summary, so it cannot pass these; they are here so a caller that wants
+        # the Full edition does not pay for the traces and the charting pull a
+        # second time. Nothing renders them yet — that is figure round 6.
         "dropped_pick_model": dropped_pick_model,
+        "receiver_drop_model": receiver_drop_model,
         "ftn": ftn,
+        # Ruling R-4's two editions (document 58 §2), as the handles each one
+        # simulates with, so a caller renders both from one context.
+        "editions": edition_handles(dropped_pick_model, receiver_drop_model),
+    }
+
+
+def edition_handles(dropped_pick_model, receiver_drop_model) -> dict[str, dict]:
+    """What each edition passes to `simulate_game` (document 58 §2).
+
+    Strict pays for no model — it is v1.3 byte for byte, and that is the whole
+    point of the name. Full pays for both directions of the hands-on-the-ball
+    class, which amendment A-3 clause 3 admits together or not at all. A handle
+    that failed to load stays `None`: a checkout without the traces still
+    renders Strict, and asks for Full at whatever coverage it has.
+    """
+    return {
+        "strict": {"dropped_pick_model": None, "receiver_drop_model": None},
+        "full": {
+            "dropped_pick_model": dropped_pick_model,
+            "receiver_drop_model": receiver_drop_model,
+        },
     }
 
 
@@ -251,6 +274,24 @@ def _dropped_pick_pieces():
     except FileNotFoundError as error:
         print(f"Note: the dropped-pick variant is unavailable ({error}).")
         return None, None
+
+
+def _receiver_drop_pieces():
+    """The receiver direction's fitted model, or ``None``.
+
+    Absence is not an error, for `_dropped_pick_pieces`'s reason: the charting
+    frame is shared, so only the trace is loaded here.
+    """
+    from nfl_simulator.receiver_drops import ReceiverDropModel
+
+    try:
+        return ReceiverDropModel.from_posterior(
+            paths.RESEARCH_OUTPUT_DIR / "trace_receiver_drop.nc",
+            paths.RESEARCH_OUTPUT_DIR / "receiver_drop_summary.json",
+        )
+    except FileNotFoundError as error:
+        print(f"Note: the receiver-drop component is unavailable ({error}).")
+        return None
 
 
 def replay(game_id: str, row: dict) -> tuple[np.ndarray, dict]:

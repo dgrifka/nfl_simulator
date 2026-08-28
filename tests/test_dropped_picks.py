@@ -491,12 +491,12 @@ def test_v2_the_variant_ledger_sums_to_the_margin_it_moved(baselines):
     )
 
 
-def test_v3_a_2022_game_with_no_worthy_throws_is_v13_field_for_field(baselines):
+def test_v3_a_2022_game_with_no_worthy_throws_is_strict_field_for_field(baselines):
     rows = [pbp_play(1.0), pbp_play(2.0, play_type="run")]
     v13 = run(rows, baselines)
     variant = run(rows, baselines, dropped_pick_model=model_at(0.45), ftn=ftn_rows([9.0]))
-    assert variant.variant == "v1.3"
-    assert v13.variant == "v1.3"
+    assert variant.variant == "strict"
+    assert v13.variant == "strict"
     for name in ("actual_margin", "deserved_margin", "dtw_home", "dtw_interval", "total_luck_epa"):
         assert getattr(variant, name) == getattr(v13, name)
     assert np.array_equal(variant.margin_draws, v13.margin_draws)
@@ -510,10 +510,10 @@ def test_v3_a_game_with_worthy_throws_is_labelled_as_the_variant(baselines):
         dropped_pick_model=model_at(0.45),
         ftn=ftn_rows([2.0]),
     )
-    assert result.variant == "v1.3+dp"
+    assert result.variant == "strict+dp"
 
 
-def test_v4_a_pre_2022_game_asked_for_the_variant_warns_and_returns_v13(baselines):
+def test_v4_a_pre_2022_game_asked_for_the_variant_warns_and_returns_strict(baselines):
     rows = [
         pbp_play(1.0, season=2019, game_id="2019_01_AWY_HOM"),
         worthy_throw(2.0, intercepted=False, season=2019, game_id="2019_01_AWY_HOM"),
@@ -521,12 +521,12 @@ def test_v4_a_pre_2022_game_asked_for_the_variant_warns_and_returns_v13(baseline
     v13 = run(rows, baselines)
     with pytest.warns(UserWarning, match="charting starts in 2022"):
         variant = run(rows, baselines, dropped_pick_model=model_at(0.45), ftn=ftn_rows([2.0]))
-    assert variant.variant == "v1.3"
+    assert variant.variant == "strict"
     assert len(variant.ledger) == len(v13.ledger)
     assert variant.deserved_margin == v13.deserved_margin
 
 
-def test_the_default_is_v13_so_the_component_is_opt_in(baselines):
+def test_the_default_is_strict_so_the_component_is_opt_in(baselines):
     result = run([worthy_throw(2.0, intercepted=False)], baselines)
-    assert result.variant == "v1.3"
+    assert result.variant == "strict"
     assert not [entry for entry in result.ledger if entry.component == "dropped_pick"]

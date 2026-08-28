@@ -475,8 +475,8 @@ def main() -> None:
         "events_total": int(events.sum()),
         "events_per_game_median_affected": float(np.median(events[affected])),
         "events_per_game_max": int(events.max()),
-        "games_labelled_rd": int((rd_table["variant"] == "v1.3+rd").sum()),
-        "games_labelled_dp_rd": int((both_table["variant"] == "v1.3+dp+rd").sum()),
+        "games_labelled_rd": int((rd_table["variant"] == "strict+rd").sum()),
+        "games_labelled_dp_rd": int((both_table["variant"] == "full").sum()),
     }
     print(f"\n{'=' * 72}\nCOVERAGE — where the receiver variant has anything to say\n{'=' * 72}")
     print(

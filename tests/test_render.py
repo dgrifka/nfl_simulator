@@ -275,3 +275,29 @@ def test_the_sidebar_is_what_the_article_version_adds(game):
     )
     assert panel is not None
     assert fig.get_size_inches()[0] > before
+
+
+# --------------------------------------------------------------------------
+# the editions — document 58 §2
+# --------------------------------------------------------------------------
+
+
+def test_the_context_maps_each_edition_to_the_handles_it_simulates_with():
+    """Strict pays for no model; Full pays for both. The map is what a caller reads."""
+    from nfl_simulator.render import edition_handles
+
+    handles = edition_handles("dp-model", "rd-model")
+    assert set(handles) == {"strict", "full"}
+    assert handles["strict"] == {"dropped_pick_model": None, "receiver_drop_model": None}
+    assert handles["full"] == {
+        "dropped_pick_model": "dp-model",
+        "receiver_drop_model": "rd-model",
+    }
+
+
+def test_a_missing_trace_leaves_its_edition_handle_none_rather_than_failing():
+    """`_dropped_pick_pieces` degrades to `None`; the map must carry that through."""
+    from nfl_simulator.render import edition_handles
+
+    handles = edition_handles(None, None)
+    assert handles["full"] == {"dropped_pick_model": None, "receiver_drop_model": None}

@@ -276,7 +276,7 @@ def coverage(variant: pl.DataFrame) -> dict:
         "events_total": int(events.sum()),
         "events_per_game_median_affected": float(np.median(events[affected])),
         "events_per_game_max": int(events.max()),
-        "games_labelled_variant": int((variant["variant"] == "v1.3+dp").sum()),
+        "games_labelled_variant": int((variant["variant"] == "strict+dp").sum()),
     }
     print(f"\n{'=' * 72}\nCOVERAGE — where the variant has anything to say\n{'=' * 72}")
     print(

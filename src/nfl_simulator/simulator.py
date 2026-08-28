@@ -98,6 +98,14 @@ class LuckEvent:
         )
 
 
+# The two editions ruling R-4 named (document 58 §2), mapped to the public name
+# each carries on a figure. `"strict+dp"` and `"strict+rd"` are deliberately
+# absent: they are audit arms, and `SimulationResult.edition` returns `None` for
+# them so nothing can render an arm the maintainer never named.
+PUBLIC_EDITIONS = {"strict": "Strict", "full": "Full"}
+EDITIONS = tuple(PUBLIC_EDITIONS)
+
+
 @dataclass(frozen=True)
 class SimulationResult:
     game_id: str
@@ -108,13 +116,21 @@ class SimulationResult:
     margin_draws: np.ndarray
     ledger: Ledger
     total_luck_epa: float
-    # Which adjudication produced these numbers. `"v1.3"` is the shipped ledger;
-    # `"v1.3+dp"` says at least one dropped-pick row is in it (document 49 §5),
-    # `"v1.3+rd"` at least one receiver-drop row (document 56 §2), and
-    # `"v1.3+dp+rd"` — amendment A-3's `v2.0` — both. The label describes the
-    # ledger, not the code path: a 2022+ game whose charting held no
-    # interceptable throw and no catchable ball is v1.3, because its numbers are.
-    variant: str = "v1.3"
+    # Which adjudication produced these numbers. `"strict"` is v1.3's ledger,
+    # renamed by ruling R-4 (document 58 §2); `"full"` is the other edition —
+    # at least one dropped-pick row (document 49 §5) *and* at least one
+    # receiver-drop row (document 56 §2), the two directions amendment A-3
+    # clause 3 admits together or not at all. `"strict+dp"` and `"strict+rd"`
+    # are the audit-only arms: callable, but they have no public name and never
+    # render. The label describes the ledger, not the code path — a 2022+ game
+    # whose charting held no interceptable throw and no catchable ball is
+    # `"strict"`, because its numbers are.
+    variant: str = "strict"
+
+    @property
+    def edition(self) -> str | None:
+        """The public name of this adjudication, or ``None`` for an audit arm."""
+        return PUBLIC_EDITIONS.get(self.variant)
 
 
 def points_per_epa(games: pl.DataFrame) -> float:
@@ -519,12 +535,24 @@ def simulate_game(
     n_coin_draws: int = DEFAULT_COIN_DRAWS,
     seed: int = DEFAULT_SEED,
     include_blocked: bool = False,
+    edition: str | None = None,
 ) -> SimulationResult:
     """Deserve-to-win for one game.
 
     `plays` must be the plays of a single game, carrying a `result` column with
     the actual home margin.
+
+    `edition` is a switch over the model handles, not a second code path. A
+    caller holding both fitted models — `render._simulation_context` does —
+    asks for `"strict"` to get v1.3 without dropping them, and for `"full"` to
+    use both. Left `None`, whichever models were passed are used, which is how
+    the audit arms `"strict+dp"` and `"strict+rd"` stay reachable.
     """
+    if edition is not None and edition not in EDITIONS:
+        raise ValueError(f"unknown edition {edition!r}; the editions are {list(EDITIONS)}")
+    if edition == "strict":
+        dropped_pick_model = None
+        receiver_drop_model = None
     if plays.is_empty():
         raise ValueError("cannot simulate a game with no plays")
 
@@ -553,7 +581,10 @@ def simulate_game(
     # two variants can be read alone and together without one moving the other.
     receiver_drops = receiver_drop_events(plays, ftn, receiver_drop_model, n_posterior_draws, rng)
     events += receiver_drops
-    variant = "v1.3" + ("+dp" if dropped_picks else "") + ("+rd" if receiver_drops else "")
+    if dropped_picks and receiver_drops:
+        variant = "full"
+    else:
+        variant = "strict" + ("+dp" if dropped_picks else "") + ("+rd" if receiver_drops else "")
 
     ledger = Ledger(tuple(event.to_entry() for event in events))
     total_luck_epa = ledger.total_luck_epa()

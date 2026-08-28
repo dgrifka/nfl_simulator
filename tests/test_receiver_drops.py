@@ -632,11 +632,11 @@ def test_v2_the_variant_ledger_sums_to_the_margin_it_moved(baselines):
     )
 
 
-def test_v3_a_2022_game_with_no_catchable_targets_is_v13_field_for_field(baselines):
+def test_v3_a_2022_game_with_no_catchable_targets_is_strict_field_for_field(baselines):
     rows = [pbp_play(1.0), pbp_play(2.0, play_type="run")]
     v13 = run(rows, baselines)
     variant = run(rows, baselines, receiver_drop_model=model_at(0.05), ftn=ftn_rows([9.0]))
-    assert variant.variant == "v1.3"
+    assert variant.variant == "strict"
     for name in ("actual_margin", "deserved_margin", "dtw_home", "dtw_interval", "total_luck_epa"):
         assert getattr(variant, name) == getattr(v13, name)
     assert np.array_equal(variant.margin_draws, v13.margin_draws)
@@ -649,10 +649,10 @@ def test_v3_a_game_with_catchable_targets_is_labelled_as_the_variant(baselines):
         receiver_drop_model=model_at(0.05),
         ftn=ftn_rows([2.0]),
     )
-    assert result.variant == "v1.3+rd"
+    assert result.variant == "strict+rd"
 
 
-def test_v4_a_pre_2022_game_asked_for_the_variant_warns_and_returns_v13(baselines):
+def test_v4_a_pre_2022_game_asked_for_the_variant_warns_and_returns_strict(baselines):
     rows = [
         pbp_play(1.0, season=2019, game_id="2019_01_AWY_HOM"),
         catchable_target_play(2.0, dropped=False, season=2019, game_id="2019_01_AWY_HOM"),
@@ -660,13 +660,13 @@ def test_v4_a_pre_2022_game_asked_for_the_variant_warns_and_returns_v13(baseline
     v13 = run(rows, baselines)
     with pytest.warns(UserWarning, match="charting starts in 2022"):
         variant = run(rows, baselines, receiver_drop_model=model_at(0.05), ftn=ftn_rows([2.0]))
-    assert variant.variant == "v1.3"
+    assert variant.variant == "strict"
     assert variant.deserved_margin == v13.deserved_margin
 
 
-def test_the_default_is_v13_so_the_component_is_opt_in(baselines):
+def test_the_default_is_strict_so_the_component_is_opt_in(baselines):
     result = run([catchable_target_play(2.0, dropped=False)], baselines)
-    assert result.variant == "v1.3"
+    assert result.variant == "strict"
     assert not [entry for entry in result.ledger if entry.component == "receiver_drop"]
 
 
@@ -727,7 +727,7 @@ def worthy_and_catchable_ftn(worthy_ids: list[float], catchable_ids: list[float]
     return pl.DataFrame(rows)
 
 
-def test_the_combined_ledger_is_labelled_v13_dp_rd(baselines):
+def test_the_combined_ledger_is_labelled_full(baselines):
     result = run(
         [catchable_target_play(2.0, dropped=False), catchable_target_play(3.0, dropped=False)],
         baselines,
@@ -735,7 +735,7 @@ def test_the_combined_ledger_is_labelled_v13_dp_rd(baselines):
         receiver_drop_model=model_at(0.05),
         ftn=worthy_and_catchable_ftn([3.0], [2.0]),
     )
-    assert result.variant == "v1.3+dp+rd"
+    assert result.variant == "full"
 
 
 def test_the_combined_ledger_sums_to_the_two_ledgers_added(baselines):
@@ -785,3 +785,99 @@ def test_switching_the_receiver_model_on_does_not_move_the_dropped_pick_rows(bas
         ]
 
     assert rows_of(dp_only, "dropped_pick") == rows_of(both, "dropped_pick")
+
+
+# --------------------------------------------------------------------------
+# the editions — document 58 §2, enacted by ruling R-4
+# --------------------------------------------------------------------------
+
+
+def test_one_direction_alone_is_an_audit_arm_with_no_public_name(baselines):
+    rows = [catchable_target_play(2.0, dropped=False), catchable_target_play(3.0, dropped=False)]
+    ftn = worthy_and_catchable_ftn([3.0], [2.0])
+    dp_only = run(rows, baselines, dropped_pick_model=dropped_pick_model_at(0.45), ftn=ftn)
+    rd_only = run(rows, baselines, receiver_drop_model=model_at(0.05), ftn=ftn)
+    assert dp_only.variant == "strict+dp"
+    assert rd_only.variant == "strict+rd"
+    assert dp_only.edition is None
+    assert rd_only.edition is None
+
+
+def test_the_edition_property_returns_the_public_name(baselines):
+    rows = [catchable_target_play(2.0, dropped=False), catchable_target_play(3.0, dropped=False)]
+    ftn = worthy_and_catchable_ftn([3.0], [2.0])
+    assert run(rows, baselines).edition == "Strict"
+    assert (
+        run(
+            rows,
+            baselines,
+            dropped_pick_model=dropped_pick_model_at(0.45),
+            receiver_drop_model=model_at(0.05),
+            ftn=ftn,
+        ).edition
+        == "Full"
+    )
+
+
+def test_edition_full_equals_passing_both_models_explicitly(baselines):
+    """The convenience is a switch over the handles, not a second code path."""
+    rows = [catchable_target_play(2.0, dropped=False), catchable_target_play(3.0, dropped=False)]
+    ftn = worthy_and_catchable_ftn([3.0], [2.0])
+    dp_model, rd_model = dropped_pick_model_at(0.45), model_at(0.05)
+
+    explicit = run(
+        rows, baselines, dropped_pick_model=dp_model, receiver_drop_model=rd_model, ftn=ftn
+    )
+    by_edition = run(
+        rows,
+        baselines,
+        dropped_pick_model=dp_model,
+        receiver_drop_model=rd_model,
+        ftn=ftn,
+        edition="full",
+    )
+    assert by_edition.variant == explicit.variant == "full"
+    assert by_edition.total_luck_epa == explicit.total_luck_epa
+    assert np.array_equal(by_edition.margin_draws, explicit.margin_draws)
+
+
+def test_edition_strict_ignores_the_models_it_was_handed(baselines):
+    """A caller holding both handles can render Strict without dropping them."""
+    rows = [catchable_target_play(2.0, dropped=False), catchable_target_play(3.0, dropped=False)]
+    ftn = worthy_and_catchable_ftn([3.0], [2.0])
+
+    no_models = run(rows, baselines)
+    by_edition = run(
+        rows,
+        baselines,
+        dropped_pick_model=dropped_pick_model_at(0.45),
+        receiver_drop_model=model_at(0.05),
+        ftn=ftn,
+        edition="strict",
+    )
+    assert by_edition.variant == no_models.variant == "strict"
+    assert by_edition.total_luck_epa == no_models.total_luck_epa
+    assert np.array_equal(by_edition.margin_draws, no_models.margin_draws)
+
+
+def test_a_pre_2022_game_asked_for_full_warns_and_returns_strict(baselines):
+    rows = [
+        pbp_play(1.0, season=2019, game_id="2019_01_AWY_HOM"),
+        catchable_target_play(2.0, dropped=False, season=2019, game_id="2019_01_AWY_HOM"),
+    ]
+    with pytest.warns(UserWarning, match="charting starts in 2022"):
+        result = run(
+            rows,
+            baselines,
+            dropped_pick_model=dropped_pick_model_at(0.45),
+            receiver_drop_model=model_at(0.05),
+            ftn=ftn_rows([2.0]),
+            edition="full",
+        )
+    assert result.variant == "strict"
+    assert result.edition == "Strict"
+
+
+def test_an_edition_that_is_not_one_of_the_two_is_refused(baselines):
+    with pytest.raises(ValueError, match="edition"):
+        run([catchable_target_play(2.0, dropped=False)], baselines, edition="v2.0")
