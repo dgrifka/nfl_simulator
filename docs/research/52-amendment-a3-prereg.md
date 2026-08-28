@@ -154,6 +154,26 @@ mirror)`.
 
 ## 8. Outcome
 
+Round 5 ran 2026-08-27 on `feat/dropped-pick-variant` (document 53); **round 6**
+re-ran G-1 the same day at document 54's amended fold spec (document 55).
+**Unmerged.**
+
+**As of round 6: G-1, G-2 and G-3 all pass. A-3 is not yet enacted, and the only
+thing it waits on is clause 3's receiver mirror (G-4, round 7).** The treatment
+table in document 05 §3 therefore now reads `variant (A-3 pending mirror)` —
+the wording §5's G-4 clause wrote for exactly this state.
+
+| Gate | Round 6 result | Commit |
+|---|---|---|
+| **G-1** — self-fulfilment (clause 5) | **PASS.** Nineteen folds at document 54 F-1's spec (weeks 1-18 plus a postseason fold holding weeks 19-22 together), **all nineteen clearing Gate C-1 with zero divergences**; worst r̂ 1.0043, thinnest ESS-tail 1,602. Bucket agreement between the in-sample and week-out arms **0.997** (1,136 of 1,139 games) against a ≥ 0.90 bar; median \|ΔDTW\| between the arms **0.05 pp** against a < 1.0 pp bar. Document 52 §5's consequence applies: **production keeps the in-sample read, with this bound recorded.** The week-out arm moves 139 games across a bucket against the in-sample arm's 136, so the 12% is not an in-sample artifact | round 6, document 55 |
+| **G-2**, **G-3** | Unchanged from round 5 — both PASS | `a4ce823` |
+| **G-4** — the mirror (clause 3) | **Not run.** Round 7, and it is now the *only* thing A-3 waits on | — |
+| **V-1** — v1.3 untouched | **PASS** again, 0.00e+00 over 2,761 games | round 6 |
+
+The round-5 table below is kept as it was written.
+
+---
+
 Round 5 ran 2026-08-27 on `feat/dropped-pick-variant`. Full record: document 53.
 **Unmerged.**
 
@@ -166,10 +186,14 @@ Round 5 ran 2026-08-27 on `feat/dropped-pick-variant`. Full record: document 53.
 | **G-4** — the mirror (clause 3) | **Not run.** Round 6, and it now waits on G-1 as well | — |
 | **V-1** — v1.3 untouched | **PASS**, twice: 0.00e+00 over 2,761 games on the deserved margin, DTW% and both bounds, re-printed at the end of both audit runs | `2c3223a`, `a4ce823` |
 
-**A-3 is not enacted.** Both substantive gates pass; what is missing is the
-precondition to G-1, so clause 5 has no bound and §4's editions do not ship.
-The treatment table therefore does **not** read `variant (A-3 pending mirror)` —
-that wording describes the state after G-1 passes. Document 53 §5 carries the
-three routes on the fold spec; none is taken by the session that found the
-failure.
+**A-3 was not enacted at the end of round 5.** Both substantive gates passed;
+what was missing was the precondition to G-1, so clause 5 had no bound and §4's
+editions did not ship. The treatment table therefore did **not** read
+`variant (A-3 pending mirror)` — that wording describes the state after G-1
+passes. Document 53 §5 carried the three routes on the fold spec; none was taken
+by the session that found the failure.
+
+*Superseded by round 6, above: the maintainer took route (1), document 54 wrote the new
+spec before it ran, and G-1 passed. §4's editions still do not ship, but the
+reason is now clause 3's mirror rather than clause 5's missing bound.*
 

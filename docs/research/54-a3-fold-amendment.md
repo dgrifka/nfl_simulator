@@ -50,3 +50,26 @@ high-leverage games. Either way the number is the deliverable.
 | Draws / tune / `target_accept` | 2,000 / 2,000 / 0.9 | **4,000 / 4,000 / 0.95** | `research/67`, `69` |
 | Folds | 18 (weeks 1–18) | **19** (+ weeks 19–22 together) | `69` |
 | Fold seed | `20260827 + week` | unchanged; postseason fold uses `+ 19` | `69` |
+
+---
+
+## 5. Outcome
+
+Round 6 ran 2026-08-27 on `feat/dropped-pick-variant`. Full record: document 55.
+**Unmerged.**
+
+| Amendment | Result |
+|---|---|
+| **F-1** — 4 × 4,000 after 4,000, `target_accept` 0.95, every fit | **Worked.** Twenty fits, twenty Gate C-1 passes, **zero divergences**. Worst fold r̂ **1.0043** (round 5: 1.0146), thinnest ESS-tail **1,602** (round 5: 245), default fit r̂ 1.0016 (round 5: 1.0070). §3's pre-committed expectation — every fold under 1.01 with tail ESS well over 400 — is met with room. The nineteen folds cost **613 s** |
+| **F-2** — a postseason fold, weeks 19-22 together, seed `20260846` | **Built.** 147 rows held out exactly as §1 says, 2,822 fitted, C-1 PASS. G-1 is measured on **all 1,139 games**; document 53 §6's disclosed gap is closed. A partition guard now refuses to run if any week is covered twice or not at all |
+| **F-3** — the in-sample arm re-fit and the audit re-run | **PASS.** Bucket moves **136** against round 4's 137 (tolerance ±5); median \|ΔDTW\| on affected games **1.59 pp** against 1.62 (tolerance ±0.2). The two fit-independent counts — 1,139 games, 1,033 affected — are exact. No surprise to record |
+| **The gate the amendment exists for** | **G-1 PASS** — bucket agreement **0.997** (1,136/1,139) against a 0.90 bar; median \|ΔDTW\| between the arms **0.05 pp** against a 1.0 pp bar |
+
+§3's pre-committed expectation also said a G-1 *fail* would be the surprise. It
+was right: agreement is 0.997, and the three games that disagree all make the
+same move across the `too close to call` boundary.
+
+One consequence of F-1 that was not written here and is disclosed in document 55
+§3: `research/67`'s round-4 `sigma_d` reproduction tripwire is a statement about
+a refactor **at A-2's spec**, so under F-1 it is reported rather than enforced,
+and F-3's audit reproduction is the binding check instead.
