@@ -84,17 +84,17 @@ def ledger_frame() -> pl.DataFrame:
 
 
 def test_the_filename_follows_the_baseball_pattern(game):
-    assert figure_filename(game, "dtw") == "GB_DET_23-31--95-5_dtw.png"
+    assert figure_filename(game, "dtw") == "GB_DET_23-31--95-5_strict_dtw.png"
 
 
 def test_every_suffix_names_a_different_file(game):
     names = {figure_filename(game, suffix) for suffix in SUFFIXES}
     assert len(names) == len(SUFFIXES) == 4
     assert names == {
-        "GB_DET_23-31--95-5_dtw.png",
-        "GB_DET_23-31--95-5_luck_ledger.png",
-        "GB_DET_23-31--95-5_card.png",
-        "GB_DET_23-31--95-5_waterfall.png",
+        "GB_DET_23-31--95-5_strict_dtw.png",
+        "GB_DET_23-31--95-5_strict_luck_ledger.png",
+        "GB_DET_23-31--95-5_strict_card.png",
+        "GB_DET_23-31--95-5_strict_waterfall.png",
     }
 
 
@@ -113,7 +113,7 @@ def test_the_shares_in_the_filename_sum_to_a_hundred(game):
 def test_a_game_with_no_score_on_file_is_named_by_its_game_id(game):
     """Never invent a scoreline to fill a filename."""
     unscored = replace(game, home_score=None, away_score=None)
-    assert figure_filename(unscored, "card") == "2018_05_GB_DET_card.png"
+    assert figure_filename(unscored, "card") == "2018_05_GB_DET_strict_card.png"
 
 
 # --------------------------------------------------------------------------
@@ -316,7 +316,7 @@ def test_the_card_puts_the_overtime_line_under_the_interval_line(game):
 
 
 def test_the_article_file_is_named_for_the_figure_it_is_a_version_of(game):
-    assert figure_filename(game, ARTICLE_SUFFIX) == "GB_DET_23-31--95-5_dtw_article.png"
+    assert figure_filename(game, ARTICLE_SUFFIX) == "GB_DET_23-31--95-5_strict_dtw_article.png"
     assert ARTICLE_SUFFIX not in SUFFIXES, "the article is an extra, not a fourth share image"
 
 
@@ -498,3 +498,17 @@ def test_the_simulation_context_loads_the_columns_both_variant_models_price_on()
         assert set(needed) <= set(columns)
     # And v1.3's own frame is still all there: Strict must not lose a column.
     assert {"game_id", "play_id", "kicker_player_name", "extra_point_result"} <= set(columns)
+
+
+def test_the_filename_carries_the_edition_so_two_of_them_never_collide(game):
+    """One game has two adjudications and they are two different images."""
+    strict = replace(game, edition="strict")
+    full = replace(game, edition="full", dtw_home=0.37, dtw_interval=(0.30, 0.44))
+    assert figure_filename(strict, "card") == "GB_DET_23-31--95-5_strict_card.png"
+    assert figure_filename(full, "card") == "GB_DET_23-31--63-37_full_card.png"
+    assert figure_filename(strict, "card") != figure_filename(full, "card")
+
+
+def test_a_game_with_no_score_still_names_its_edition(game):
+    unscored = replace(game, home_score=None, away_score=None, edition="full")
+    assert figure_filename(unscored, "card") == "2018_05_GB_DET_full_card.png"

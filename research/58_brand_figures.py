@@ -19,14 +19,21 @@ Writes twenty share PNGs to ``research/outputs/`` — four per game — plus one
 ``research/outputs/`` is gitignored, this script is the artifact, and document
 41 is the record.
 
-The five games are the round's, chosen and not typical:
+The seven games are the round's, chosen and not typical. The first three
+predate FTN charting and have only a Strict edition; the last four have both,
+and are rendered in the headline edition — Full — with the two 2025 games
+rendered a second time in Strict so the two can be compared side by side.
 
 * ``2018_05_GB_DET`` — the worked clear flip (documents 33, 37, 38).
 * ``2021_14_LV_KC`` — degenerate: every re-flip lands the same way.
-* ``2025_17_DET_MIN`` — inside the band, "too close to call".
 * ``2016_14_NYJ_SF`` — overtime, the largest per-game toss move in the window.
+* ``2025_17_DET_MIN`` — inside the band, "too close to call".
 * ``2025_13_DEN_WAS`` — overtime under the 2025 rulebook, and the game whose
   two rule labels collided before document 37 §7a's fix.
+* ``2022_13_WAS_NYG`` — a tie the Full edition hardens: eight dropped picks,
+  seven of them Washington throws that escaped (document 50).
+* ``2024_19_LAC_HOU`` — two dropped touchdowns near 9 EPA apiece, and the
+  largest edition disagreement of the seven.
 """
 
 from __future__ import annotations
@@ -38,6 +45,7 @@ from nfl_simulator.plots import luck_bars, plain_label, verdict_from_row
 from nfl_simulator.render import (
     ARTICLE_SUFFIX,
     SUFFIXES,
+    counterpart_verdict,
     figure_filename,
     kick_distances,
     kicker_names,
@@ -50,12 +58,18 @@ from nfl_simulator.teams import load_team_table, pair_colors, team_logo
 
 RESULTS = "58_brand_figures.json"
 
+# Each game and the editions it is rendered in, headline edition first. The two
+# 2025 games carry a second, Strict render so the maintainer can put the two side by
+# side; the other five are rendered once, in whichever edition is their
+# headline.
 EXAMPLES = (
-    "2018_05_GB_DET",
-    "2021_14_LV_KC",
-    "2025_17_DET_MIN",
-    "2016_14_NYJ_SF",
-    "2025_13_DEN_WAS",
+    ("2018_05_GB_DET", ("strict",)),
+    ("2021_14_LV_KC", ("strict",)),
+    ("2016_14_NYJ_SF", ("strict",)),
+    ("2025_17_DET_MIN", ("full", "strict")),
+    ("2025_13_DEN_WAS", ("full", "strict")),
+    ("2022_13_WAS_NYG", ("full",)),
+    ("2024_19_LAC_HOU", ("full",)),
 )
 
 # nflverse's 32 clubs plus the four relocation aliases. A different number means
@@ -83,46 +97,64 @@ def main() -> None:
         f"\n{'=' * 76}\nREPLAY — every redrawn distribution must belong to its summary\n{'=' * 76}"
     )
     records = []
-    for game_id in EXAMPLES:
-        row = sources.game_row(game_id)
-        result, gaps = replay(game_id, row, sources.schedule_row(game_id))
-        draws = result.margin_draws
-        worst = max(gaps.values())
-        print(
-            f"  {game_id:<18} max |Δ vs committed| {worst:.2e}  {'ok' if worst == 0 else 'check'}"
-        )
+    for game_id, editions in EXAMPLES:
+        for edition in editions:
+            schedule = sources.schedule_row(game_id)
+            row = sources.game_row(game_id, edition=edition)
+            result, gaps = replay(game_id, row, schedule, edition=edition)
+            draws = result.margin_draws
+            worst = max(gaps.values())
+            print(
+                f"  {game_id:<18} {edition:<7} max |Δ vs committed| {worst:.2e}  "
+                f"{'ok' if worst == 0 else 'check'}"
+            )
 
-        verdict = verdict_from_row(row, draws, sources.schedule_row(game_id))
-        ledger = sources.ledger.filter(sources.ledger["game_id"] == game_id).drop("game_id")
-        rows = prepare_rows(ledger, verdict, kick_distances(game_id), kicker_names(game_id))
-        bars = luck_bars(rows, points_per_epa=sources.slope)
-        home_colour, away_colour = pair_colors(verdict.home_team, verdict.away_team)
-        records.append(
-            {
-                "game_id": game_id,
-                "verdict": verdict,
-                "bars": bars,
-                "colours": (home_colour, away_colour),
-                "logos": {
-                    team: team_logo(team) is not None
-                    for team in (verdict.home_team, verdict.away_team)
-                },
-                "replay_worst": worst,
-                "n_events": len(rows),
-                "labels": [plain_label(r) for r in rows],
-            }
-        )
+            verdict = verdict_from_row(
+                row,
+                draws,
+                schedule,
+                edition=edition,
+                counterpart=counterpart_verdict(sources, game_id, edition, schedule),
+            )
+            ledger = (
+                result.ledger.to_frame()
+                if edition == "full"
+                else sources.ledger.filter(sources.ledger["game_id"] == game_id).drop("game_id")
+            )
+            rows = prepare_rows(ledger, verdict, kick_distances(game_id), kicker_names(game_id))
+            bars = luck_bars(rows, points_per_epa=sources.slope)
+            home_colour, away_colour = pair_colors(verdict.home_team, verdict.away_team)
+            records.append(
+                {
+                    "game_id": game_id,
+                    "edition": edition,
+                    "verdict": verdict,
+                    "bars": bars,
+                    "colours": (home_colour, away_colour),
+                    "logos": {
+                        team: team_logo(team) is not None
+                        for team in (verdict.home_team, verdict.away_team)
+                    },
+                    "replay_worst": worst,
+                    "n_events": len(rows),
+                    "labels": [plain_label(r) for r in rows],
+                }
+            )
 
     print(f"\n{'=' * 76}\nFIGURES\n{'=' * 76}")
     written = []
     for record in records:
         verdict = record["verdict"]
-        paths_out = render_game(record["game_id"], article=True)
+        paths_out = render_game(record["game_id"], article=True, edition=record["edition"])
         written.extend(paths_out)
         home, away = record["colours"]
         marks = ", ".join(f"{team} {'✓' if ok else '—'}" for team, ok in record["logos"].items())
-        print(f"\n  {record['game_id']:<18} {verdict.headline():<22} {verdict.bucket}")
+        print(
+            f"\n  {record['game_id']:<18} {verdict.edition_name:<7} "
+            f"{verdict.headline():<22} {verdict.bucket}"
+        )
         print(f"    {verdict.subtitle_line()}")
+        print(f"    {verdict.edition_note() or 'no other edition'}")
         print(f"    colours {home} / {away}   logos {marks}   overtime {verdict.went_to_overtime}")
         for path in paths_out:
             print(f"    {path.name}")
@@ -143,6 +175,8 @@ def main() -> None:
                 "games": [
                     {
                         "game_id": record["game_id"],
+                        "edition": record["edition"],
+                        "edition_note": record["verdict"].edition_note(),
                         "headline": record["verdict"].headline(),
                         "bucket": record["verdict"].bucket,
                         "subtitle": record["verdict"].subtitle_line(),

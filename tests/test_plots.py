@@ -2699,3 +2699,142 @@ def test_no_two_value_labels_print_through_each_other_on_det_min():
     for index, box in enumerate(boxes):
         for other in boxes[index + 1 :]:
             assert not box.overlaps(other)
+
+
+# --------------------------------------------------------------------------
+# the edition on every image — figure round 6, part B
+# --------------------------------------------------------------------------
+
+
+def flat_text(fig) -> str:
+    """Every string on a figure as one line, so a wrapped footer still matches."""
+    return figure_text(fig).replace("\n", " ")
+
+
+def strict_and_full(**kwargs):
+    """One game in both editions, each carrying the other as its counterpart.
+
+    `2024_19_LAC_HOU`'s two real adjudications, from `research/76`: Strict makes
+    it Houston's game beyond any doubt — 100% and a deserved margin of +23.3 on
+    a 20-point win — and Full, which prices the two nine-EPA dropped touchdowns,
+    makes it a coin flip at 48%. The two land in **different verdict buckets**,
+    which is the case every rule in this section exists for."""
+    common = {"game_id": "2024_19_LAC_HOU", "home_team": "HOU", "away_team": "LAC"}
+    strict = verdict(
+        dtw_home=1.0, deserved_margin=23.34, actual_margin=20.0, edition="strict", **common
+    )
+    full = verdict(
+        dtw_home=0.478, deserved_margin=-0.22, actual_margin=20.0, edition="full", **common
+    )
+    return (
+        replace(strict, counterpart=full, **kwargs),
+        replace(full, counterpart=strict, **kwargs),
+    )
+
+
+def test_the_stamp_names_the_edition_before_the_data_credit():
+    from nfl_simulator.style import WATERMARK, edition_stamp
+
+    assert edition_stamp("full") == f"Full edition · {WATERMARK}"
+    assert edition_stamp("strict") == f"Strict edition · {WATERMARK}"
+
+
+def test_an_edition_nobody_named_cannot_be_stamped():
+    """`strict+dp` is callable in the simulator and has no public name."""
+    from nfl_simulator.style import edition_stamp
+
+    with pytest.raises(ValueError, match="strict\\+dp"):
+        edition_stamp("strict+dp")
+
+
+def test_finalize_stamps_the_edition_it_is_told(tmp_path, monkeypatch):
+    from nfl_simulator import style
+
+    stamped = {}
+    monkeypatch.setattr(
+        style, "apply_watermark", lambda path, **kwargs: stamped.update(kwargs, path=path)
+    )
+    fig, _ax = plot_game_card(verdict())
+    style.finalize(fig, tmp_path / "card.png", edition="full")
+    assert stamped["text"] == style.edition_stamp("full")
+
+
+def test_a_full_image_states_the_strict_headline_and_margin_in_one_line():
+    """The other edition is one line away, and it is the whole other verdict."""
+    _strict, full = strict_and_full()
+    assert full.edition_note() == "Strict edition: HOU 100% · LAC 0% — deserved margin HOU by 23.3"
+
+
+def test_a_strict_image_of_a_charted_game_states_the_full_one_the_same_way():
+    strict, _full = strict_and_full()
+    assert strict.edition_note() == "Full edition: LAC 52% · HOU 48% — deserved margin LAC by 0.2"
+
+
+def test_a_game_that_predates_charting_says_so_instead():
+    from nfl_simulator.plots import CHARTING_NOTE
+
+    early = verdict(game_id="2018_05_GB_DET", home_team="DET", away_team="GB")
+    assert early.edition_note() == CHARTING_NOTE
+    assert "2022" in CHARTING_NOTE
+
+
+def test_a_charted_game_with_no_counterpart_on_hand_claims_nothing():
+    """Silence beats a wrong claim: a 2025 verdict built without its counterpart
+    must not print the pre-charting line, which would be false."""
+    assert verdict(game_id="2025_17_DET_MIN").edition_note() == ""
+
+
+@pytest.mark.parametrize("edition", ["strict", "full"])
+def test_the_verdict_knows_its_own_edition_by_its_public_name(edition):
+    assert verdict(edition=edition).edition_name == {"strict": "Strict", "full": "Full"}[edition]
+
+
+def edition_figures(game):
+    """The four share figures, drawn for one verdict."""
+    rows = [ledger_row(game.actual_margin - game.deserved_margin, play_id=1.0)]
+    reconciling = replace(
+        game, deserved_margin=game.actual_margin - sum(r["luck_epa"] for r in rows) * PPE
+    )
+    return {
+        "dtw": plot_bootstrap_distribution(reconciling, coverage=False)[0],
+        "luck_ledger": plot_luck_ledger_card(reconciling, rows, points_per_epa=PPE)[0],
+        "card": plot_game_card(reconciling)[0],
+        "waterfall": plot_luck_ledger(reconciling, rows, points_per_epa=PPE)[0],
+    }
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
+def test_every_figure_carries_the_other_edition_as_one_muted_line(suffix):
+    _strict, full = strict_and_full()
+    assert "Strict edition:" in flat_text(edition_figures(full)[suffix])
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
+def test_every_figure_of_an_uncharted_game_says_there_is_only_one_edition(suffix):
+    from nfl_simulator.plots import CHARTING_NOTE
+
+    early = verdict(game_id="2018_05_GB_DET", home_team="DET", away_team="GB", dtw_home=0.05)
+    assert CHARTING_NOTE in flat_text(edition_figures(early)[suffix])
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
+def test_no_number_from_the_other_edition_appears_outside_that_one_line(suffix):
+    """The pill, the callout, the shares and the title are the rendered
+    edition's alone. Strict calls this game 100/0 and Full calls it 48/52; on a
+    Full image `100%` may appear only inside the Strict line."""
+    _strict, full = strict_and_full()
+    text = flat_text(edition_figures(full)[suffix])
+    without_the_line = text.replace(full.edition_note(), "")
+    assert "100%" not in without_the_line
+    assert "48%" in text and "52%" in text
+
+
+def test_the_verdict_pill_is_the_rendered_editions_bucket_not_the_other_ones():
+    """Strict holds the scoreboard here and Full is too close to call. A pill
+    that read the counterpart would put the wrong verdict on the image."""
+    strict, full = strict_and_full()
+    assert strict.bucket == SCOREBOARD_HOLDS
+    assert full.bucket == TOO_CLOSE
+    card = plot_game_card(full)[0]
+    assert TOO_CLOSE in flat_text(card)
+    assert SCOREBOARD_HOLDS not in flat_text(card)

@@ -36,8 +36,10 @@ import numpy as np
 from matplotlib.patches import Patch
 from matplotlib.text import Annotation, Text
 
+from nfl_simulator.ingest import FTN_SEASONS
 from nfl_simulator.style import (
     CLASH_DISTANCE,
+    EDITION_NAMES,
     PALETTE,
     colour_distance,
     heading_font,
@@ -63,9 +65,29 @@ SCOREBOARD_HOLDS = "scoreboard holds"
 # would let a reader take the figure for the whole story.
 OVERTIME_FOOTER = "Went to overtime; the coin toss is reported, not neutralized."
 
+
+def footer_lines(verdict) -> list[str]:
+    """The muted asides every per-game figure carries, in one order everywhere.
+
+    Both are statements about what the figure is *not*: the overtime toss is in
+    this game and not in this ledger, and the other edition is an adjudication
+    of this game that this image is not showing. Built here rather than in each
+    figure so the four never drift into three different orders.
+    """
+    lines = [OVERTIME_FOOTER] if verdict.went_to_overtime else []
+    note = verdict.edition_note()
+    return lines + [note] if note else lines
+
+
 NOMINAL_COVERAGE = "89%"
 MEASURED_COVERAGE = "91.5%"
 DEGENERATE_SHARE = "44.4%"
+
+# Ruling R-4's two editions (document 58 §2). The first charted season is read
+# from `ingest` rather than written as 2022, the way `dropped_picks` and
+# `receiver_drops` read it, so the three cannot drift apart.
+FIRST_CHARTED_SEASON = min(FTN_SEASONS)
+CHARTING_NOTE = f"Strict edition only \u2014 charting begins in {FIRST_CHARTED_SEASON}."
 
 # --------------------------------------------------------------------------
 # style
@@ -135,6 +157,51 @@ class GameVerdict:
     away_score: int | None = None
     game_date: str | None = None
     went_to_overtime: bool = False
+    # Which of ruling R-4's two adjudications these numbers are, and the other
+    # one beside it. `counterpart` is a whole verdict rather than a formatted
+    # string so the line that quotes it is built here, once, from the same
+    # methods the headline uses — a second edition quoted in its own words
+    # would be a second place for the rounding to disagree.
+    edition: str = "strict"
+    counterpart: GameVerdict | None = None
+
+    @property
+    def season(self) -> int:
+        """The season this game id starts with."""
+        return int(str(self.game_id)[:4])
+
+    @property
+    def edition_name(self) -> str:
+        """`"Strict"` or `"Full"` — the public name, from document 58 §2."""
+        return EDITION_NAMES[self.edition]
+
+    def deserved_phrase(self) -> str:
+        """`"GB by 8.3"` — the side the deserved margin favours, and by how much."""
+        if self.deserved_margin == 0:
+            return "dead level"
+        side = self.home_team if self.deserved_margin > 0 else self.away_team
+        return f"{side} by {abs(self.deserved_margin):.1f}"
+
+    def edition_note(self) -> str:
+        """The one muted line that says what the *other* edition made of this game.
+
+        Three cases, and the third is why this returns a string rather than
+        raising. A charted game carries its counterpart and quotes it whole —
+        both shares and the deserved margin — because a reader who is told the
+        two editions disagree and not by how much has been given a worry rather
+        than a fact. A game that predates FTN charting has no second edition and
+        says so. And a charted verdict built without its counterpart on hand
+        says **nothing**: printing the pre-charting line there would be a false
+        claim, and silence is the only safe degradation.
+        """
+        if self.counterpart is not None:
+            other = self.counterpart
+            shares = other.headline().replace(" / ", " \u00b7 ")
+            return (
+                f"{other.edition_name} edition: {shares} "
+                f"\u2014 deserved margin {other.deserved_phrase()}"
+            )
+        return CHARTING_NOTE if self.season < FIRST_CHARTED_SEASON else ""
 
     @property
     def is_degenerate(self) -> bool:
@@ -248,17 +315,29 @@ class GameVerdict:
 
 
 def verdict_from_row(
-    row: dict, margin_draws: np.ndarray, schedule: dict | None = None
+    row: dict,
+    margin_draws: np.ndarray,
+    schedule: dict | None = None,
+    *,
+    edition: str = "strict",
+    counterpart: GameVerdict | None = None,
 ) -> GameVerdict:
-    """Build a verdict from a `dtw_games_v13.parquet` row plus its bootstrap draws.
+    """Build a verdict from a summary row plus its bootstrap draws.
 
     ``schedule`` is the game's nflverse schedule row, and it supplies only
     presentation facts — the two scores, the date, whether the game went to
     overtime. Nothing in it can change the adjudication; the summary row is
     still the sole source of every number the figure states.
+
+    ``edition`` says which summary the row came from — `dtw_games_v13.parquet`
+    is Strict and `full_summary.parquet` is Full — and ``counterpart`` is the
+    other edition's verdict, for the one line that quotes it. Neither can move
+    a number: the row is still the only source of every figure on the image.
     """
     schedule = schedule or {}
     return GameVerdict(
+        edition=edition,
+        counterpart=counterpart,
         game_id=row["game_id"],
         home_team=row["home_team"],
         away_team=row["away_team"],
@@ -1024,8 +1103,8 @@ def plot_bootstrap_distribution(
         # annotation at a fixed offset under it lands on the second line half
         # the time. Document 16 refused the toss, so a game that had one has to
         # say the ledger is one event short on purpose.
-        if verdict.went_to_overtime:
-            caveat.set_text(f"{caveat.get_text()}\n{OVERTIME_FOOTER}")
+        for line in footer_lines(verdict):
+            caveat.set_text(f"{caveat.get_text()}\n{line}")
         # Corners first, then each other: a label moved off a corner can land on
         # the other rule's label, and the lift is the move that always works.
         for rule_label in (deserved_label, actual_label):
@@ -2004,9 +2083,10 @@ def plot_luck_ledger(
         ]
         # Document 16 measured the overtime toss and refused it, so a game that
         # went to overtime has to say the ledger is one event short on purpose.
-        # Silence would let a reader take the waterfall for the whole story.
-        if verdict.went_to_overtime:
-            footer.append(OVERTIME_FOOTER)
+        # Silence would let a reader take the waterfall for the whole story. The
+        # edition line follows it, because it is the same kind of aside: what
+        # this ledger is *not*.
+        footer.extend(footer_lines(verdict))
         ax.annotate(
             "\n".join(footer),
             xy=(0, 0),
@@ -2059,8 +2139,15 @@ LEDGER_SWINGS_Y = 8.90
 # to a fixed height left a hole down the middle of a card whose first team had
 # three luck events, and a hole reads as a bug rather than as margin.
 LEDGER_TABLES_TOP = 8.00
-LEDGER_TABLES_BOTTOM = 0.34
+# Raised in figure round 6 from 0.34 to make room for a second footer line: an
+# overtime Full-edition card carries both the toss note and the Strict headline,
+# and the band under the tables held exactly one.
+LEDGER_TABLES_BOTTOM = 0.56
 LEDGER_SECTION_GAP = 0.44
+# The bottom band, in inches from the card's foot: the last line's centre, and
+# the step up to the one above it.
+LEDGER_FOOTER_Y = 0.12
+LEDGER_FOOTER_STEP = 0.24
 
 
 @dataclass(frozen=True)
@@ -2651,11 +2738,13 @@ def plot_luck_ledger_card(
             )
             return fig, ax
 
-        if verdict.went_to_overtime:
+        # The bottom band, filled from the bottom up so the last line always
+        # lands at the same height whatever the game had to say above it.
+        for index, line in enumerate(reversed(footer_lines(verdict))):
             ax.text(
                 4.0,
-                0.12,
-                OVERTIME_FOOTER,
+                LEDGER_FOOTER_Y + index * LEDGER_FOOTER_STEP,
+                line,
                 fontsize=10,
                 ha="center",
                 va="center",
@@ -2691,6 +2780,13 @@ def plot_luck_ledger_card(
 # 400 px the smallest preview gives it.
 CARD_SIZE_IN = 8.0
 CARD_DPI = 200
+
+# The card's bottom block — the interval line, then the asides — in axes
+# fractions: where the first line sits and how far apart they are. Three lines
+# is the most any game produces (interval, overtime, other edition), and at this
+# step the last of them clears the card's foot.
+CARD_FOOTER_TOP = 0.120
+CARD_FOOTER_STEP = 0.043
 
 
 def plot_game_card(verdict: GameVerdict, *, colors: tuple[str, str] | None = None, logos=None):
@@ -2848,10 +2944,17 @@ def plot_game_card(verdict: GameVerdict, *, colors: tuple[str, str] | None = Non
                 f"{NOMINAL_COVERAGE} interval on {favoured}'s share: "
                 f"{share_low * 100:.0f}–{share_high * 100:.0f}%."
             )
-        centred(0.098, note, fontsize=11, color=PALETTE["text_muted"])
-
-        if verdict.went_to_overtime:
-            centred(0.048, OVERTIME_FOOTER, fontsize=11, color=PALETTE["text_muted"])
+        # The interval line and everything under it are one block, laid out from
+        # a fixed top rather than at fixed heights: a regulation Strict game has
+        # two lines here and an overtime game three, and a line placed at a
+        # constant y for the two-line case lands on its neighbour in the three.
+        for index, line in enumerate([note, *footer_lines(verdict)]):
+            centred(
+                CARD_FOOTER_TOP - index * CARD_FOOTER_STEP,
+                line,
+                fontsize=11,
+                color=PALETTE["text_muted"],
+            )
         return fig, ax
 
 

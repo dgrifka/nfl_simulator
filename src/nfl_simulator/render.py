@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 
 from nfl_simulator import paths
@@ -102,11 +103,17 @@ DTW_FIGURE = {"bin_width": 3.0, "callout": True, "arrow": True}
 
 
 def figure_filename(verdict: GameVerdict, suffix: str) -> str:
-    """`"GB_DET_23-31--95-5_dtw.png"` — the baseball simulator's pattern, verbatim.
+    """`"GB_DET_23-31--95-5_strict_dtw.png"` — the baseball simulator's pattern.
 
     Away team first, then home, then the scoreline, then the two shares, then
-    what the figure is. The name is the caption for anyone scrolling a folder
-    of them, which is why the verdict's own numbers are in it.
+    the edition, then what the figure is. The name is the caption for anyone
+    scrolling a folder of them, which is why the verdict's own numbers are in it.
+
+    **The edition is in the name, not only in the stamp.** One game has two
+    adjudications and they differ in exactly the numbers the rest of the name is
+    built from, so without it a Full render would overwrite the Strict one of
+    any game whose two shares happened to round the same way — silently, and
+    with the wrong image left on disk.
 
     The two shares are rounded **once, together** — the home share is rounded
     and the away share is 100 minus it — so the pair in the filename always sums
@@ -116,12 +123,12 @@ def figure_filename(verdict: GameVerdict, suffix: str) -> str:
     filename is not a place to invent a score.
     """
     if verdict.home_score is None or verdict.away_score is None:
-        return f"{verdict.game_id}_{suffix}.png"
+        return f"{verdict.game_id}_{verdict.edition}_{suffix}.png"
     home_share = round(verdict.dtw_home * 100)
     return (
         f"{verdict.away_team}_{verdict.home_team}_"
         f"{verdict.away_score:.0f}-{verdict.home_score:.0f}--"
-        f"{100 - home_share}-{home_share}_{suffix}.png"
+        f"{100 - home_share}-{home_share}_{verdict.edition}_{suffix}.png"
     )
 
 
@@ -552,7 +559,34 @@ def kicker_names(game_id: str) -> dict:
 # --------------------------------------------------------------------------
 
 
-def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = False) -> list[Path]:
+def counterpart_verdict(sources: Sources, game_id: str, edition: str, schedule: dict):
+    """The *other* edition's verdict, for the one muted line that quotes it.
+
+    Read from that edition's published summary and never replayed. The replay
+    check exists for the distribution a figure **draws**; this verdict is drawn
+    by nothing — it contributes a headline and a deserved margin to a footer —
+    and re-simulating a second adjudication to print two numbers would double
+    every render's cost for no guarantee the committed record does not already
+    give.
+
+    ``None`` when there is no other edition: a game before the first charted
+    season has one adjudication, and `GameVerdict.edition_note` says so.
+    """
+    if season_of(game_id) < FIRST_CHARTED_SEASON:
+        return None
+    other = "strict" if edition == "full" else "full"
+    return verdict_from_row(
+        sources.game_row(game_id, edition=other), np.empty(0), schedule, edition=other
+    )
+
+
+def render_game(
+    game_id: str,
+    out_dir: Path | None = None,
+    *,
+    article: bool = False,
+    edition: str | None = None,
+) -> list[Path]:
     """Write this game's four PNGs and return their paths, in ``SUFFIXES`` order.
 
     **No share image carries the sidebar.** Document 16's refusal is a fact about
@@ -564,16 +598,37 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
     ``article=True`` adds one more file for an overtime game,
     ``{...}_dtw_article.png``: the distribution with the panel attached. That is
     where the six paragraphs belong.
+
+    ``edition`` names which of ruling R-4's two adjudications is drawn. Left
+    ``None`` it is :func:`default_edition` — Full from the first charted season,
+    Strict before it — which is the headline reading. Every file the call writes
+    carries the edition in its name and in its stamp, and each of them states
+    the other edition's verdict in one muted line.
     """
     out_dir = Path(out_dir) if out_dir is not None else paths.RESEARCH_OUTPUT_DIR
+    edition = check_edition(game_id, edition or default_edition(game_id))
     sources = load_sources()
 
-    row = sources.game_row(game_id)
+    row = sources.game_row(game_id, edition=edition)
     schedule = sources.schedule_row(game_id)
-    result, _gaps = replay(game_id, row, schedule)
-    verdict = verdict_from_row(row, result.margin_draws, schedule)
+    result, _gaps = replay(game_id, row, schedule, edition=edition)
+    verdict = verdict_from_row(
+        row,
+        result.margin_draws,
+        schedule,
+        edition=edition,
+        counterpart=counterpart_verdict(sources, game_id, edition, schedule),
+    )
 
-    ledger = sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
+    # Strict reads the shipped ledger artifact, which is the committed record of
+    # v1.3's rows. Full has no shipped ledger and takes the rows from the replay
+    # that was just checked against its summary — the same coins the histogram
+    # above them is drawn from, which is the rule this module opens with.
+    ledger = (
+        result.ledger.to_frame()
+        if edition == "full"
+        else sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
+    )
     rows = prepare_rows(ledger, verdict, kick_distances(game_id), kicker_names(game_id))
     colours = pair_colors(verdict.home_team, verdict.away_team)
     sides = (verdict.home_team, verdict.away_team)
@@ -612,6 +667,7 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
             finalize(
                 fig,
                 out_dir / figure_filename(verdict, suffix),
+                edition=edition,
                 # The card's square shape is the point of it, and `tight` would
                 # crop it to whatever its content happened to fill.
                 bbox_inches=None if suffix in ("card", "luck_ledger") else "tight",
@@ -625,5 +681,7 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
             verdict, colors=colours, logos=logos, coverage=True, **DTW_FIGURE
         )
         attach_overtime_sidebar(fig, ax, verdict, toss)
-        written.append(finalize(fig, out_dir / figure_filename(verdict, ARTICLE_SUFFIX)))
+        written.append(
+            finalize(fig, out_dir / figure_filename(verdict, ARTICLE_SUFFIX), edition=edition)
+        )
     return written
