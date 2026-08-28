@@ -47,6 +47,14 @@ from nfl_simulator.dropped_picks import (
 )
 from nfl_simulator.fg_model import FieldGoalModel, Weather, sanitize_weather
 from nfl_simulator.ledger import Ledger, LedgerEntry
+from nfl_simulator.receiver_drops import (
+    FIRST_CHARTED_SEASON as RECEIVER_FIRST_CHARTED_SEASON,
+)
+from nfl_simulator.receiver_drops import (
+    ReceiverDropModel,
+    catchable_target_frame,
+)
+from nfl_simulator.receiver_drops import event_class_for as receiver_event_class_for
 
 DEFAULT_POSTERIOR_DRAWS = 400
 
@@ -101,9 +109,11 @@ class SimulationResult:
     ledger: Ledger
     total_luck_epa: float
     # Which adjudication produced these numbers. `"v1.3"` is the shipped ledger;
-    # `"v1.3+dp"` says at least one dropped-pick row is in it (document 49 §5).
-    # The label describes the ledger, not the code path: a 2022+ game whose
-    # charting held no interceptable throw is v1.3, because its numbers are.
+    # `"v1.3+dp"` says at least one dropped-pick row is in it (document 49 §5),
+    # `"v1.3+rd"` at least one receiver-drop row (document 56 §2), and
+    # `"v1.3+dp+rd"` — amendment A-3's `v2.0` — both. The label describes the
+    # ledger, not the code path: a 2022+ game whose charting held no
+    # interceptable throw and no catchable ball is v1.3, because its numbers are.
     variant: str = "v1.3"
 
 
@@ -375,6 +385,67 @@ def dropped_pick_events(
     return events
 
 
+def receiver_drop_events(
+    plays: pl.DataFrame,
+    ftn: pl.DataFrame | None,
+    model: ReceiverDropModel | None,
+    n_draws: int,
+    rng: np.random.Generator,
+) -> list[LuckEvent]:
+    """The **variant** component: catchable targets, at the receiving corps' rate.
+
+    Document 56, the other direction of amendment A-3's hands-on-the-ball class,
+    and nothing about it is v1.3. It fires only when a caller hands in both a
+    fitted model and a charting frame.
+
+    The branch is **the catch**, and the offence is charged: ``actual`` is 1 when
+    the ball was caught, ``expected`` is the posterior probability that it would
+    be, and ``swing`` is what catching it was worth against the incompletion —
+    priced from this play's own completion counterfactual where nflfastR supplies
+    one. Signs follow `fumble_events` exactly, so a positive ``luck_epa`` still
+    means good fortune for the home team no matter who was throwing.
+
+    Note the asymmetry with `dropped_pick_events`, which is the honest outcome of
+    amendment A-3 clause 2 rather than a defect: a drop is a 1-in-20 event, so a
+    dropped ball books close to a whole swing of bad fortune and a routine catch
+    books a twentieth of one the other way.
+
+    Coverage is a warning, never an error (document 56 §2's V-4). A pre-2022 game
+    asked for the variant gets v1.3, because FTN charting does not reach it.
+    """
+    if model is None or ftn is None:
+        return []
+
+    season = int(plays["season"][0])
+    if season < RECEIVER_FIRST_CHARTED_SEASON:
+        warnings.warn(
+            f"{plays['game_id'][0]} is a {season} game and FTN charting starts in "
+            f"{RECEIVER_FIRST_CHARTED_SEASON}; the receiver-drop variant cannot be "
+            "built for it and the v1.3 adjudication is returned unchanged.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return []
+
+    events = []
+    for row in catchable_target_frame(plays, ftn).iter_rows(named=True):
+        catch = model.catch_probability(row["entity_season"], row)
+        home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
+        swing = abs(model.swing_for_play(row))
+        events.append(
+            LuckEvent(
+                play_id=float(row["play_id"]),
+                component="receiver_drop",
+                event_class=receiver_event_class_for(row["yardline_100"], row["down"]),
+                charged_team=row["posteam"],
+                actual=0.0 if row["is_drop"] else 1.0,
+                expected_draws=_resample(catch, n_draws, rng),
+                swing=swing * home_sign,
+            )
+        )
+    return events
+
+
 def _resample(draws: np.ndarray, n_draws: int, rng: np.random.Generator) -> np.ndarray:
     """Match a posterior to the bootstrap's draw count.
 
@@ -442,6 +513,7 @@ def simulate_game(
     points_per_epa: float,
     xp_baseline: ExtraPointBaseline | None = None,
     dropped_pick_model: DroppedPickModel | None = None,
+    receiver_drop_model: ReceiverDropModel | None = None,
     ftn: pl.DataFrame | None = None,
     n_posterior_draws: int = DEFAULT_POSTERIOR_DRAWS,
     n_coin_draws: int = DEFAULT_COIN_DRAWS,
@@ -476,7 +548,12 @@ def simulate_game(
     # not move when the variant is switched on.
     dropped_picks = dropped_pick_events(plays, ftn, dropped_pick_model, n_posterior_draws, rng)
     events += dropped_picks
-    variant = "v1.3+dp" if dropped_picks else "v1.3"
+    # And the receiver direction after that, for the same reason: appending keeps
+    # `+dp` byte-for-byte identical whether or not `+rd` is switched on, so the
+    # two variants can be read alone and together without one moving the other.
+    receiver_drops = receiver_drop_events(plays, ftn, receiver_drop_model, n_posterior_draws, rng)
+    events += receiver_drops
+    variant = "v1.3" + ("+dp" if dropped_picks else "") + ("+rd" if receiver_drops else "")
 
     ledger = Ledger(tuple(event.to_entry() for event in events))
     total_luck_epa = ledger.total_luck_epa()
