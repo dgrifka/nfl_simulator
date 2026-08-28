@@ -421,3 +421,52 @@ def test_the_read_side_groups_the_postseason_weeks_into_one_pass(monkeypatch):
     )
     assert [weeks for weeks, _ in seen] == [[1], [2], [19, 20, 22]]
     assert seen[-1][1] == "mpost"
+
+
+# --------------------------------------------------------------------------
+# G-1's disagreement set
+# --------------------------------------------------------------------------
+
+
+def _an_arm(dtw: list[float], margins: list[float], events: list[int]) -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "game_id": [f"g{i}" for i in range(len(dtw))],
+            "actual_margin": margins,
+            "dtw_home": dtw,
+            "deserved_margin": [(d - 0.5) * 20 for d in dtw],
+            "n_dropped_pick_events": events,
+        }
+    )
+
+
+def test_g1_names_the_games_whose_bucket_disagrees():
+    """G-1's statistic is the disagreement set; a count nobody can check is not it."""
+    actual = [7.0, 7.0, 7.0]
+    in_sample = _an_arm([0.80, 0.62, 0.30], actual, [2, 3, 1])
+    week_out = _an_arm([0.79, 0.58, 0.31], actual, [2, 3, 1])
+    report = weekout.gate_g1(in_sample, week_out.drop("actual_margin"))
+
+    assert report["n_bucket_disagreements"] == 1
+    named = report["disagreeing_games"]
+    assert [entry["game_id"] for entry in named] == ["g1"]
+    assert named[0]["bucket_in_sample"] == "scoreboard holds"
+    assert named[0]["bucket_week_out"] == "too close to call"
+    assert named[0]["abs_delta_dtw_pp"] == pytest.approx(4.0)
+
+
+def test_g1_stops_when_the_arms_disagree_on_the_event_count():
+    """Different event counts mean the arms are not the same population."""
+    actual = [7.0, 7.0]
+    in_sample = _an_arm([0.80, 0.62], actual, [2, 3])
+    week_out = _an_arm([0.80, 0.62], actual, [2, 4])
+    with pytest.raises(SystemExit, match="event count"):
+        weekout.gate_g1(in_sample, week_out.drop("actual_margin"))
+
+
+def test_g1_stops_when_the_arms_do_not_cover_the_same_games():
+    actual = [7.0, 7.0]
+    in_sample = _an_arm([0.80, 0.62], actual, [2, 3])
+    week_out = _an_arm([0.80], [7.0], [2])
+    with pytest.raises(SystemExit, match="do not cover the same games"):
+        weekout.gate_g1(in_sample, week_out.drop("actual_margin"))

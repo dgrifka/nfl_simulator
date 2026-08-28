@@ -427,10 +427,30 @@ def gate_g1(in_sample: pl.DataFrame, week_out: pl.DataFrame) -> dict:
     bucket_out = [_audit.bucket(row["dtw_out"], row["actual_margin"]) for row in rows]
     agree = [a == b for a, b in zip(bucket_in, bucket_out, strict=True)]
 
+    # The disagreements are named, not just counted. G-1's statistic *is* the
+    # disagreement set, and a record that reports "three games" without saying
+    # which three cannot be checked by the next reader — document 33's lesson,
+    # one step further on.
     transitions: dict[str, int] = {}
-    for a, b in zip(bucket_in, bucket_out, strict=True):
+    disagreeing = []
+    for row, a, b in zip(rows, bucket_in, bucket_out, strict=True):
         if a != b:
             transitions[f"{a} -> {b}"] = transitions.get(f"{a} -> {b}", 0) + 1
+            disagreeing.append(
+                {
+                    "game_id": row["game_id"],
+                    "actual_margin": row["actual_margin"],
+                    "dtw_in": row["dtw_in"],
+                    "dtw_out": row["dtw_out"],
+                    "abs_delta_dtw_pp": abs(row["dtw_out"] - row["dtw_in"]) * 100,
+                    "margin_in": row["margin_in"],
+                    "margin_out": row["margin_out"],
+                    "events": row["events_in"],
+                    "bucket_in_sample": a,
+                    "bucket_week_out": b,
+                }
+            )
+    disagreeing.sort(key=lambda entry: -entry["abs_delta_dtw_pp"])
 
     affected = joined["events_in"].to_numpy() > 0
     d_dtw = (joined["dtw_out"] - joined["dtw_in"]).abs().to_numpy() * 100
@@ -452,6 +472,7 @@ def gate_g1(in_sample: pl.DataFrame, week_out: pl.DataFrame) -> dict:
         "n_bucket_agree": int(sum(agree)),
         "n_bucket_disagreements": int(len(agree) - sum(agree)),
         "transitions_in_sample_to_week_out": transitions,
+        "disagreeing_games": disagreeing,
         "median_abs_delta_dtw_pp_affected": median_pp,
         "eti89_abs_delta_dtw_pp_affected": [
             float(v) for v in np.percentile(d_dtw[affected], [_audit.ETI_LOW, _audit.ETI_HIGH])
@@ -473,6 +494,13 @@ def gate_g1(in_sample: pl.DataFrame, week_out: pl.DataFrame) -> dict:
     )
     for name, count in sorted(transitions.items(), key=lambda item: -item[1]):
         print(f"    {name:45s} {count:5d}")
+    for entry in disagreeing:
+        print(
+            f"    {entry['game_id']:16s} actual {entry['actual_margin']:+3.0f}  DTW% "
+            f"{entry['dtw_in'] * 100:5.1f} -> {entry['dtw_out'] * 100:5.1f} "
+            f"({entry['abs_delta_dtw_pp']:4.2f} pp)  {entry['bucket_in_sample']} -> "
+            f"{entry['bucket_week_out']}"
+        )
     print(
         f"G-1: bucket agreement {agreement:.3f} "
         f"({sum(agree):,}/{len(agree):,}); median |dDTW| between arms "
