@@ -384,3 +384,144 @@ always used the neutral, and it cannot be closed by choosing between the two
 colours `anchor_colour` already owns — it needs a third, or a non-colour
 encoding on the anchor bars. The anchors remain 1.4× the bar height and labelled
 `Actual:` / `Deserved:`, so nothing rests on the colour. In the queue as Parked.
+
+## 9. Round 8 — the annotation band, and the cap on the page
+
+the maintainer's notes on `LAC_HOU_12-32--52-48_full_dtw.png`, executed on
+`fix/figure-round-8` from handoff `handoff-2026-08-28-figures-r8.md`. Two
+things: the nine renders move onto document 62's capped Full summary and the
+waterfall learns to draw the cap, and the Deserve-to-Win figure's crowded strip
+becomes one band. Presentation only — hard constraint 1 was again that no
+statistic move, and both editions replay at **0.00e+00** on all nine renders
+after every part.
+
+### 9a. What a reader sees now
+
+**The Deserve-to-Win figure has one band above the bars, and it holds two
+things.** `Deserved: HOU by 0.9` sits centred over the dashed rule and
+`Actual: HOU by 20` centred over the solid one, both bold, both above the top
+spine. Before this round four things shared the strip inside the plot: the two
+labels hung to the right of their own rules, the luck arrow's sentence ran
+between them, and a callout restated the subtitle's `DTW:` line and the verdict
+pill a third time. The callout is gone from the share image and kept on the
+article figure, which has the sidebar's audience and the room for a sentence.
+
+**A label to one side of its rule is read as belonging to whatever it sits
+over.** That is why they are centred now rather than merely moved: on a lopsided
+game the right-hung `Actual:` label started over the *deserved* rule, which is
+the line it is not about.
+
+**When the two margins are close the labels stack rather than overprint.**
+`Deserved:` takes the upper row and `Actual:` holds the lower one, which is the
+row a reader's eye meets first coming up off the plot. Of the nine renders only
+`2025_13_DEN_WAS` stacks, and it stacks in both editions — 1.3 against 1 in
+Full, 3.3 against 1 in Strict. The rule is geometric: two boxes that overlap
+with `CORNER_CLEARANCE`'s padding, never a bucket or a margin size.
+
+**The lift is paid for.** The second row is cut out of the band the header sits
+above, so `draw_header` takes the same room back and the whole block — heading,
+divider, subtitle, pill — moves up together. Without it the lifted box came to
+within about 13 px of the subtitle on `2025_13_DEN_WAS`: no overlap, and exactly
+the case §6's `CORNER_CLEARANCE` was written for. The header only makes way on a
+game that stacks.
+
+**The luck arrow moved under the axis.** It spans the same two margins with its
+head still at the actual end, drawn between the tick labels and the direction
+labels, with `luck moved the margin 19.1 points toward HOU` centred under the
+span. It now sits directly over the ticks that number the distance it measures.
+The two direction labels and the footnote drop by the arrow band's own height so
+the room is made rather than borrowed — on every game, not only on one that has
+an arrow, because furniture that moves between games is furniture a reader
+cannot compare across them. A degenerate game still draws no arrow.
+
+**The waterfall draws the possession cap.** A cap row reads
+`WAS Possession cap · Q2 drive 6` — the component's name and the drive verbatim,
+no player and no probability, because a cap is not a branch anybody flipped but
+a possession's booked luck bounded by its own largest "what if". Small ones fold
+per club as amendment A-3's two components do, `4 smaller possession caps (WAS)`,
+and the club goes in parentheses rather than in front of the noun: nobody
+*performs* a cap. No new colour — a cap row wears the colour of the side its clip
+helped, by the same rule as every other bar, and the label is the encoding.
+
+### 9b. A render-path defect the round found
+
+`render.edition_handles` never passed `simulate_game` an `edition`, and document
+61's cap is keyed on that **argument** rather than on the variant the ledger comes
+out carrying — the audit arms deliberately reach it with `edition=None`. So every
+Full render replayed *uncapped*. Nothing was visibly wrong while the summary on
+disk was also uncapped; the moment document 62's capped summary was put in place,
+`research/58`'s own replay gate stopped on `2025_17_DET_MIN` at 5.7e-03 of DTW.
+
+This is the gate working. It is worth recording as a decision that the render
+path keeps its **own** copy of the edition name rather than inferring one: the
+edition is what the maintainer asked for, and §2a already settled that it is not the
+`variant` the ledger happens to carry.
+
+### 9c. What was rendered
+
+Nine share sets and four article figures, all replaying at `0.00e+00`, on the
+capped numbers. Every named Full figure is renamed by them.
+
+| Game | Edition | DTW file | Waterfall rows | Cap rows drawn |
+|---|---|---|---|---|
+| `2018_05_GB_DET` | Strict | `GB_DET_23-31--95-5` | 9 | — |
+| `2021_14_LV_KC` | Strict | `LV_KC_9-48--0-100` | 6 | — |
+| `2016_14_NYJ_SF` | Strict | `NYJ_SF_23-17--36-64` | 4 | — |
+| `2025_17_DET_MIN` | Full | `DET_MIN_10-23--53-47` | 10 | 0 bars of 8 |
+| `2025_17_DET_MIN` | Strict | `DET_MIN_10-23--45-55` | 6 | — |
+| `2025_13_DEN_WAS` | Full | `DEN_WAS_27-26--59-41` | 10 | 1 bar of 15 |
+| `2025_13_DEN_WAS` | Strict | `DEN_WAS_27-26--86-14` | 4 | — |
+| `2022_13_WAS_NYG` | Full | `WAS_NYG_20-20--3-97` | **17** | 1 bar, a fold of 4, of 14 |
+| `2024_19_LAC_HOU` | Full | `LAC_HOU_12-32--45-55` | **18** | 2 bars of 13 |
+
+"Cap rows drawn" is bars against ledger rows: most cap rows are worth under a
+tenth of a point and fold into that figure's `events under 0.1 pt` row inside
+`luck_bars`, before `group_rows` ever sees them. `2025_17_DET_MIN` books eight
+and draws none for that reason.
+
+The two bolded counts exceed §8's "no waterfall exceeds 16 event rows", by
+exactly the cap rows added. Sixteen was a measured result from round 6 taken
+before cap rows existed, not a bound the code enforces — the synthetic
+fifty-drop frame in `tests/test_plots.py` still holds at 16 — and the fold was
+not tightened to get back under it, because "a lone small event is left as
+itself" is a rule this round had no licence to change.
+
+### 9d. Register — closed this round
+
+| Item | Where |
+|---|---|
+| Four annotations share the strip above the bars (round 8, raised) | 9a — one band, two labels |
+| The callout repeats the subtitle and the pill (round 8, raised) | 9a — share image drops it |
+| The luck arrow crosses both rule labels (round 8, raised) | 9a — under the axis |
+| A cap row has no words on the waterfall (document 62 §5, implied) | 9a — `Possession cap · Q3 drive 7` |
+| Full renders replay uncapped (found this round) | 9b — `edition_handles` names its edition |
+
+**Open, carried forward.** Everything in §8c's "Open" table is unchanged: **D-5**,
+document 42's other entries, `w = 0.285`, Gate C-2 at the receiver grain,
+`is_catchable_ball`, A-3 clause 7's sunset, and §8d's neutral-vs-KC protan gap.
+
+### 9e. Raised this round, not acted on
+
+**The corner-text rule cannot fire.** The handoff asks that `LAC wins` / `HOU
+wins` go logo-only "when a rule label's box would overlap the corner text". With
+the rule labels now above the top spine and the corner texts eight points below
+it, the two are on different rows and their padded boxes never meet: all
+eighteen corner texts survive on the nine renders, measured. The rule is
+implemented, geometric, and tested both ways — it is a guard against a layout
+that no longer occurs, not dead code, but it is not doing the job the maintainer's sketch
+showed it doing. If the intent was that the corner text should go *unconditionally*
+now that the `wins by` line under the axis carries the same key, that is a
+one-line change and the maintainer's call, not this round's.
+
+**A very small gap draws a very small arrow.** `2025_13_DEN_WAS` Full moves
+0.35 points, and its span renders **17.8 px** wide against a head that is most of
+that — honest, and at print size it reads as a stray `>` glyph under the axis
+rather than as a span. A minimum drawn length, or
+suppressing the arrow under some floor and keeping only the sentence, would both
+be new rules rather than layout fixes, so neither was invented here. Parked.
+
+**`Possession cap` is the only row label that opens with a capital.** Every other
+row reads `LAC drop · Dissly`, `HOU fumble on a run`; a cap reads
+`LAC Possession cap · Q4 drive 26`. The capital is the handoff's own settled
+wording and was not re-litigated, but it is visible in a column of otherwise
+lower-case rows. Parked.
