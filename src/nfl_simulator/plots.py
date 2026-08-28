@@ -1477,13 +1477,20 @@ def plot_team_points_distribution(
 # reconciles. Presentation only — the ledger itself keeps every event.
 POINTS_FLOOR = 0.1
 
+# Every name lowercase, because the column these fill is lowercase: a row reads
+# `LAC possession cap \u00b7 Q4 drive 26` beside `LAC drop \u00b7 Dissly`, and a
+# capital after the team code on one row of the column and not the others reads
+# as the start of a sentence rather than as a component. The ledger card, whose
+# cells *are* sentence case, lifts the first letter itself with
+# :func:`sentence_case` — the case belongs to the place the label is drawn, not
+# to the label.
 COMPONENT_NAMES = {
     "fumble": "fumble",
     "field_goal": "field goal",
     "extra_point": "extra point",
     "dropped_pick": "dropped pick",
     "receiver_drop": "receiver drop",
-    "possession_cap": "Possession cap",
+    "possession_cap": "possession cap",
 }
 
 # Document 61's clip, which the Full edition books as a ledger row of its own.

@@ -32,6 +32,7 @@ from nfl_simulator.plots import (  # noqa: E402
     BAND_HIGH,
     BAND_LOW,
     CLEAR_FLIP,
+    COMPONENT_NAMES,
     CORNER_CLEARANCE,
     LEDGER_BOX_HEIGHT,
     LEDGER_BOXES_Y,
@@ -47,6 +48,7 @@ from nfl_simulator.plots import (  # noqa: E402
     band_sweep,
     bucket_label,
     event_phrase,
+    group_rows,
     luck_bars,
     margin_sentence,
     net_luck,
@@ -3710,7 +3712,7 @@ def test_a_possession_cap_row_names_the_drive_it_bounded():
     """The component's name, then the drive verbatim. `Q3 drive 7 possession
     cap` is what the unknown-component fallback would have printed, and it reads
     as a drive that owns a cap rather than a cap that bounded a drive."""
-    assert event_phrase(cap_row()) == "Possession cap · Q3 drive 7"
+    assert event_phrase(cap_row()) == "possession cap · Q3 drive 7"
 
 
 def test_a_possession_cap_row_names_no_player_and_quotes_no_probability():
@@ -3719,7 +3721,7 @@ def test_a_possession_cap_row_names_no_player_and_quotes_no_probability():
     are the identity's bookkeeping, and printing them as a branch would invent
     an event that never happened."""
     label = plain_label(cap_row())
-    assert label == "LAC Possession cap · Q3 drive 7"
+    assert label == "LAC possession cap · Q3 drive 7"
     assert "%" not in label
 
 
@@ -4066,3 +4068,35 @@ def test_the_arrow_helper_returns_no_span_under_the_floor():
     assert span is None
     assert label.get_text().startswith("luck moved the margin")
     assert ARROW_FLOOR == 1.0
+
+
+# --------------------------------------------------------------------------
+# round 9: the cap row in the column's case
+# --------------------------------------------------------------------------
+
+
+def test_the_cap_row_is_lowercase_like_every_other_component_name():
+    """`LAC Possession cap · Q4 drive 26` beside `LAC drop · Dissly` was the
+    only row label with a capital after the team code. The column's case is
+    lowercase; the cap joins it."""
+    assert COMPONENT_NAMES["possession_cap"] == "possession cap"
+    assert all(name == name.lower() for name in COMPONENT_NAMES.values())
+
+
+def test_the_folded_cap_row_reads_in_the_same_case():
+    bars = [
+        luck_bars([cap_row(luck_epa=-0.02, event_class=f"Q1 drive {i}")], points_per_epa=PPE)[0]
+        for i in range(1, 3)
+    ]
+    (grouped,) = group_rows(bars)
+    assert grouped.label == "2 smaller possession caps (LAC)"
+
+
+def test_the_ledger_card_still_lifts_the_cap_row_s_first_letter():
+    """The card's cells are sentence case and the waterfall's rows are not, so
+    the same event is `Possession cap · Q3 drive 7` in one and `possession cap
+    · Q3 drive 7` in the other. Lowercasing the constant must not lowercase the
+    cell — `sentence_case` is what puts the capital back."""
+    from nfl_simulator.plots import sentence_case
+
+    assert sentence_case(event_phrase(cap_row())) == "Possession cap · Q3 drive 7"
