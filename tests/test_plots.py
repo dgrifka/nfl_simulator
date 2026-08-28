@@ -2686,10 +2686,16 @@ def test_every_value_label_carries_a_surface_so_a_rule_cannot_strike_it_through(
 
 
 def test_a_sub_half_point_bar_hangs_its_label_off_a_leader():
+    """Round 6 grouping folds this game's two slivers into one -0.4 row.
+
+    Round 4 saw two leadered labels here, `-0.3` and a folded `-0.01`; both are
+    under a point, so `group_rows` now folds them together and the single row
+    they make is still narrower than its own label. The fix D-4 shipped is what
+    is under test, not the number of rows it applies to."""
     fig, ax = det_min_waterfall()
     fig.canvas.draw()
     leaders = [t for t in _value_labels(ax) if t.arrow_patch is not None]
-    assert {t.get_text() for t in leaders} == {"-0.3", "-0.01"}
+    assert {t.get_text() for t in leaders} == {"-0.4"}
 
 
 def test_no_two_value_labels_print_through_each_other_on_det_min():
@@ -2699,3 +2705,514 @@ def test_no_two_value_labels_print_through_each_other_on_det_min():
     for index, box in enumerate(boxes):
         for other in boxes[index + 1 :]:
             assert not box.overlaps(other)
+
+
+# --------------------------------------------------------------------------
+# the edition on every image — figure round 6, part B
+# --------------------------------------------------------------------------
+
+
+def flat_text(fig) -> str:
+    """Every string on a figure as one line, so a wrapped footer still matches."""
+    return figure_text(fig).replace("\n", " ")
+
+
+def strict_and_full(**kwargs):
+    """One game in both editions, each carrying the other as its counterpart.
+
+    `2024_19_LAC_HOU`'s two real adjudications, from `research/76`: Strict makes
+    it Houston's game beyond any doubt — 100% and a deserved margin of +23.3 on
+    a 20-point win — and Full, which prices the two nine-EPA dropped touchdowns,
+    makes it a coin flip at 48%. The two land in **different verdict buckets**,
+    which is the case every rule in this section exists for."""
+    common = {"game_id": "2024_19_LAC_HOU", "home_team": "HOU", "away_team": "LAC"}
+    strict = verdict(
+        dtw_home=1.0, deserved_margin=23.34, actual_margin=20.0, edition="strict", **common
+    )
+    full = verdict(
+        dtw_home=0.478, deserved_margin=-0.22, actual_margin=20.0, edition="full", **common
+    )
+    return (
+        replace(strict, counterpart=full, **kwargs),
+        replace(full, counterpart=strict, **kwargs),
+    )
+
+
+def test_the_stamp_names_the_edition_before_the_data_credit():
+    from nfl_simulator.style import WATERMARK, edition_stamp
+
+    assert edition_stamp("full") == f"Full edition · {WATERMARK}"
+    assert edition_stamp("strict") == f"Strict edition · {WATERMARK}"
+
+
+def test_an_edition_nobody_named_cannot_be_stamped():
+    """`strict+dp` is callable in the simulator and has no public name."""
+    from nfl_simulator.style import edition_stamp
+
+    with pytest.raises(ValueError, match="strict\\+dp"):
+        edition_stamp("strict+dp")
+
+
+def test_finalize_stamps_the_edition_it_is_told(tmp_path, monkeypatch):
+    from nfl_simulator import style
+
+    stamped = {}
+    monkeypatch.setattr(
+        style, "apply_watermark", lambda path, **kwargs: stamped.update(kwargs, path=path)
+    )
+    fig, _ax = plot_game_card(verdict())
+    style.finalize(fig, tmp_path / "card.png", edition="full")
+    assert stamped["text"] == style.edition_stamp("full")
+
+
+def test_a_full_image_states_the_strict_headline_and_margin_in_one_line():
+    """The other edition is one line away, and it is the whole other verdict."""
+    _strict, full = strict_and_full()
+    assert full.edition_note() == "Strict edition: HOU 100% · LAC 0% — deserved margin HOU by 23.3"
+
+
+def test_a_strict_image_of_a_charted_game_states_the_full_one_the_same_way():
+    strict, _full = strict_and_full()
+    assert strict.edition_note() == "Full edition: LAC 52% · HOU 48% — deserved margin LAC by 0.2"
+
+
+def test_a_game_that_predates_charting_says_so_instead():
+    from nfl_simulator.plots import CHARTING_NOTE
+
+    early = verdict(game_id="2018_05_GB_DET", home_team="DET", away_team="GB")
+    assert early.edition_note() == CHARTING_NOTE
+    assert "2022" in CHARTING_NOTE
+
+
+def test_a_charted_game_with_no_counterpart_on_hand_claims_nothing():
+    """Silence beats a wrong claim: a 2025 verdict built without its counterpart
+    must not print the pre-charting line, which would be false."""
+    assert verdict(game_id="2025_17_DET_MIN").edition_note() == ""
+
+
+@pytest.mark.parametrize("edition", ["strict", "full"])
+def test_the_verdict_knows_its_own_edition_by_its_public_name(edition):
+    assert verdict(edition=edition).edition_name == {"strict": "Strict", "full": "Full"}[edition]
+
+
+def edition_figures(game):
+    """The four share figures, drawn for one verdict."""
+    rows = [ledger_row(game.actual_margin - game.deserved_margin, play_id=1.0)]
+    reconciling = replace(
+        game, deserved_margin=game.actual_margin - sum(r["luck_epa"] for r in rows) * PPE
+    )
+    return {
+        "dtw": plot_bootstrap_distribution(reconciling, coverage=False)[0],
+        "luck_ledger": plot_luck_ledger_card(reconciling, rows, points_per_epa=PPE)[0],
+        "card": plot_game_card(reconciling)[0],
+        "waterfall": plot_luck_ledger(reconciling, rows, points_per_epa=PPE)[0],
+    }
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
+def test_every_figure_carries_the_other_edition_as_one_muted_line(suffix):
+    _strict, full = strict_and_full()
+    assert "Strict edition:" in flat_text(edition_figures(full)[suffix])
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
+def test_every_figure_of_an_uncharted_game_says_there_is_only_one_edition(suffix):
+    from nfl_simulator.plots import CHARTING_NOTE
+
+    early = verdict(game_id="2018_05_GB_DET", home_team="DET", away_team="GB", dtw_home=0.05)
+    assert CHARTING_NOTE in flat_text(edition_figures(early)[suffix])
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
+def test_no_number_from_the_other_edition_appears_outside_that_one_line(suffix):
+    """The pill, the callout, the shares and the title are the rendered
+    edition's alone. Strict calls this game 100/0 and Full calls it 48/52; on a
+    Full image `100%` may appear only inside the Strict line."""
+    _strict, full = strict_and_full()
+    text = flat_text(edition_figures(full)[suffix])
+    without_the_line = text.replace(full.edition_note(), "")
+    assert "100%" not in without_the_line
+    assert "48%" in text and "52%" in text
+
+
+def test_the_verdict_pill_is_the_rendered_editions_bucket_not_the_other_ones():
+    """Strict holds the scoreboard here and Full is too close to call. A pill
+    that read the counterpart would put the wrong verdict on the image."""
+    strict, full = strict_and_full()
+    assert strict.bucket == SCOREBOARD_HOLDS
+    assert full.bucket == TOO_CLOSE
+    card = plot_game_card(full)[0]
+    assert TOO_CLOSE in flat_text(card)
+    assert SCOREBOARD_HOLDS not in flat_text(card)
+
+
+# --------------------------------------------------------------------------
+# the ledger under Full: grouping and drop wording — figure round 6, part C
+# --------------------------------------------------------------------------
+
+
+def drop_row(luck_epa: float, play_id: float, team: str = "DET", **kwargs) -> dict:
+    """One receiver-drop ledger row, in the shape the simulator books it."""
+    return {
+        "play_id": play_id,
+        "component": "receiver_drop",
+        "event_class": "34-66 yd, early down",
+        "charged_team": team,
+        "luck_epa": luck_epa,
+        "actual": 1.0,
+        "expected": 0.96,
+        **kwargs,
+    }
+
+
+def test_an_event_worth_a_point_or_more_keeps_its_own_row():
+    from nfl_simulator.plots import group_rows
+
+    bars = luck_bars([drop_row(-2.0, 1.0), drop_row(-1.6, 2.0)], points_per_epa=PPE)
+    assert [bar.label for bar in group_rows(bars)] == [bar.label for bar in bars]
+
+
+def test_the_small_receiver_drops_of_one_team_become_one_counted_row():
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-0.4, float(i), team="GB") for i in range(1, 6)]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert grouped.label == "5 smaller receiver drops (GB)"
+    assert grouped.n_events == 5
+    assert grouped.points == pytest.approx(5 * 0.4 * PPE)
+
+
+def test_the_two_teams_small_drops_stay_two_rows():
+    """A sum of two clubs' luck is nobody's row, and would wear nobody's mark."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-0.4, float(i), team="GB") for i in range(1, 4)]
+    rows += [drop_row(0.4, float(i), team="DET") for i in range(4, 7)]
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert {bar.label for bar in grouped} == {
+        "3 smaller receiver drops (GB)",
+        "3 smaller receiver drops (DET)",
+    }
+
+
+def test_the_small_dropped_picks_are_counted_under_their_own_name():
+    from nfl_simulator.plots import group_rows
+
+    rows = [
+        drop_row(-0.3, float(i), team="DET", component="dropped_pick", expected=0.52)
+        for i in range(1, 5)
+    ]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert grouped.label == "4 smaller dropped picks (DET)"
+
+
+def test_the_strict_components_keep_the_row_they_have_always_had():
+    """Fumbles and kicks fold into one un-teamed row, as they did before Full."""
+    from nfl_simulator.plots import GROUP_THRESHOLD, group_rows
+
+    rows = [ledger_row(0.5, play_id=1.0), ledger_row(-0.4, play_id=2.0, component="field_goal")]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
+    assert grouped.label == f"2 events under {GROUP_THRESHOLD:g} pt"
+    assert grouped.team is None
+
+
+def test_grouping_never_loses_a_point_of_luck():
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-3.0, 1.0), drop_row(-0.4, 2.0), drop_row(0.2, 3.0, team="GB")]
+    rows += [ledger_row(0.3, play_id=4.0), ledger_row(-0.9, play_id=5.0)]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    assert sum(bar.points for bar in group_rows(bars)) == pytest.approx(
+        sum(bar.points for bar in bars), abs=1e-9
+    )
+
+
+def test_a_lone_small_event_is_left_as_itself():
+    """`1 smaller receiver drops (GB)` is a worse row than the event it hides."""
+    from nfl_simulator.plots import group_rows
+
+    bars = luck_bars([drop_row(-3.0, 1.0), drop_row(-0.4, 2.0)], points_per_epa=PPE, floor=0.0)
+    assert [bar.label for bar in group_rows(bars)][-1] == bars[-1].label
+
+
+def test_grouped_rows_are_ordered_biggest_mover_first_like_every_other_row():
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-0.2, float(i), team="GB") for i in range(1, 4)]
+    rows += [drop_row(0.9, float(i), team="DET") for i in range(4, 7)]
+    points = [abs(bar.points) for bar in group_rows(luck_bars(rows, points_per_epa=PPE))]
+    assert points == sorted(points, reverse=True)
+
+
+WATERFALL_MAX_EVENT_ROWS = 16
+
+
+def test_a_full_edition_waterfall_of_fifty_events_is_still_a_figure():
+    """A median Full game carries 48 receiver-drop rows. Fifty rows is a table.
+
+    The bound is on the **event** rows; the two anchors are the figure's ends
+    and are always drawn. Sixteen is what the seven round-6 games produce at
+    their worst — `2022_13_WAS_NYG` and `2024_19_LAC_HOU`, both exactly
+    sixteen, from 77 and 63 events."""
+    rows = [
+        drop_row(-0.3 if i % 2 else 0.3, float(i), team="GB" if i % 3 else "DET") for i in range(50)
+    ]
+    rows += [ledger_row(2.0, play_id=100.0), ledger_row(-1.5, play_id=101.0)]
+    total = sum(r["luck_epa"] for r in rows)
+    game = verdict(actual_margin=7.0, deserved_margin=7.0 - total * PPE)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert len(ax.get_yticklabels()) - 2 <= WATERFALL_MAX_EVENT_ROWS
+
+
+# ---- the wording the two new components wear ------------------------------
+
+
+def test_a_dropped_pick_names_the_thrower_and_what_the_ball_did():
+    row = {
+        "component": "dropped_pick",
+        "event_class": "34-66 yd, early down",
+        "charged_team": "GB",
+        "actual": 1.0,
+        "expected": 0.52,
+        "passer": "Goff",
+    }
+    assert event_phrase(row) == "dropped pick · thrown by Goff"
+    assert outcome_phrase(row) == "escaped (48% catch)"
+    assert plain_label(row) == "GB dropped pick · thrown by Goff, escaped (48% catch)"
+
+
+def test_a_pick_that_was_caught_says_so_at_the_same_probability():
+    row = {
+        "component": "dropped_pick",
+        "event_class": "34-66 yd, early down",
+        "charged_team": "GB",
+        "actual": 0.0,
+        "expected": 0.52,
+        "passer": "Goff",
+    }
+    assert outcome_phrase(row) == "intercepted (48% catch)"
+
+
+def test_a_receiver_drop_names_the_receiver_and_the_catch_probability():
+    row = {
+        "component": "receiver_drop",
+        "event_class": "1-33 yd, late down",
+        "charged_team": "GB",
+        "actual": 0.0,
+        "expected": 0.96,
+        "receiver": "Watson",
+    }
+    assert event_phrase(row) == "receiver drop · Watson"
+    assert outcome_phrase(row) == "dropped (96% catch)"
+    assert plain_label(row) == "GB receiver drop · Watson, dropped (96% catch)"
+
+
+def test_a_catch_is_said_the_same_way_the_drop_is():
+    row = {
+        "component": "receiver_drop",
+        "event_class": "1-33 yd, late down",
+        "charged_team": "GB",
+        "actual": 1.0,
+        "expected": 0.96,
+        "receiver": "Watson",
+    }
+    assert outcome_phrase(row) == "caught (96% catch)"
+
+
+@pytest.mark.parametrize("component", ["dropped_pick", "receiver_drop"])
+def test_a_play_with_no_name_on_file_is_not_given_one(component):
+    row = {
+        "component": component,
+        "event_class": "1-33 yd, late down",
+        "charged_team": "GB",
+        "actual": 1.0,
+        "expected": 0.6,
+    }
+    assert event_phrase(row) == component.replace("_", " ")
+
+
+def test_the_card_box_headline_still_sums_every_own_play_event_it_folded():
+    """The card truncates to five rows and folds the rest into `and n more`;
+    the headline over it is the whole team's luck, grouped rows included."""
+    rows = [drop_row(-0.3, float(i), team="MIN") for i in range(1, 12)]
+    rows += [ledger_row(2.0, play_id=100.0, charged_team="MIN")]
+    game = verdict()
+    _away, home = team_ledgers(game, rows, points_per_epa=PPE)
+    assert home.team == "MIN"
+    assert home.net_points == pytest.approx(
+        sum(r["luck_epa"] for r in rows if r["charged_team"] == "MIN") * PPE
+    )
+    assert sum(row.points for row in table_rows(home)) == pytest.approx(home.net_points)
+
+
+# --------------------------------------------------------------------------
+# intervals on the row labels, and the waterfall's axis — round 6, part D
+# --------------------------------------------------------------------------
+
+
+def kick_row_with_spread(**kwargs) -> dict:
+    return {
+        "component": "field_goal",
+        "event_class": "40-44 yd",
+        "charged_team": "GB",
+        "actual": 0.0,
+        "expected": 0.88,
+        "expected_low": 0.83,
+        "expected_high": 0.92,
+        **kwargs,
+    }
+
+
+def test_a_kick_label_can_carry_the_spread_of_its_own_make_probability():
+    """88% is a posterior mean. Without its spread two kicks priced at 88% look
+    equally certain, and one of them may be a kicker nobody has 30 kicks on."""
+    assert outcome_phrase(kick_row_with_spread(), interval=True) == "missed (88% kick, 83–92)"
+
+
+def test_the_short_form_is_still_what_a_caller_gets_by_default():
+    assert outcome_phrase(kick_row_with_spread()) == "missed (88% kick)"
+
+
+def test_a_receiver_drop_carries_its_catch_interval_the_same_way():
+    row = {
+        "component": "receiver_drop",
+        "event_class": "1-33 yd, late down",
+        "charged_team": "GB",
+        "actual": 0.0,
+        "expected": 0.96,
+        "expected_low": 0.94,
+        "expected_high": 0.98,
+        "receiver": "Watson",
+    }
+    assert outcome_phrase(row, interval=True) == "dropped (96% catch, 94–98)"
+
+
+def test_a_dropped_picks_interval_is_mirrored_onto_the_catch_branch():
+    """The stored probability is that the ball **escaped**; the label quotes the
+    catch. Quoting the stored bounds unmirrored would put the escape interval
+    under a catch percentage — a 40–55 catch printed as 45–60."""
+    row = {
+        "component": "dropped_pick",
+        "event_class": "34-66 yd, early down",
+        "charged_team": "GB",
+        "actual": 1.0,
+        "expected": 0.52,
+        "expected_low": 0.45,
+        "expected_high": 0.60,
+        "passer": "Goff",
+    }
+    assert outcome_phrase(row, interval=True) == "escaped (48% catch, 40–55)"
+
+
+def test_a_row_with_no_spread_on_file_keeps_the_bare_probability():
+    row = kick_row_with_spread()
+    del row["expected_low"]
+    assert outcome_phrase(row, interval=True) == "missed (88% kick)"
+
+
+def test_a_grouped_row_carries_no_interval():
+    """A fold of twelve drops has no one probability to put a spread on."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [
+        drop_row(-0.3, float(i), team="GB", expected_low=0.94, expected_high=0.98)
+        for i in range(1, 6)
+    ]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, interval=True))
+    assert grouped.label == "5 smaller receiver drops (GB)"
+    assert "catch" not in grouped.label and "\u2013" not in grouped.label
+
+
+def test_the_waterfall_labels_carry_the_interval_and_the_card_does_not():
+    rows = [
+        drop_row(-2.0, 1.0, team="MIN", expected_low=0.94, expected_high=0.98),
+        drop_row(-1.6, 2.0, team="DET", expected_low=0.90, expected_high=0.99),
+    ]
+    total = sum(r["luck_epa"] for r in rows)
+    game = verdict(actual_margin=7.0, deserved_margin=7.0 - total * PPE)
+    waterfall, _ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    card, _cax = plot_luck_ledger_card(game, rows, points_per_epa=PPE)
+    assert "94–98" in flat_text(waterfall)
+    assert "94–98" not in flat_text(card)
+    assert "96% catch" in flat_text(card)
+
+
+# ---- the axis reads like the distribution's -------------------------------
+
+
+def waterfall_axis(**kwargs):
+    rows = [ledger_row(3.0, play_id=1.0), ledger_row(-2.0, play_id=2.0)]
+    total = sum(r["luck_epa"] for r in rows)
+    game = verdict(actual_margin=7.0, deserved_margin=7.0 - total * PPE, **kwargs)
+    return plot_luck_ledger(game, rows, points_per_epa=PPE)
+
+
+def test_the_waterfall_axis_has_no_subtraction_in_its_title():
+    """`final margin (MIN − DET)` was arithmetic the reader had to perform."""
+    _fig, ax = waterfall_axis()
+    assert ax.get_xlabel() == ""
+
+
+def test_the_waterfall_ticks_are_unsigned_like_the_distributions():
+    _fig, ax = waterfall_axis()
+    _fig.canvas.draw()
+    assert all(not label.get_text().startswith("−") for label in ax.get_xticklabels())
+    assert all(not label.get_text().startswith("-") for label in ax.get_xticklabels())
+
+
+def test_the_waterfall_says_which_half_of_the_axis_is_whose():
+    _fig, ax = waterfall_axis()
+    texts = {t.get_text() for t in ax.texts}
+    assert "← DET wins by" in texts
+    assert "MIN wins by →" in texts
+
+
+def test_the_two_direction_labels_wear_the_two_clubs_colours():
+    colours = ("#4F2683", "#0076B6")
+    _fig, ax = plot_luck_ledger(
+        verdict(actual_margin=7.0, deserved_margin=7.0 - 1.0 * PPE),
+        [ledger_row(1.0, play_id=1.0)],
+        points_per_epa=PPE,
+        colors=colours,
+    )
+    by_text = {t.get_text(): t.get_color() for t in ax.texts}
+    assert by_text["MIN wins by →"] == colours[0]
+    assert by_text["← DET wins by"] == colours[1]
+
+
+def test_nothing_under_the_waterfall_axis_prints_through_anything_else():
+    """Three things now live under the axis — the two direction labels, the
+    colour key and the footer — where round 5 had two. They were laid out at
+    offsets chosen when the direction labels did not exist, and seven of the
+    nine round-6 renders had the key's box crossing a label's band."""
+    fig, ax = waterfall_axis(went_to_overtime=True)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    boxes = [t.get_window_extent(renderer) for t in ax.texts if "wins by" in t.get_text()]
+    boxes.append(ax.get_legend().get_window_extent(renderer))
+    boxes.append(
+        next(t for t in ax.texts if "not a sequence" in t.get_text()).get_window_extent(renderer)
+    )
+    for index, box in enumerate(boxes):
+        for other in boxes[index + 1 :]:
+            assert not box.overlaps(other)
+
+
+def test_the_overtime_sidebar_names_the_edition_its_toss_number_belongs_to():
+    """Hard constraint 2: no image mixes editions in one number.
+
+    The per-game toss move was measured on simulator v1.1 against v1.3 — which
+    is now called Strict — and the sidebar said it was measured "against the
+    v1.3 share above". On a Full-edition article figure the share above is the
+    Full share, so the sentence attributed a Strict-measured move to a number it
+    was never measured against."""
+    from nfl_simulator.plots import overtime_lines
+
+    _strict, full = strict_and_full(went_to_overtime=True)
+    line = next(
+        text
+        for text in overtime_lines(full, OvertimeToss("HOU", 2024, -0.14))
+        if "toss is worth" in text
+    )
+    assert "Strict" in line
+    assert "share above" not in line

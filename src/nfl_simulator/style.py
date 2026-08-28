@@ -65,6 +65,29 @@ BRAND_HANDLE = "@[TBD]"
 DATA_CREDIT = "Data: nflverse"
 WATERMARK = f"{DATA_CREDIT} | {BRAND_HANDLE}"
 
+# Ruling R-4's two editions (document 58 §2), by the public name each wears.
+# The audit arms `"strict+dp"` and `"strict+rd"` are deliberately absent: they
+# are callable in the simulator and were never named, so an image cannot claim
+# to be one.
+EDITION_NAMES = {"strict": "Strict", "full": "Full"}
+
+
+def edition_stamp(edition: str) -> str:
+    """`"Full edition · Data: nflverse | @[TBD]"` — the corner of every PNG.
+
+    The edition goes **before** the credit rather than after it because the
+    credit is the fixed part: a reader who has seen one of these images already
+    knows where nflverse's name sits, and the word that changes between two
+    images of the same game is the one worth reading first.
+    """
+    if edition not in EDITION_NAMES:
+        raise ValueError(
+            f"{edition!r} is not an edition anybody named; they are "
+            f"{list(EDITION_NAMES)} (document 58 §2)."
+        )
+    return f"{EDITION_NAMES[edition]} edition \u00b7 {WATERMARK}"
+
+
 # Font preference order. Matplotlib walks the list and uses the first family
 # present on the system; DejaVu Sans ships with matplotlib, so the last entry
 # always resolves and a machine without Inter still gets a readable figure.
@@ -515,11 +538,18 @@ def finalize(
     logo_path: str | Path | None = None,
     bbox_inches: str | None = "tight",
     close: bool = True,
+    edition: str | None = None,
 ) -> Path:
     """Save, stamp and close — the one exit every figure in the product takes.
 
     Centralised so no figure can be shipped without its data credit: the way to
     write a PNG here is this function, and this function always watermarks.
+
+    ``edition`` puts ruling R-4's edition name in front of the credit, so the
+    corner of the image says which of the two adjudications it is. Left
+    ``None`` the stamp is the bare credit, which is what every figure outside
+    the per-game product — the band sweep, a diagnostic — should carry: those
+    are not an adjudication of a game and have no edition to name.
     """
     import matplotlib.pyplot as plt
 
@@ -528,7 +558,11 @@ def finalize(
     fig.savefig(
         filepath, dpi=dpi, bbox_inches=bbox_inches, facecolor=PALETTE["bg"], edgecolor="none"
     )
-    apply_watermark(filepath, logo_path=logo_path)
+    apply_watermark(
+        filepath,
+        logo_path=logo_path,
+        text=WATERMARK if edition is None else edition_stamp(edition),
+    )
     if close:
         plt.close(fig)
     return filepath

@@ -135,6 +135,13 @@ class SimulationResult:
     # whose charting held no interceptable throw and no catchable ball is
     # `"strict"`, because its numbers are.
     variant: str = "strict"
+    # The events this adjudication was built from, kept because they carry the
+    # one thing the ledger drops: `expected_draws`, the whole posterior on each
+    # branch. `LedgerEntry` stores its mean, which is the number the arithmetic
+    # needs and is all the shipped artifacts hold — so a figure that wants to
+    # say how *sure* a probability was has nowhere else to read it. Defaulted to
+    # empty so nothing that already reads this dataclass changes shape.
+    events: tuple[LuckEvent, ...] = ()
 
     @property
     def edition(self) -> str | None:
@@ -712,6 +719,7 @@ def simulate_game(
             home_point_draws=np.full(1, float(home_points)) if has_score else None,
             away_point_draws=np.full(1, float(away_points)) if has_score else None,
             variant=variant,
+            events=tuple(events),
         )
 
     # One replay. `bootstrap_margins` is still the public arithmetic document 10
@@ -748,4 +756,5 @@ def simulate_game(
         home_point_draws=home_draws,
         away_point_draws=away_draws,
         variant=variant,
+        events=tuple(events),
     )

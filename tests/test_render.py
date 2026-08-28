@@ -84,17 +84,17 @@ def ledger_frame() -> pl.DataFrame:
 
 
 def test_the_filename_follows_the_baseball_pattern(game):
-    assert figure_filename(game, "dtw") == "GB_DET_23-31--95-5_dtw.png"
+    assert figure_filename(game, "dtw") == "GB_DET_23-31--95-5_strict_dtw.png"
 
 
 def test_every_suffix_names_a_different_file(game):
     names = {figure_filename(game, suffix) for suffix in SUFFIXES}
     assert len(names) == len(SUFFIXES) == 4
     assert names == {
-        "GB_DET_23-31--95-5_dtw.png",
-        "GB_DET_23-31--95-5_luck_ledger.png",
-        "GB_DET_23-31--95-5_card.png",
-        "GB_DET_23-31--95-5_waterfall.png",
+        "GB_DET_23-31--95-5_strict_dtw.png",
+        "GB_DET_23-31--95-5_strict_luck_ledger.png",
+        "GB_DET_23-31--95-5_strict_card.png",
+        "GB_DET_23-31--95-5_strict_waterfall.png",
     }
 
 
@@ -113,7 +113,7 @@ def test_the_shares_in_the_filename_sum_to_a_hundred(game):
 def test_a_game_with_no_score_on_file_is_named_by_its_game_id(game):
     """Never invent a scoreline to fill a filename."""
     unscored = replace(game, home_score=None, away_score=None)
-    assert figure_filename(unscored, "card") == "2018_05_GB_DET_card.png"
+    assert figure_filename(unscored, "card") == "2018_05_GB_DET_strict_card.png"
 
 
 # --------------------------------------------------------------------------
@@ -316,7 +316,7 @@ def test_the_card_puts_the_overtime_line_under_the_interval_line(game):
 
 
 def test_the_article_file_is_named_for_the_figure_it_is_a_version_of(game):
-    assert figure_filename(game, ARTICLE_SUFFIX) == "GB_DET_23-31--95-5_dtw_article.png"
+    assert figure_filename(game, ARTICLE_SUFFIX) == "GB_DET_23-31--95-5_strict_dtw_article.png"
     assert ARTICLE_SUFFIX not in SUFFIXES, "the article is an extra, not a fourth share image"
 
 
@@ -355,3 +355,292 @@ def test_a_missing_trace_leaves_its_edition_handle_none_rather_than_failing():
 
     handles = edition_handles(None, None)
     assert handles["full"] == {"dropped_pick_model": None, "receiver_drop_model": None}
+
+
+# --------------------------------------------------------------------------
+# a summary and a replay per edition — figure round 6, part A
+# --------------------------------------------------------------------------
+
+
+def summary_frame(rows: list[dict]) -> pl.DataFrame:
+    """A `dtw_games_*.parquet`-shaped frame, at whatever numbers a test needs.
+
+    No rows is the shape a checkout that never ran the Full pass actually holds
+    — `render._empty_summary` — rather than a frame with no columns at all,
+    which nothing on disk can produce."""
+    from nfl_simulator.render import _empty_summary
+
+    return pl.DataFrame(rows) if rows else _empty_summary()
+
+
+def sources_with(strict: pl.DataFrame, full: pl.DataFrame):
+    """A `Sources` carrying two summaries and nothing else that touches disk."""
+    from nfl_simulator.render import Sources
+
+    empty = summary_frame([])
+    return Sources(
+        games=strict,
+        ledger=empty,
+        schedule=empty,
+        overtime=empty,
+        slope=PPE,
+        full=full,
+    )
+
+
+STRICT_ROW = {
+    "game_id": "2025_17_DET_MIN",
+    "home_team": "MIN",
+    "away_team": "DET",
+    "actual_margin": 13.0,
+    "deserved_margin": 1.2,
+    "dtw_home": 0.55,
+    "dtw_low": 0.50,
+    "dtw_high": 0.61,
+}
+FULL_ROW = {
+    **STRICT_ROW,
+    "deserved_margin": 3.4,
+    "dtw_home": 0.63,
+    "dtw_low": 0.57,
+    "dtw_high": 0.70,
+}
+
+
+def test_the_default_edition_is_full_from_the_first_charted_season_and_strict_before_it():
+    """FTN charting starts in 2022; before it there is only one adjudication."""
+    from nfl_simulator.render import default_edition
+
+    assert default_edition("2022_13_WAS_NYG") == "full"
+    assert default_edition("2025_17_DET_MIN") == "full"
+    assert default_edition("2018_05_GB_DET") == "strict"
+    assert default_edition("2016_14_NYJ_SF") == "strict"
+
+
+def test_a_pre_charting_game_asked_for_full_is_refused_before_anything_is_simulated():
+    """The error names the season and the reason, and it costs no simulation.
+
+    `replay` would otherwise load the play-by-play and both traces before
+    discovering that the game predates the charting the Full edition is built
+    from — and would then return a Strict ledger under a Full headline, because
+    both variant builders warn and return an empty list on a pre-2022 game."""
+    from nfl_simulator.render import replay
+
+    with pytest.raises(ValueError, match="2018.*charting"):
+        replay("2018_05_GB_DET", STRICT_ROW, edition="full")
+
+
+def test_an_edition_nobody_named_is_refused(game):
+    from nfl_simulator.render import replay
+
+    with pytest.raises(ValueError, match="deluxe"):
+        replay("2025_17_DET_MIN", STRICT_ROW, edition="deluxe")
+
+
+def test_each_edition_reads_its_own_summary():
+    """A Full render must not check itself against Strict's published numbers."""
+    sources = sources_with(summary_frame([STRICT_ROW]), summary_frame([FULL_ROW]))
+    assert sources.game_row("2025_17_DET_MIN")["dtw_home"] == 0.55
+    assert sources.game_row("2025_17_DET_MIN", edition="strict")["dtw_home"] == 0.55
+    assert sources.game_row("2025_17_DET_MIN", edition="full")["dtw_home"] == 0.63
+
+
+def test_a_game_missing_from_the_full_summary_names_the_artifact_to_build():
+    """A checkout that has not run the Full pass says so, rather than falling
+    back to Strict's numbers under a Full stamp."""
+    from nfl_simulator.render import FULL_ARTIFACT
+
+    sources = sources_with(summary_frame([STRICT_ROW]), summary_frame([]))
+    with pytest.raises(SystemExit, match=FULL_ARTIFACT):
+        sources.game_row("2025_17_DET_MIN", edition="full")
+
+
+def test_the_replay_gaps_are_measured_against_the_row_it_was_handed():
+    """The four numbers a redrawn distribution has to land on, and no others."""
+    from nfl_simulator.ledger import Ledger
+    from nfl_simulator.render import replay_gaps
+    from nfl_simulator.simulator import SimulationResult
+
+    result = SimulationResult(
+        game_id="2025_17_DET_MIN",
+        actual_margin=13.0,
+        deserved_margin=3.4,
+        dtw_home=0.63,
+        dtw_interval=(0.57, 0.70),
+        margin_draws=np.zeros(4),
+        ledger=Ledger(()),
+        total_luck_epa=0.0,
+        variant="full",
+    )
+    assert max(replay_gaps(result, FULL_ROW).values()) == 0.0
+    gaps = replay_gaps(result, STRICT_ROW)
+    assert set(gaps) == {"deserved_margin", "dtw_home", "dtw_low", "dtw_high"}
+    assert gaps["dtw_home"] == pytest.approx(0.08)
+
+
+def test_the_simulation_context_loads_the_columns_both_variant_models_price_on():
+    """A Full replay reads covariates v1.3 never needed.
+
+    `44_read_side_fix.SIM_COLUMNS` is the v1.3 frame, and the two
+    hands-on-the-ball models price on columns that are not in it. Loading the
+    narrow frame and asking for Full would raise deep inside a model rather
+    than at the edge — or worse, price a null the frame simply never fetched.
+    Document 49 §6's V-1 proved the wide frame inert on Strict, which is what
+    makes loading it unconditionally safe."""
+    from nfl_simulator.dropped_picks import PBP_COVARIATE_COLUMNS as DROPPED_PICK_COLUMNS
+    from nfl_simulator.receiver_drops import PBP_COVARIATE_COLUMNS as RECEIVER_COLUMNS
+    from nfl_simulator.receiver_drops import PBP_SWING_COLUMNS
+    from nfl_simulator.render import simulation_columns
+
+    columns = simulation_columns()
+    assert len(columns) == len(set(columns)), "a duplicated column is a wasted read"
+    for needed in (DROPPED_PICK_COLUMNS, RECEIVER_COLUMNS, PBP_SWING_COLUMNS, ["defteam"]):
+        assert set(needed) <= set(columns)
+    # And v1.3's own frame is still all there: Strict must not lose a column.
+    assert {"game_id", "play_id", "kicker_player_name", "extra_point_result"} <= set(columns)
+
+
+def test_the_filename_carries_the_edition_so_two_of_them_never_collide(game):
+    """One game has two adjudications and they are two different images."""
+    strict = replace(game, edition="strict")
+    full = replace(game, edition="full", dtw_home=0.37, dtw_interval=(0.30, 0.44))
+    assert figure_filename(strict, "card") == "GB_DET_23-31--95-5_strict_card.png"
+    assert figure_filename(full, "card") == "GB_DET_23-31--63-37_full_card.png"
+    assert figure_filename(strict, "card") != figure_filename(full, "card")
+
+
+def test_a_game_with_no_score_still_names_its_edition(game):
+    unscored = replace(game, home_score=None, away_score=None, edition="full")
+    assert figure_filename(unscored, "card") == "2018_05_GB_DET_full_card.png"
+
+
+def test_a_prepared_variant_row_carries_the_thrower_and_the_receiver(game):
+    """The two names the Full edition's rows are read by, from the play-by-play.
+
+    Presentation only, exactly as the kicker's name is: the dropped pick was
+    priced at the defence's shrunk rate and the drop at the receiving corps'.
+    Neither name moves a number, and a play without one keeps its bare label."""
+    from nfl_simulator.plots import plain_label
+
+    frame = pl.DataFrame(
+        {
+            "play_id": [55.0, 61.0],
+            "component": ["dropped_pick", "receiver_drop"],
+            "event_class": ["34-66 yd, early down", "1-33 yd, late down"],
+            "charged_team": ["GB", "GB"],
+            "actual": [1.0, 0.0],
+            "expected": [0.52, 0.96],
+            "swing": [-2.0, -1.4],
+            "luck_epa": [0.96, 1.34],
+        }
+    )
+    rows = prepare_rows(frame, game, passers={55.0: "Goff"}, receivers={61.0: "Watson"})
+    assert [plain_label(row) for row in rows] == [
+        "GB dropped pick · thrown by Goff, escaped (48% catch)",
+        "GB receiver drop · Watson, dropped (96% catch)",
+    ]
+
+
+def test_a_variant_row_with_nobody_on_file_keeps_its_bare_label(game):
+    from nfl_simulator.plots import event_phrase
+
+    frame = pl.DataFrame(
+        {
+            "play_id": [55.0],
+            "component": ["receiver_drop"],
+            "event_class": ["1-33 yd, late down"],
+            "charged_team": ["GB"],
+            "actual": [0.0],
+            "expected": [0.96],
+            "swing": [-1.4],
+            "luck_epa": [1.34],
+        }
+    )
+    (row,) = prepare_rows(frame, game)
+    assert row["receiver"] is None
+    assert event_phrase(row) == "receiver drop"
+
+
+def test_the_simulation_frame_carries_the_two_names_those_rows_are_read_by():
+    """Added the way `kicker_player_name` was in round 4 — presentation only."""
+    from nfl_simulator.render import simulation_columns
+
+    assert {"passer_player_name", "receiver_player_name"} <= set(simulation_columns())
+
+
+def test_the_simulation_keeps_the_events_the_intervals_are_read_from():
+    """`LedgerEntry` stores the posterior mean; the draws live on the event.
+
+    Nothing on disk carries them — the shipped ledger has one number per row —
+    so the only place a figure can get an interval is the replay it is already
+    running, and the result has to hand the events back for that."""
+    from nfl_simulator.simulator import LuckEvent, SimulationResult
+
+    assert "events" in SimulationResult.__dataclass_fields__
+    event = LuckEvent(
+        play_id=1.0,
+        component="field_goal",
+        event_class="40-44 yd",
+        charged_team="GB",
+        actual=0.0,
+        expected_draws=np.linspace(0.80, 0.95, 200),
+        swing=-4.0,
+    )
+    assert event.to_entry().expected == pytest.approx(event.expected_draws.mean())
+
+
+def test_the_intervals_are_keyed_by_the_play_and_the_component_on_it():
+    """A blocked field goal books a fumble row on the same play id. Keying on
+    the play alone would give one of the two rows the other's probability."""
+    from nfl_simulator.render import expected_intervals
+    from nfl_simulator.simulator import LuckEvent, SimulationResult
+
+    def event(component, draws):
+        return LuckEvent(
+            play_id=7.0,
+            component=component,
+            event_class="x",
+            charged_team="GB",
+            actual=0.0,
+            expected_draws=draws,
+            swing=-1.0,
+        )
+
+    result = SimulationResult(
+        game_id="2018_05_GB_DET",
+        actual_margin=8.0,
+        deserved_margin=8.0,
+        dtw_home=0.5,
+        dtw_interval=(0.4, 0.6),
+        margin_draws=np.zeros(3),
+        ledger=None,
+        total_luck_epa=0.0,
+        events=(
+            event("field_goal", np.linspace(0.80, 0.96, 200)),
+            event("fumble", np.linspace(0.40, 0.60, 200)),
+        ),
+    )
+    intervals = expected_intervals(result)
+    assert set(intervals) == {(7.0, "field_goal"), (7.0, "fumble")}
+    assert intervals[(7.0, "field_goal")][0] == pytest.approx(0.8088, abs=1e-3)
+
+
+def test_a_prepared_row_takes_the_interval_of_its_own_play_and_component(game):
+    frame = pl.DataFrame(
+        {
+            "play_id": [834.0],
+            "component": ["field_goal"],
+            "event_class": ["40-44 yd"],
+            "charged_team": ["GB"],
+            "expected": [0.88],
+            "swing": [-4.29],
+            "luck_epa": [3.76],
+        }
+    )
+    (row,) = prepare_rows(frame, game, intervals={(834.0, "field_goal"): (0.83, 0.92)})
+    assert (row["expected_low"], row["expected_high"]) == (0.83, 0.92)
+
+
+def test_a_prepared_row_with_no_interval_on_file_carries_none(game):
+    (row,) = prepare_rows(ledger_frame().head(1), game)
+    assert row["expected_low"] is None

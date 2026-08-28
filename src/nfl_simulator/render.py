@@ -23,13 +23,15 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 
 from nfl_simulator import paths
+from nfl_simulator.ingest import FTN_SEASONS
 from nfl_simulator.ledger import with_actual
 from nfl_simulator.plots import (
     GameVerdict,
@@ -41,6 +43,7 @@ from nfl_simulator.plots import (
     plot_luck_ledger_card,
     verdict_from_row,
 )
+from nfl_simulator.simulator import EDITIONS
 from nfl_simulator.style import finalize
 from nfl_simulator.teams import pair_colors, team_logo, team_name
 
@@ -48,6 +51,18 @@ GAMES_ARTIFACT = "dtw_games_v13.parquet"
 LEDGER_ARTIFACT = "dtw_ledger_v13.parquet"
 OVERTIME_ARTIFACT = "26_overtime_games.parquet"
 METADATA = "model_metadata_v13.json"
+
+# Ruling R-4's second edition (document 58 §2), written by
+# `research/76_full_edition_summary.py`. It is not a v1.3 artifact and it is not
+# shipped: a checkout that has not run that script renders Strict and says so
+# when it is asked for Full, rather than quietly checking a Full render against
+# Strict's published numbers.
+FULL_ARTIFACT = "full_summary.parquet"
+
+# The first season FTN charting reaches, which is the first season the Full
+# edition exists at all. Read from `ingest` rather than written as 2022 so the
+# two cannot drift.
+FIRST_CHARTED_SEASON = min(FTN_SEASONS)
 
 # v1.3's shipped settings, quoted from `research/46_simulator_v13.py` the same
 # way drivers 54 and 57 quote them. Changing any of them changes the draws, and
@@ -88,11 +103,17 @@ DTW_FIGURE = {"bin_width": 3.0, "callout": True, "arrow": True}
 
 
 def figure_filename(verdict: GameVerdict, suffix: str) -> str:
-    """`"GB_DET_23-31--95-5_dtw.png"` — the baseball simulator's pattern, verbatim.
+    """`"GB_DET_23-31--95-5_strict_dtw.png"` — the baseball simulator's pattern.
 
     Away team first, then home, then the scoreline, then the two shares, then
-    what the figure is. The name is the caption for anyone scrolling a folder
-    of them, which is why the verdict's own numbers are in it.
+    the edition, then what the figure is. The name is the caption for anyone
+    scrolling a folder of them, which is why the verdict's own numbers are in it.
+
+    **The edition is in the name, not only in the stamp.** One game has two
+    adjudications and they differ in exactly the numbers the rest of the name is
+    built from, so without it a Full render would overwrite the Strict one of
+    any game whose two shares happened to round the same way — silently, and
+    with the wrong image left on disk.
 
     The two shares are rounded **once, together** — the home share is rounded
     and the away share is 100 minus it — so the pair in the filename always sums
@@ -102,12 +123,12 @@ def figure_filename(verdict: GameVerdict, suffix: str) -> str:
     filename is not a place to invent a score.
     """
     if verdict.home_score is None or verdict.away_score is None:
-        return f"{verdict.game_id}_{suffix}.png"
+        return f"{verdict.game_id}_{verdict.edition}_{suffix}.png"
     home_share = round(verdict.dtw_home * 100)
     return (
         f"{verdict.away_team}_{verdict.home_team}_"
         f"{verdict.away_score:.0f}-{verdict.home_score:.0f}--"
-        f"{100 - home_share}-{home_share}_{suffix}.png"
+        f"{100 - home_share}-{home_share}_{verdict.edition}_{suffix}.png"
     )
 
 
@@ -134,6 +155,9 @@ def prepare_rows(
     verdict: GameVerdict,
     distances: dict | None = None,
     kickers: dict | None = None,
+    passers: dict | None = None,
+    receivers: dict | None = None,
+    intervals: dict | None = None,
 ) -> list[dict]:
     """Ledger rows with the three extra keys :func:`plots.plain_label` can use.
 
@@ -141,26 +165,86 @@ def prepare_rows(
     predates the column (see :func:`ledger.with_actual`). ``opponent`` is the
     other team in *this* game, which is what makes "recovered by GB" sayable —
     the ledger records who fumbled, not who ended up with the ball. And
+    ``intervals`` is `render.expected_intervals`' map, and is what lets a
+    waterfall label say how sure a probability was. It is absent from every
+    artifact on disk, which is why it is threaded from the replay rather than
+    read: a row without one keeps the bare probability.
+
     ``kick_distance`` is the kick's real yardage from the play-by-play, left
     absent rather than guessed when the play is not found: the ledger stores a
     five-yard class, and printing its midpoint as the distance would be making
     a number up. ``kicker`` is the surname on the same play, and is absent the
-    same way.
+    same way — as are ``passer`` and ``receiver``, the two names the Full
+    edition's rows are read by.
     """
     distances = distances or {}
     kickers = kickers or {}
+    passers = passers or {}
+    receivers = receivers or {}
+    intervals = intervals or {}
     rows = with_actual(frame).to_dicts()
     for row in rows:
         charged = row.get("charged_team")
         row["opponent"] = verdict.away_team if charged == verdict.home_team else verdict.home_team
-        row["kick_distance"] = distances.get(row.get("play_id"))
-        row["kicker"] = kickers.get(row.get("play_id"))
+        play_id = row.get("play_id")
+        row["kick_distance"] = distances.get(play_id)
+        row["kicker"] = kickers.get(play_id)
+        row["passer"] = passers.get(play_id)
+        row["receiver"] = receivers.get(play_id)
+        low, high = intervals.get((play_id, row.get("component")), (None, None))
+        row["expected_low"], row["expected_high"] = low, high
     return rows
+
+
+# --------------------------------------------------------------------------
+# the two editions
+# --------------------------------------------------------------------------
+
+
+def season_of(game_id: str) -> int:
+    """The season an nflverse game id starts with."""
+    return int(str(game_id)[:4])
+
+
+def default_edition(game_id: str) -> str:
+    """Which edition this game is headlined in when a caller does not choose.
+
+    Ruling R-4 (document 58 §2): Full is the headline wherever it exists, and it
+    exists from the first charted season on. A 2018 game has one adjudication,
+    so it is not offered a choice it cannot have.
+    """
+    return "full" if season_of(game_id) >= FIRST_CHARTED_SEASON else "strict"
+
+
+def check_edition(game_id: str, edition: str) -> str:
+    """Refuse an impossible pairing **before** anything is loaded or simulated.
+
+    Two ways to ask for a figure nobody can draw. The first is an edition that
+    was never named — `"strict+dp"` is callable in the simulator and has no
+    public name, so it cannot be rendered. The second is the Full edition on a
+    game that predates FTN charting: both variant builders warn and return an
+    empty list there, so the render would come back with a Strict ledger under a
+    Full stamp. That is the one failure mode a stamp is supposed to prevent, and
+    it is worth a stop rather than a warning.
+    """
+    if edition not in EDITIONS:
+        raise ValueError(f"unknown edition {edition!r}; the editions are {list(EDITIONS)}")
+    season = season_of(game_id)
+    if edition == "full" and season < FIRST_CHARTED_SEASON:
+        raise ValueError(
+            f"{game_id} is a {season} game and FTN charting starts in "
+            f"{FIRST_CHARTED_SEASON}, so it has no Full edition. Render it Strict."
+        )
+    return edition
 
 
 # --------------------------------------------------------------------------
 # the committed sources
 # --------------------------------------------------------------------------
+
+
+def _empty_summary() -> pl.DataFrame:
+    return pl.DataFrame({"game_id": []}, schema={"game_id": pl.String})
 
 
 @dataclass(frozen=True)
@@ -172,11 +256,34 @@ class Sources:
     schedule: pl.DataFrame
     overtime: pl.DataFrame
     slope: float
+    # The Full edition's summary, and it is allowed to be empty. `games` is the
+    # shipped v1.3 artifact and is always there; this one is written by
+    # `research/76_full_edition_summary.py` and a checkout that has not run it
+    # still renders every Strict figure.
+    full: pl.DataFrame = field(default_factory=_empty_summary)
 
-    def game_row(self, game_id: str) -> dict:
-        rows = self.games.filter(pl.col("game_id") == game_id).to_dicts()
+    def summary(self, edition: str = "strict") -> pl.DataFrame:
+        """The summary the named edition's numbers are published in."""
+        return self.full if edition == "full" else self.games
+
+    def game_row(self, game_id: str, edition: str = "strict") -> dict:
+        """This game's published row **in the edition asked for**.
+
+        Never falls back to the other edition. A Full figure checked against
+        Strict's numbers would replay clean and then print a headline the replay
+        does not belong to, which is the whole reason the check exists.
+        """
+        artifact = FULL_ARTIFACT if edition == "full" else GAMES_ARTIFACT
+        rows = self.summary(edition).filter(pl.col("game_id") == game_id).to_dicts()
         if not rows:
-            raise SystemExit(f"{game_id} is not in {GAMES_ARTIFACT}.")
+            raise SystemExit(
+                f"{game_id} is not in {artifact}."
+                + (
+                    "  Run `uv run python research/76_full_edition_summary.py` to build it."
+                    if edition == "full"
+                    else ""
+                )
+            )
         return rows[0]
 
     def schedule_row(self, game_id: str) -> dict:
@@ -202,28 +309,76 @@ def load_sources() -> Sources:
     output = paths.RESEARCH_OUTPUT_DIR
     with (output / METADATA).open() as handle:
         slope = float(json.load(handle)["points_per_epa"])
+    full = output / FULL_ARTIFACT
     return Sources(
         games=pl.read_parquet(output / GAMES_ARTIFACT),
         ledger=pl.read_parquet(output / LEDGER_ARTIFACT),
         schedule=pl.read_parquet(paths.SCHEDULE_PATH),
         overtime=pl.read_parquet(output / OVERTIME_ARTIFACT),
         slope=slope,
+        # Absence is not an error, for the reason on the field itself: every
+        # Strict figure still draws on a checkout that has not run the Full pass.
+        full=pl.read_parquet(full) if full.exists() else _empty_summary(),
     )
 
 
-@cache
-def _simulation_context():
-    """v1.3's fitted pieces, built once so a batch pays for them once.
+def _read_side():
+    """`research/44_read_side_fix.py`, imported off the research path.
 
-    Imported through `research/44_read_side_fix.py` because that is where the
-    read-side fix and the refitted field-goal model live, and re-implementing
-    either here would be a second copy of the thing document 30 corrected.
+    That is where the read-side fix and the refitted field-goal model live, and
+    re-implementing either here would be a second copy of the thing document 30
+    corrected.
     """
     research = Path(__file__).resolve().parents[2] / "research"
     if str(research) not in sys.path:
         sys.path.insert(0, str(research))
     from importlib import import_module
 
+    return import_module("44_read_side_fix")
+
+
+def simulation_columns() -> list[str]:
+    """The play-by-play columns a replay of **either** edition needs.
+
+    v1.3's own frame plus what the two hands-on-the-ball models price on — the
+    same list `research/68_dropped_pick_variant_audit.py` builds, and for the
+    same reason. It is loaded unconditionally rather than per edition because
+    document 49 §6's V-1 replayed all 2,761 shipped games on the wide frame at
+    0.00e+00: the extra columns are proven inert on Strict, not assumed to be,
+    so one frame serves both editions and there is no second cache to keep
+    consistent with the first.
+    """
+    from nfl_simulator.dropped_picks import PBP_COVARIATE_COLUMNS as DROPPED_PICK_COLUMNS
+    from nfl_simulator.receiver_drops import PBP_COVARIATE_COLUMNS as RECEIVER_COLUMNS
+    from nfl_simulator.receiver_drops import PBP_SWING_COLUMNS
+
+    return list(
+        dict.fromkeys(
+            [
+                *_read_side().SIM_COLUMNS,
+                # The defence the dropped pick is charged against; v1.3 never
+                # needed it, because a fumble is charged to whoever fumbled.
+                "defteam",
+                # Presentation only, added in figure round 6 the way
+                # `kicker_player_name` was added in round 4: a Full-edition row
+                # is read by who threw the ball and who it was thrown to.
+                # Nothing prices on either — the dropped pick was priced at the
+                # defence's shrunk rate and the drop at the receiving corps' —
+                # and the seven example games still replay at 0.00e+00 with both
+                # loaded.
+                "passer_player_name",
+                "receiver_player_name",
+                *DROPPED_PICK_COLUMNS,
+                *RECEIVER_COLUMNS,
+                *PBP_SWING_COLUMNS,
+            ]
+        )
+    )
+
+
+@cache
+def _simulation_context():
+    """Both editions' fitted pieces, built once so a batch pays for them once."""
     from nfl_simulator.components import (
         build_game_table,
         fit_fg_baseline,
@@ -233,8 +388,8 @@ def _simulation_context():
     from nfl_simulator.ingest import PBP_SEASONS, load_pbp
     from nfl_simulator.simulator import points_per_epa
 
-    read_side = import_module("44_read_side_fix")
-    pbp = load_pbp(PBP_SEASONS, columns=read_side.SIM_COLUMNS)
+    read_side = _read_side()
+    pbp = load_pbp(PBP_SEASONS, columns=simulation_columns())
     fg_model, _ = read_side.load_model("trace_fg_refit.nc", "fg_refit_summary.json")
     dropped_pick_model, ftn = _dropped_pick_pieces()
     receiver_drop_model = _receiver_drop_pieces()
@@ -317,7 +472,43 @@ def _receiver_drop_pieces():
         return None
 
 
-def replay(game_id: str, row: dict, schedule: dict | None = None):
+def expected_intervals(result) -> dict[tuple[float, str], tuple[float, float]]:
+    """`(play_id, component) -> the 89% bounds on that branch's probability`.
+
+    Document 03's 5.5/94.5 convention, the same one the DTW interval uses, taken
+    over the posterior draws each :class:`LuckEvent` carries. The key is the
+    play **and** the component because they are not the same thing: four blocked
+    field goals in the shipped population also book a fumble row on their own
+    play id, and a map keyed on the play alone would hand one of those two rows
+    the other's probability.
+    """
+    from nfl_simulator.simulator import ETI_HIGH, ETI_LOW
+
+    return {
+        (float(event.play_id), str(event.component)): (
+            float(np.percentile(event.expected_draws, ETI_LOW)),
+            float(np.percentile(event.expected_draws, ETI_HIGH)),
+        )
+        for event in result.events
+    }
+
+
+def replay_gaps(result, row: dict) -> dict[str, float]:
+    """How far a re-simulation lands from the summary row it is checked against.
+
+    The four published numbers, and only those four: a figure states the
+    deserved margin, the DTW share and the interval's two ends, so those are
+    what a redraw has to reproduce before a pixel is drawn.
+    """
+    return {
+        "deserved_margin": abs(result.deserved_margin - row["deserved_margin"]),
+        "dtw_home": abs(result.dtw_home - row["dtw_home"]),
+        "dtw_low": abs(result.dtw_interval[0] - row["dtw_low"]),
+        "dtw_high": abs(result.dtw_interval[1] - row["dtw_high"]),
+    }
+
+
+def replay(game_id: str, row: dict, schedule: dict | None = None, *, edition: str = "strict"):
     """The game's bootstrap, re-simulated and checked against the summary.
 
     The shipped parquet keeps the summary, not the 160,000 draws, so a figure
@@ -330,9 +521,15 @@ def replay(game_id: str, row: dict, schedule: dict | None = None):
     this returns the whole :class:`SimulationResult` rather than the margins
     alone: two figures drawn from two replays of the same coins would be two
     adjudications wearing one headline.
+
+    ``edition`` names which adjudication is replayed, and ``row`` must be that
+    edition's published row — `Sources.game_row` is what pairs them. Strict is
+    v1.3 with both variant models switched off and replays at 0.00e+00 against
+    the shipped summary, exactly as it did before this argument existed.
     """
     from nfl_simulator.simulator import simulate_game
 
+    check_edition(game_id, edition)
     schedule = schedule or {}
     scores = {
         "home_points": schedule.get("home_score"),
@@ -353,17 +550,19 @@ def replay(game_id: str, row: dict, schedule: dict | None = None):
         n_coin_draws=COIN_DRAWS,
         seed=RANDOM_SEED,
         include_blocked=False,
+        # The charting frame is handed over whole: `worthy_throw_frame` and
+        # `catchable_target_frame` both join it on game id and play id, so a
+        # frame carrying every 2022-2025 game contributes exactly this game's
+        # rows. Strict discards both handles inside `simulate_game`.
+        ftn=context["ftn"],
+        **context["editions"][edition],
         **scores,
     )
-    gaps = {
-        "deserved_margin": abs(result.deserved_margin - row["deserved_margin"]),
-        "dtw_home": abs(result.dtw_home - row["dtw_home"]),
-        "dtw_low": abs(result.dtw_interval[0] - row["dtw_low"]),
-        "dtw_high": abs(result.dtw_interval[1] - row["dtw_high"]),
-    }
+    gaps = replay_gaps(result, row)
     if max(gaps.values()) > REPLAY_TOLERANCE:
         raise SystemExit(
-            f"{game_id} does not replay to its shipped summary ({gaps}). Stop rather than draw it."
+            f"{game_id} does not replay to its {edition} summary ({gaps}). "
+            "Stop rather than draw it."
         )
     return result, gaps
 
@@ -402,12 +601,66 @@ def kicker_names(game_id: str) -> dict:
         return {}
 
 
+def _player_names(game_id: str, column: str) -> dict:
+    """`play_id -> surname` for one play-by-play name column.
+
+    Degrades exactly as :func:`kick_distances` does — a missing column or an
+    unreadable cache costs the labels their names, never the render.
+    """
+    try:
+        plays = _simulation_context()["pbp"].filter(pl.col("game_id") == game_id)
+        if column not in plays.columns:
+            return {}
+        named = plays.select("play_id", column).drop_nulls(column)
+        return {float(play): kicker_surname(name) for play, name in named.iter_rows()}
+    except Exception as error:  # pragma: no cover - the labels degrade, not the render
+        print(f"Warning: no {column} for {game_id}: {error}")
+        return {}
+
+
+def passer_names(game_id: str) -> dict:
+    """`play_id -> the quarterback's surname`, for the dropped-pick rows."""
+    return _player_names(game_id, "passer_player_name")
+
+
+def receiver_names(game_id: str) -> dict:
+    """`play_id -> the target's surname`, for the receiver-drop rows."""
+    return _player_names(game_id, "receiver_player_name")
+
+
 # --------------------------------------------------------------------------
 # the render
 # --------------------------------------------------------------------------
 
 
-def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = False) -> list[Path]:
+def counterpart_verdict(sources: Sources, game_id: str, edition: str, schedule: dict):
+    """The *other* edition's verdict, for the one muted line that quotes it.
+
+    Read from that edition's published summary and never replayed. The replay
+    check exists for the distribution a figure **draws**; this verdict is drawn
+    by nothing — it contributes a headline and a deserved margin to a footer —
+    and re-simulating a second adjudication to print two numbers would double
+    every render's cost for no guarantee the committed record does not already
+    give.
+
+    ``None`` when there is no other edition: a game before the first charted
+    season has one adjudication, and `GameVerdict.edition_note` says so.
+    """
+    if season_of(game_id) < FIRST_CHARTED_SEASON:
+        return None
+    other = "strict" if edition == "full" else "full"
+    return verdict_from_row(
+        sources.game_row(game_id, edition=other), np.empty(0), schedule, edition=other
+    )
+
+
+def render_game(
+    game_id: str,
+    out_dir: Path | None = None,
+    *,
+    article: bool = False,
+    edition: str | None = None,
+) -> list[Path]:
     """Write this game's four PNGs and return their paths, in ``SUFFIXES`` order.
 
     **No share image carries the sidebar.** Document 16's refusal is a fact about
@@ -419,17 +672,46 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
     ``article=True`` adds one more file for an overtime game,
     ``{...}_dtw_article.png``: the distribution with the panel attached. That is
     where the six paragraphs belong.
+
+    ``edition`` names which of ruling R-4's two adjudications is drawn. Left
+    ``None`` it is :func:`default_edition` — Full from the first charted season,
+    Strict before it — which is the headline reading. Every file the call writes
+    carries the edition in its name and in its stamp, and each of them states
+    the other edition's verdict in one muted line.
     """
     out_dir = Path(out_dir) if out_dir is not None else paths.RESEARCH_OUTPUT_DIR
+    edition = check_edition(game_id, edition or default_edition(game_id))
     sources = load_sources()
 
-    row = sources.game_row(game_id)
+    row = sources.game_row(game_id, edition=edition)
     schedule = sources.schedule_row(game_id)
-    result, _gaps = replay(game_id, row, schedule)
-    verdict = verdict_from_row(row, result.margin_draws, schedule)
+    result, _gaps = replay(game_id, row, schedule, edition=edition)
+    verdict = verdict_from_row(
+        row,
+        result.margin_draws,
+        schedule,
+        edition=edition,
+        counterpart=counterpart_verdict(sources, game_id, edition, schedule),
+    )
 
-    ledger = sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
-    rows = prepare_rows(ledger, verdict, kick_distances(game_id), kicker_names(game_id))
+    # Strict reads the shipped ledger artifact, which is the committed record of
+    # v1.3's rows. Full has no shipped ledger and takes the rows from the replay
+    # that was just checked against its summary — the same coins the histogram
+    # above them is drawn from, which is the rule this module opens with.
+    ledger = (
+        result.ledger.to_frame()
+        if edition == "full"
+        else sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
+    )
+    rows = prepare_rows(
+        ledger,
+        verdict,
+        kick_distances(game_id),
+        kicker_names(game_id),
+        passer_names(game_id),
+        receiver_names(game_id),
+        expected_intervals(result),
+    )
     colours = pair_colors(verdict.home_team, verdict.away_team)
     sides = (verdict.home_team, verdict.away_team)
     logos = {team: team_logo(team) for team in sides}
@@ -467,6 +749,7 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
             finalize(
                 fig,
                 out_dir / figure_filename(verdict, suffix),
+                edition=edition,
                 # The card's square shape is the point of it, and `tight` would
                 # crop it to whatever its content happened to fill.
                 bbox_inches=None if suffix in ("card", "luck_ledger") else "tight",
@@ -480,5 +763,7 @@ def render_game(game_id: str, out_dir: Path | None = None, *, article: bool = Fa
             verdict, colors=colours, logos=logos, coverage=True, **DTW_FIGURE
         )
         attach_overtime_sidebar(fig, ax, verdict, toss)
-        written.append(finalize(fig, out_dir / figure_filename(verdict, ARTICLE_SUFFIX)))
+        written.append(
+            finalize(fig, out_dir / figure_filename(verdict, ARTICLE_SUFFIX), edition=edition)
+        )
     return written
