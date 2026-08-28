@@ -25,6 +25,7 @@ so a game with no luck events returns its own result exactly.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -38,8 +39,22 @@ from nfl_simulator.components import (
     fg_attempt_mask,
     xp_attempt_mask,
 )
+from nfl_simulator.dropped_picks import (
+    FIRST_CHARTED_SEASON,
+    DroppedPickModel,
+    event_class_for,
+    worthy_throw_frame,
+)
 from nfl_simulator.fg_model import FieldGoalModel, Weather, sanitize_weather
 from nfl_simulator.ledger import Ledger, LedgerEntry
+from nfl_simulator.receiver_drops import (
+    FIRST_CHARTED_SEASON as RECEIVER_FIRST_CHARTED_SEASON,
+)
+from nfl_simulator.receiver_drops import (
+    ReceiverDropModel,
+    catchable_target_frame,
+)
+from nfl_simulator.receiver_drops import event_class_for as receiver_event_class_for
 
 DEFAULT_POSTERIOR_DRAWS = 400
 
@@ -83,6 +98,14 @@ class LuckEvent:
         )
 
 
+# The two editions ruling R-4 named (document 58 §2), mapped to the public name
+# each carries on a figure. `"strict+dp"` and `"strict+rd"` are deliberately
+# absent: they are audit arms, and `SimulationResult.edition` returns `None` for
+# them so nothing can render an arm the maintainer never named.
+PUBLIC_EDITIONS = {"strict": "Strict", "full": "Full"}
+EDITIONS = tuple(PUBLIC_EDITIONS)
+
+
 @dataclass(frozen=True)
 class SimulationResult:
     game_id: str
@@ -102,6 +125,21 @@ class SimulationResult:
     # second one.
     home_point_draws: np.ndarray | None = None
     away_point_draws: np.ndarray | None = None
+    # Which adjudication produced these numbers. `"strict"` is v1.3's ledger,
+    # renamed by ruling R-4 (document 58 §2); `"full"` is the other edition —
+    # at least one dropped-pick row (document 49 §5) *and* at least one
+    # receiver-drop row (document 56 §2), the two directions amendment A-3
+    # clause 3 admits together or not at all. `"strict+dp"` and `"strict+rd"`
+    # are the audit-only arms: callable, but they have no public name and never
+    # render. The label describes the ledger, not the code path — a 2022+ game
+    # whose charting held no interceptable throw and no catchable ball is
+    # `"strict"`, because its numbers are.
+    variant: str = "strict"
+
+    @property
+    def edition(self) -> str | None:
+        """The public name of this adjudication, or ``None`` for an audit arm."""
+        return PUBLIC_EDITIONS.get(self.variant)
 
 
 def points_per_epa(games: pl.DataFrame) -> float:
@@ -312,6 +350,127 @@ def extra_point_events(
     return events
 
 
+def dropped_pick_events(
+    plays: pl.DataFrame,
+    ftn: pl.DataFrame | None,
+    model: DroppedPickModel | None,
+    n_draws: int,
+    rng: np.random.Generator,
+) -> list[LuckEvent]:
+    """The **variant** component: interceptable throws, at the defence's rate.
+
+    Document 49, and nothing about it is v1.3. It fires only when a caller hands
+    in both a fitted model and a charting frame, which is why every v1.3 number
+    in the repo is reproduced by this function returning an empty list.
+
+    The branch is **escape**, and the offence is charged: ``actual`` is 1 when
+    the throw got away, ``expected`` is the posterior probability that it would,
+    and ``swing`` is what escaping was worth against being picked. Signs follow
+    `fumble_events` exactly — ``actual`` is the good branch for the charged team,
+    ``swing`` is its EPA value times the home sign — so a positive ``luck_epa``
+    still means good fortune for the home team no matter who threw the ball.
+
+    Coverage is a warning, never an error (document 49 §6, V-4). A pre-2022 game
+    asked for the variant gets v1.3, because FTN charting does not reach it; a
+    2022+ game whose charting has no worthy throws gets v1.3 too, because there
+    was nothing interceptable to adjudicate.
+    """
+    if model is None or ftn is None:
+        return []
+
+    season = int(plays["season"][0])
+    if season < FIRST_CHARTED_SEASON:
+        warnings.warn(
+            f"{plays['game_id'][0]} is a {season} game and FTN charting starts in "
+            f"{FIRST_CHARTED_SEASON}; the dropped-pick variant cannot be built for it "
+            "and the v1.3 adjudication is returned unchanged.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return []
+
+    events = []
+    for row in worthy_throw_frame(plays, ftn).iter_rows(named=True):
+        catch = model.catch_probability(row["defence_season"], row)
+        home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
+        swing = abs(model.swing_for(row["yardline_100"], row["down"]))
+        events.append(
+            LuckEvent(
+                play_id=float(row["play_id"]),
+                component="dropped_pick",
+                event_class=event_class_for(row["yardline_100"], row["down"]),
+                charged_team=row["posteam"],
+                # The escape branch. `1 - catch` rather than a second model
+                # call, so the two branches cannot drift apart by a draw.
+                actual=0.0 if row["interception"] else 1.0,
+                expected_draws=_resample(1.0 - catch, n_draws, rng),
+                swing=swing * home_sign,
+            )
+        )
+    return events
+
+
+def receiver_drop_events(
+    plays: pl.DataFrame,
+    ftn: pl.DataFrame | None,
+    model: ReceiverDropModel | None,
+    n_draws: int,
+    rng: np.random.Generator,
+) -> list[LuckEvent]:
+    """The **variant** component: catchable targets, at the receiving corps' rate.
+
+    Document 56, the other direction of amendment A-3's hands-on-the-ball class,
+    and nothing about it is v1.3. It fires only when a caller hands in both a
+    fitted model and a charting frame.
+
+    The branch is **the catch**, and the offence is charged: ``actual`` is 1 when
+    the ball was caught, ``expected`` is the posterior probability that it would
+    be, and ``swing`` is what catching it was worth against the incompletion —
+    priced from this play's own completion counterfactual where nflfastR supplies
+    one. Signs follow `fumble_events` exactly, so a positive ``luck_epa`` still
+    means good fortune for the home team no matter who was throwing.
+
+    Note the asymmetry with `dropped_pick_events`, which is the honest outcome of
+    amendment A-3 clause 2 rather than a defect: a drop is a 1-in-20 event, so a
+    dropped ball books close to a whole swing of bad fortune and a routine catch
+    books a twentieth of one the other way.
+
+    Coverage is a warning, never an error (document 56 §2's V-4). A pre-2022 game
+    asked for the variant gets v1.3, because FTN charting does not reach it.
+    """
+    if model is None or ftn is None:
+        return []
+
+    season = int(plays["season"][0])
+    if season < RECEIVER_FIRST_CHARTED_SEASON:
+        warnings.warn(
+            f"{plays['game_id'][0]} is a {season} game and FTN charting starts in "
+            f"{RECEIVER_FIRST_CHARTED_SEASON}; the receiver-drop variant cannot be "
+            "built for it and the v1.3 adjudication is returned unchanged.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return []
+
+    events = []
+    for row in catchable_target_frame(plays, ftn).iter_rows(named=True):
+        catch = model.catch_probability(row["entity_season"], row)
+        home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
+        swing = abs(model.swing_for_play(row))
+        events.append(
+            LuckEvent(
+                play_id=float(row["play_id"]),
+                component="receiver_drop",
+                event_class=receiver_event_class_for(row["yardline_100"], row["down"]),
+                charged_team=row["posteam"],
+                actual=0.0 if row["is_drop"] else 1.0,
+                expected_draws=_resample(catch, n_draws, rng),
+                swing=swing * home_sign,
+            )
+        )
+    return events
+
+
 def _resample(draws: np.ndarray, n_draws: int, rng: np.random.Generator) -> np.ndarray:
     """Match a posterior to the bootstrap's draw count.
 
@@ -456,12 +615,16 @@ def simulate_game(
     fg_model: FieldGoalModel | None,
     points_per_epa: float,
     xp_baseline: ExtraPointBaseline | None = None,
+    dropped_pick_model: DroppedPickModel | None = None,
+    receiver_drop_model: ReceiverDropModel | None = None,
+    ftn: pl.DataFrame | None = None,
     n_posterior_draws: int = DEFAULT_POSTERIOR_DRAWS,
     n_coin_draws: int = DEFAULT_COIN_DRAWS,
     seed: int = DEFAULT_SEED,
     include_blocked: bool = False,
     home_points: float | None = None,
     away_points: float | None = None,
+    edition: str | None = None,
 ) -> SimulationResult:
     """Deserve-to-win for one game.
 
@@ -472,7 +635,17 @@ def simulate_game(
     optional because the adjudication does not need them: the margin is what
     the simulator decides. Given them, the result also carries each team's
     deserved points, split out of the same replay the margin came from.
+    `edition` is a switch over the model handles, not a second code path. A
+    caller holding both fitted models — `render._simulation_context` does —
+    asks for `"strict"` to get v1.3 without dropping them, and for `"full"` to
+    use both. Left `None`, whichever models were passed are used, which is how
+    the audit arms `"strict+dp"` and `"strict+rd"` stay reachable.
     """
+    if edition is not None and edition not in EDITIONS:
+        raise ValueError(f"unknown edition {edition!r}; the editions are {list(EDITIONS)}")
+    if edition == "strict":
+        dropped_pick_model = None
+        receiver_drop_model = None
     if plays.is_empty():
         raise ValueError("cannot simulate a game with no plays")
 
@@ -502,6 +675,21 @@ def simulate_game(
     events += extra_point_events(
         plays, xp_baseline, fg_model, n_posterior_draws, rng, include_blocked=include_blocked
     )
+    # Last, and after the shared random stream has been drawn from by every v1.3
+    # builder. Appending rather than interleaving is what keeps `None` byte-for-
+    # byte identical to v1.3: the draws the fumble and kicking coins consume do
+    # not move when the variant is switched on.
+    dropped_picks = dropped_pick_events(plays, ftn, dropped_pick_model, n_posterior_draws, rng)
+    events += dropped_picks
+    # And the receiver direction after that, for the same reason: appending keeps
+    # `+dp` byte-for-byte identical whether or not `+rd` is switched on, so the
+    # two variants can be read alone and together without one moving the other.
+    receiver_drops = receiver_drop_events(plays, ftn, receiver_drop_model, n_posterior_draws, rng)
+    events += receiver_drops
+    if dropped_picks and receiver_drops:
+        variant = "full"
+    else:
+        variant = "strict" + ("+dp" if dropped_picks else "") + ("+rd" if receiver_drops else "")
 
     ledger = Ledger(tuple(event.to_entry() for event in events))
     total_luck_epa = ledger.total_luck_epa()
@@ -523,6 +711,7 @@ def simulate_game(
             total_luck_epa=total_luck_epa,
             home_point_draws=np.full(1, float(home_points)) if has_score else None,
             away_point_draws=np.full(1, float(away_points)) if has_score else None,
+            variant=variant,
         )
 
     # One replay. `bootstrap_margins` is still the public arithmetic document 10
@@ -558,4 +747,5 @@ def simulate_game(
         total_luck_epa=total_luck_epa,
         home_point_draws=home_draws,
         away_point_draws=away_draws,
+        variant=variant,
     )

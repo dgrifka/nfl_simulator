@@ -9,7 +9,7 @@ arithmetic for the reader to finish.
 
 Branch `fix/figure-round-4`, four commits, one per part, plus this record.
 Handoff: `handoff-2026-08-27-figures-r4.md`. Log:
-`log-2026-08-27-figures-r4.md`. Results: `results-2026-08-27-exp5.md`.
+`log-2026-08-27-figures-r4.md`. Results: `results-2026-08-27-exp5-figures.md`.
 
 ---
 
@@ -211,7 +211,7 @@ the maintainer's decision, not settled by the round.
 
 the maintainer's decisions in a Fable 5 chat after reading this document and the round-4
 PNGs. Handoff: `handoff-2026-08-27-figures-r5.md`. Results:
-`results-2026-08-27-exp6.md`. One commit for the figure, one for this record.
+`results-2026-08-27-exp6-figures.md`. One commit for the figure, one for this record.
 Nothing is fitted, no published number moves, and the five example games still
 replay at **0.00e+00**.
 
