@@ -355,3 +355,146 @@ def test_a_missing_trace_leaves_its_edition_handle_none_rather_than_failing():
 
     handles = edition_handles(None, None)
     assert handles["full"] == {"dropped_pick_model": None, "receiver_drop_model": None}
+
+
+# --------------------------------------------------------------------------
+# a summary and a replay per edition — figure round 6, part A
+# --------------------------------------------------------------------------
+
+
+def summary_frame(rows: list[dict]) -> pl.DataFrame:
+    """A `dtw_games_*.parquet`-shaped frame, at whatever numbers a test needs.
+
+    No rows is the shape a checkout that never ran the Full pass actually holds
+    — `render._empty_summary` — rather than a frame with no columns at all,
+    which nothing on disk can produce."""
+    from nfl_simulator.render import _empty_summary
+
+    return pl.DataFrame(rows) if rows else _empty_summary()
+
+
+def sources_with(strict: pl.DataFrame, full: pl.DataFrame):
+    """A `Sources` carrying two summaries and nothing else that touches disk."""
+    from nfl_simulator.render import Sources
+
+    empty = summary_frame([])
+    return Sources(
+        games=strict,
+        ledger=empty,
+        schedule=empty,
+        overtime=empty,
+        slope=PPE,
+        full=full,
+    )
+
+
+STRICT_ROW = {
+    "game_id": "2025_17_DET_MIN",
+    "home_team": "MIN",
+    "away_team": "DET",
+    "actual_margin": 13.0,
+    "deserved_margin": 1.2,
+    "dtw_home": 0.55,
+    "dtw_low": 0.50,
+    "dtw_high": 0.61,
+}
+FULL_ROW = {
+    **STRICT_ROW,
+    "deserved_margin": 3.4,
+    "dtw_home": 0.63,
+    "dtw_low": 0.57,
+    "dtw_high": 0.70,
+}
+
+
+def test_the_default_edition_is_full_from_the_first_charted_season_and_strict_before_it():
+    """FTN charting starts in 2022; before it there is only one adjudication."""
+    from nfl_simulator.render import default_edition
+
+    assert default_edition("2022_13_WAS_NYG") == "full"
+    assert default_edition("2025_17_DET_MIN") == "full"
+    assert default_edition("2018_05_GB_DET") == "strict"
+    assert default_edition("2016_14_NYJ_SF") == "strict"
+
+
+def test_a_pre_charting_game_asked_for_full_is_refused_before_anything_is_simulated():
+    """The error names the season and the reason, and it costs no simulation.
+
+    `replay` would otherwise load the play-by-play and both traces before
+    discovering that the game predates the charting the Full edition is built
+    from — and would then return a Strict ledger under a Full headline, because
+    both variant builders warn and return an empty list on a pre-2022 game."""
+    from nfl_simulator.render import replay
+
+    with pytest.raises(ValueError, match="2018.*charting"):
+        replay("2018_05_GB_DET", STRICT_ROW, edition="full")
+
+
+def test_an_edition_nobody_named_is_refused(game):
+    from nfl_simulator.render import replay
+
+    with pytest.raises(ValueError, match="deluxe"):
+        replay("2025_17_DET_MIN", STRICT_ROW, edition="deluxe")
+
+
+def test_each_edition_reads_its_own_summary():
+    """A Full render must not check itself against Strict's published numbers."""
+    sources = sources_with(summary_frame([STRICT_ROW]), summary_frame([FULL_ROW]))
+    assert sources.game_row("2025_17_DET_MIN")["dtw_home"] == 0.55
+    assert sources.game_row("2025_17_DET_MIN", edition="strict")["dtw_home"] == 0.55
+    assert sources.game_row("2025_17_DET_MIN", edition="full")["dtw_home"] == 0.63
+
+
+def test_a_game_missing_from_the_full_summary_names_the_artifact_to_build():
+    """A checkout that has not run the Full pass says so, rather than falling
+    back to Strict's numbers under a Full stamp."""
+    from nfl_simulator.render import FULL_ARTIFACT
+
+    sources = sources_with(summary_frame([STRICT_ROW]), summary_frame([]))
+    with pytest.raises(SystemExit, match=FULL_ARTIFACT):
+        sources.game_row("2025_17_DET_MIN", edition="full")
+
+
+def test_the_replay_gaps_are_measured_against_the_row_it_was_handed():
+    """The four numbers a redrawn distribution has to land on, and no others."""
+    from nfl_simulator.ledger import Ledger
+    from nfl_simulator.render import replay_gaps
+    from nfl_simulator.simulator import SimulationResult
+
+    result = SimulationResult(
+        game_id="2025_17_DET_MIN",
+        actual_margin=13.0,
+        deserved_margin=3.4,
+        dtw_home=0.63,
+        dtw_interval=(0.57, 0.70),
+        margin_draws=np.zeros(4),
+        ledger=Ledger(()),
+        total_luck_epa=0.0,
+        variant="full",
+    )
+    assert max(replay_gaps(result, FULL_ROW).values()) == 0.0
+    gaps = replay_gaps(result, STRICT_ROW)
+    assert set(gaps) == {"deserved_margin", "dtw_home", "dtw_low", "dtw_high"}
+    assert gaps["dtw_home"] == pytest.approx(0.08)
+
+
+def test_the_simulation_context_loads_the_columns_both_variant_models_price_on():
+    """A Full replay reads covariates v1.3 never needed.
+
+    `44_read_side_fix.SIM_COLUMNS` is the v1.3 frame, and the two
+    hands-on-the-ball models price on columns that are not in it. Loading the
+    narrow frame and asking for Full would raise deep inside a model rather
+    than at the edge — or worse, price a null the frame simply never fetched.
+    Document 49 §6's V-1 proved the wide frame inert on Strict, which is what
+    makes loading it unconditionally safe."""
+    from nfl_simulator.dropped_picks import PBP_COVARIATE_COLUMNS as DROPPED_PICK_COLUMNS
+    from nfl_simulator.receiver_drops import PBP_COVARIATE_COLUMNS as RECEIVER_COLUMNS
+    from nfl_simulator.receiver_drops import PBP_SWING_COLUMNS
+    from nfl_simulator.render import simulation_columns
+
+    columns = simulation_columns()
+    assert len(columns) == len(set(columns)), "a duplicated column is a wasted read"
+    for needed in (DROPPED_PICK_COLUMNS, RECEIVER_COLUMNS, PBP_SWING_COLUMNS, ["defteam"]):
+        assert set(needed) <= set(columns)
+    # And v1.3's own frame is still all there: Strict must not lose a column.
+    assert {"game_id", "play_id", "kicker_player_name", "extra_point_result"} <= set(columns)
