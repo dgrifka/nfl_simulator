@@ -204,3 +204,148 @@ The logo, the `@[TBD]` handle, the merge to `main`, the community write-up, and
 rendering all 2,761 games. D-5 (the article figure's trailing space) and the new
 D-6 stay open and disclosed. The anchor-colour step in §D is offered for
 the maintainer's decision, not settled by the round.
+
+---
+
+## Round 5 — the margin plot returns, with a "wins by" axis (2026-08-27)
+
+the maintainer's decisions in a Fable 5 chat after reading this document and the round-4
+PNGs. Handoff: `handoff-2026-08-27-figures-r5.md`. Results:
+`results-2026-08-27-exp6.md`. One commit for the figure, one for this record.
+Nothing is fitted, no published number moves, and the five example games still
+replay at **0.00e+00**.
+
+### R5-A. The team-points share image is withdrawn
+
+**Decision.** §B's swap is reversed. The `dtw` share image is the margin
+distribution again; `plot_team_points_distribution` and
+`simulator.team_point_draws` stay in the module and stay tested, and nothing
+renders them. `render.TEAM_POINTS_FIGURE` is removed rather than left unused —
+a live constant naming a figure the product does not draw is an invitation to
+re-wire it by accident. Their docstrings now say why in one sentence.
+
+**Why.** Per-team "deserved points" assigns a whole margin swing to one team's
+score column, which is not what the ledger measures. §B disclosed the
+consequence honestly — "Green Bay's four missed field goals put its deserved
+points near 44 against an actual 23" — and printed it: `Most likely: GB 44 –
+DET 35`. The arithmetic is right; the sentence it makes is not one the product
+is entitled to say. D-6, which was a defect of *that* figure's second subtitle
+line, is closed as moot.
+
+### R5-B. The axis is read, not computed
+
+**Decision, in five parts.**
+
+* **Unsigned ticks.** `25 20 15 10 5 0 5 10`. The tick *positions* are still the
+  signed margins — a rule at −8.28 lands where it always did — and only the
+  printing changes.
+* **No axis title.** `final margin (DET − GB)` was a subtraction the reader had
+  to perform before `−15` meant anything. In its place, two direction labels
+  flank zero under the axis: `← GB wins by` in Green Bay's colour, `DET wins by
+  →` in Detroit's.
+* **Both halves tinted and named**, reusing the waterfall's `_draw_side_tints`:
+  `GB wins` with the club's mark in the top-left corner, `DET wins` in the
+  top-right. A degenerate game gets both, and the empty half is the finding.
+* **The rule labels name a team**, reusing the waterfall's `anchor_label`:
+  `Actual: DET by 8`, `Deserved: GB by 8.3`, `Deserved: even` on a dead-level
+  game.
+* **The legend row is gone.** The tints and the corner labels name the same two
+  clubs, and the legend named them a second time — in the row the two direction
+  labels now occupy.
+
+The luck arrow, the callout, the pill, the caveat and the overtime footer are
+untouched. `BRAND_HANDLE`, the three-point bins and the four `SUFFIXES` are
+unchanged.
+
+**What a fan sees differently.** On `2018_05_GB_DET`: the left half of the axis
+is faintly green under `GB wins`, the right faintly blue under `DET wins`, the
+ticks count outward from zero in both directions, and the two rules read
+`Deserved: GB by 8.3` and `Actual: DET by 8`. Nobody has to know which team the
+margin was subtracted from.
+
+### R5-C. The coverage sentence is article-only
+
+**Decision.** The share `dtw` prints `The 89% interval on GB's share runs
+92–96%.` and stops. The article figure keeps document 10's second sentence.
+`GameVerdict.interval_note` gained a `coverage` switch and the two call sites in
+`render_game` pass it explicitly, so the one difference between the share image
+and the article figure is visible at both.
+
+**Why.** This is §A's reasoning, applied to the figure the margin plot came back
+to. §A took the coverage stamp off the card because a second percentage beside
+the share reads as a competing answer; round 4 could leave the sentence on "the
+distribution" because the distribution was then article-only. It is not any
+more, so the rule follows the figure rather than the filename.
+
+**Interpretation flagged.** The handoff's phrase was "the coverage sentence
+stays article-only", which is a change on the share image rather than a
+preservation — the withdrawn team-points figure was printing it. Read as §A's
+rule; one keyword to reverse if the maintainer meant the other thing.
+
+### R5-D. Three defects found by opening the PNGs
+
+Each is closed with a test written first.
+
+1. **A rule printed through a corner label.** The rules run the full height of
+   the plot and cross the band the corner labels sit in: on `2018_05_GB_DET` the
+   solid actual rule at +8 struck `DET wins` through, and on `2021_14_LV_KC` the
+   rule at +39 struck `KC wins`. Closed with D-4's own device — the corner
+   labels are backed in the module's cream on this figure. `_draw_side_tints`
+   takes a `shield` flag rather than shielding unconditionally: the waterfall's
+   corner band has nothing crossing it, and its figures are unchanged.
+2. **A rule label stopped a pixel short of a corner label.** On
+   `2025_17_DET_MIN`, `Actual: MIN by 13` flipped to the left of its rule and
+   its box edge landed against the M of `MIN wins`, which reads as a clipped
+   letter. The rule labels now keep an 8-point clearance rather than merely not
+   overlapping. A label that cannot clear a corner on either side of its own
+   rule is lifted above the top spine, where `_lift_colliding_label` already
+   sends a label with nowhere else to be — which is what `Actual: DET by 8` and
+   `Actual: KC by 39` do.
+3. **The two direction labels printed through each other.** Both are anchored to
+   zero. On `2021_14_LV_KC` every margin is one side's, so zero is pinned hard
+   against the frame's left edge, and the clamp that saved `← LV wins by` from
+   the y axis walked it into `KC wins by →`. The right-hand label is now pushed
+   clear of the left-hand one.
+
+### R5-E. What is on disk
+
+Twenty-two PNGs in `research/outputs/` (gitignored), the same twenty-two
+filenames round 4 wrote — one of them is a different figure again.
+
+| Game | Distribution files opened and read |
+|---|---|
+| `2018_05_GB_DET` | `GB_DET_23-31--95-5_dtw.png` |
+| `2021_14_LV_KC` | `LV_KC_9-48--0-100_dtw.png` |
+| `2025_17_DET_MIN` | `DET_MIN_10-23--45-55_dtw.png` |
+| `2016_14_NYJ_SF` | `NYJ_SF_23-17--36-64_{dtw,dtw_article}.png` |
+| `2025_13_DEN_WAS` | `DEN_WAS_27-26--86-14_{dtw,dtw_article}.png` |
+
+Also opened, to confirm the untouched figures did not move: two waterfalls
+(`GB_DET`, `LV_KC` — `_draw_side_tints` is theirs) and one card (`DET_MIN`).
+
+### R5-F. Verification
+
+* `uv run pytest` — **592 passed**, from 570 at round 4's head.
+* `uv run ruff check .` and `ruff format --check .` — clean.
+* `research/58_brand_figures.py` — replay `max |Δ vs committed|` **0.00e+00** on
+  every one of the five games, before and after the figure commit.
+
+### R5-G. The register after this round
+
+* **D-4** — closed in round 4, unchanged.
+* **D-5** — the article figure's trailing space under a short plot. Still open,
+  still disclosed, still cosmetic. `DEN_WAS_27-26--86-14_dtw_article.png` shows
+  it.
+* **D-6** — **closed as moot.** It was a defect of the team-points figure's
+  second subtitle line, and that figure is no longer drawn.
+* **New, not a defect but worth the maintainer's eye:** the two figures now read their
+  axes differently. The distribution has unsigned ticks and two direction
+  labels; the waterfall still has signed ticks and `final margin (DET − GB)`.
+  The round scoped the change to the share and article distributions, so this is
+  raised rather than fixed.
+
+### R5-H. What this round did not do
+
+The anchor-colour step in §D stays as shipped, by decision. The logo, the
+`@[TBD]` handle, the merge to `main`, the community write-up, and rendering all
+2,761 games are all still outstanding.

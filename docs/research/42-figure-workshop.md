@@ -338,7 +338,16 @@ waterfall's height changes with its row count), so a seven-paragraph panel is
 taller than a 4-inch distribution.
 
 **D-6 — the most-likely scoreline can read as a tie on a game the product
-calls (open, disclosed, round 4).** The share image's second subtitle line is
+calls (closed as moot, round 5).** Round 5 withdrew the team-points share image
+— a margin swing is not a per-team points swing — and this defect was a defect
+of that figure's second subtitle line. Nothing draws the most-likely scoreline
+any more, so there is nothing left to fix or to disclose. The reasoning below is
+kept because it is the measurement, not the verdict: the modal *joint* bin pair
+agreed with the marginal modes on all five example games, so the tie was the
+three-point bin meeting a one-point game rather than the estimator. Document 51
+§R5-A is the round's record.
+
+*Round 4's statement, for the record.* The share image's second subtitle line is
 each team's modal three-point bin, and on `2025_13_DEN_WAS` both modes land in
 the same 21-24 bin: `Most likely: DEN 23 - WAS 23` sits under a pill that says
 the scoreboard holds and a callout that says DEN deserved to win 86% of
@@ -350,6 +359,15 @@ overlap, and narrowing the bin would comb the histogram. the maintainer's call.
 
 **Open after round 4:** D-5 and D-6, both cosmetic-to-semantic. D-1, D-2, D-3
 and D-4 are closed above.
+
+**Open after round 5:** D-5 alone. D-6 is closed as moot above; D-1 through D-4
+were already closed. Round 5 found and closed three new layout defects in the
+same commit that introduced their cause, so none of them reached this register —
+they are recorded in document 51 §R5-D. One thing is raised and not fixed: the
+distribution now reads its axis unsigned with two direction labels while the
+waterfall still reads `final margin (DET − GB)` with signed ticks. That is a
+scope boundary, not a defect, and it is the maintainer's call whether the waterfall
+follows.
 
 **Closed in round 2:** the round-1 protan defect on `2016_14_NYJ_SF` (document
 41 §6, §8) — resolved by §3, from ΔE 5.2 to 36.5. Round 1's KC/SF finding is
