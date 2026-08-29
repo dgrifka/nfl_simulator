@@ -28,6 +28,7 @@ from matplotlib.patches import FancyArrowPatch  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from nfl_simulator.plots import (  # noqa: E402
+    ANCHOR_HEIGHT,
     ARROW_FLOOR_SHARE,
     BAND_HIGH,
     BAND_LOW,
@@ -4710,3 +4711,89 @@ def test_the_group_rows_keyword_names_the_frame_it_is_a_share_of():
     rows += [ledger_row(0.4, play_id=float(i), charged_team="GB") for i in (2, 3)]
     (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=10.0)
     assert grouped.label == "3 small events (GB)"
+
+
+# --------------------------------------------------------------------------
+# round 12 Part D: an anchor of zero shows a tick
+# --------------------------------------------------------------------------
+
+
+def _ticks(ax) -> list:
+    return [line for line in ax.lines if line.get_gid() == "anchor-tick"]
+
+
+def _anchor_bars(ax) -> list:
+    """The two end rows' bars, which are drawn at the anchors' own height."""
+    return [
+        patch
+        for patch in ax.patches
+        if abs(patch.get_height() - 0.62 * ANCHOR_HEIGHT) < 1e-9 and patch.get_gid() != "side-span"
+    ]
+
+
+def test_a_deserved_anchor_of_zero_shows_a_tick_and_no_bar():
+    """Document 63 §7d N2. `Deserved: even` left the anchor row as a label and a
+    club mark floating with nothing between them, on 19 of the 97 game-editions
+    read. A zero-width bar is nothing to draw, so the row gets a short tick of
+    the anchor colour at x = 0 instead — enough for the eye to find the row."""
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.0), deserved_margin=0.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    fig.canvas.draw()
+    (tick,) = _ticks(ax)
+    assert list(tick.get_xdata()) == [0.0, 0.0]
+    assert len(_anchor_bars(ax)) == 1, "only the actual end still has a bar"
+
+
+def test_the_zero_anchor_tick_is_two_points_of_the_anchor_colour():
+    """Two points wide, so it reads as a mark on the row rather than as a rule."""
+    from nfl_simulator.plots import ANCHOR_TICK_WIDTH, anchor_colour
+
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.0), deserved_margin=0.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE, colors=("#0076B6", "#203731"))
+    (tick,) = _ticks(ax)
+    assert ANCHOR_TICK_WIDTH == 2.0
+    assert tick.get_linewidth() == ANCHOR_TICK_WIDTH
+    assert tick.get_color() == anchor_colour("#0076B6", "#203731")
+
+
+def test_the_tick_stands_on_the_row_the_anchor_labels():
+    """It marks its own row, so it is the anchor bar's height and centred on it."""
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.0), deserved_margin=0.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    (tick,) = _ticks(ax)
+    low, high = sorted(tick.get_ydata())
+    assert high - low == pytest.approx(0.62 * ANCHOR_HEIGHT)
+    assert (low + high) / 2 == pytest.approx(len(luck_bars(rows, points_per_epa=PPE)) + 1)
+
+
+def test_an_actual_tie_shows_a_tick_on_the_actual_anchor():
+    """`2022_01_IND_HOU` is the other half of N2: the game itself was a tie, so
+    `Actual: even` is the row with nothing on it."""
+    rows = [ledger_row(-2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=0.0), deserved_margin=2.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert len(_ticks(ax)) == 1
+    assert len(_anchor_bars(ax)) == 1
+
+
+def test_a_game_level_at_both_ends_shows_two_ticks():
+    """A tie the adjudication also calls level has two empty anchor rows."""
+    rows = [ledger_row(1.0, play_id=1.0, charged_team="DET")]
+    rows += [ledger_row(-1.0, play_id=2.0, charged_team="GB")]
+    game = replace(verdict(actual_margin=0.0), deserved_margin=0.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert len(_ticks(ax)) == 2
+    assert not _anchor_bars(ax)
+
+
+def test_an_anchor_with_a_margin_still_draws_its_bar_and_no_tick():
+    """The control: the rule must not put a tick on the 3,880 games that have
+    two real anchors."""
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=8.0), deserved_margin=6.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert not _ticks(ax)
+    assert len(_anchor_bars(ax)) == 2

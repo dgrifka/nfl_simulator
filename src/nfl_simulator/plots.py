@@ -2461,6 +2461,12 @@ HOW_TO_READ = (
 )
 
 
+# How wide the tick on a zero anchor is drawn, in points. Two is a mark on a
+# row; anything thicker reads as a rule running down the plot, and the waterfall
+# already has one of those at x = 0.
+ANCHOR_TICK_WIDTH = 2.0
+
+
 def anchor_colour(home_colour: str, away_colour: str) -> str:
     """Ink for the two totals, stepping to the neutral when a club sits too near it.
 
@@ -2594,6 +2600,42 @@ def _draw_side_tints(
     return corners
 
 
+def _draw_anchor(ax, y: float, margin: float, colour: str) -> None:
+    """One end row: a bar from zero out to the margin, or a tick when it is zero.
+
+    Document 63 §7d N2. `Deserved: even` — and `Actual: even` on a tie — asks for
+    a bar of zero width, which draws nothing, and the row is then a label and a
+    club mark with empty plot between them. It happened on 19 of the 97
+    game-editions the round-11 tail read opened.
+
+    **A zero anchor draws no bar by design**: there is no distance to show, and
+    inventing a minimum-width bar would state a margin the game did not have. So
+    the row keeps its label and its mark and gains a short tick of the anchor
+    colour at x = 0, the height of the bar it stands in for, so the eye can find
+    the row's position on the axis.
+    """
+    if margin == 0.0:
+        half = 0.31 * ANCHOR_HEIGHT
+        (tick,) = ax.plot(
+            [0.0, 0.0],
+            [y - half, y + half],
+            color=colour,
+            linewidth=ANCHOR_TICK_WIDTH,
+            solid_capstyle="butt",
+            zorder=2,
+        )
+        tick.set_gid("anchor-tick")
+        return
+    ax.barh(
+        y,
+        abs(margin),
+        left=min(0.0, margin),
+        height=0.62 * ANCHOR_HEIGHT,
+        color=colour,
+        zorder=2,
+    )
+
+
 def plot_luck_ledger(
     verdict: GameVerdict,
     rows,
@@ -2677,14 +2719,7 @@ def plot_luck_ledger(
             spans = running_totals(bars, verdict.actual_margin)
             rows_y = np.arange(len(bars) + 2, dtype=float)
 
-            ax.barh(
-                rows_y[0],
-                abs(verdict.actual_margin),
-                left=min(0.0, verdict.actual_margin),
-                height=0.62 * ANCHOR_HEIGHT,
-                color=ends_colour,
-                zorder=2,
-            )
+            _draw_anchor(ax, rows_y[0], verdict.actual_margin, ends_colour)
             for y, bar, (begin, end) in zip(rows_y[1:-1], bars, spans, strict=True):
                 ax.barh(
                     y,
@@ -2740,14 +2775,7 @@ def plot_luck_ledger(
                     ),
                     zorder=5,
                 )
-            ax.barh(
-                rows_y[-1],
-                abs(verdict.deserved_margin),
-                left=min(0.0, verdict.deserved_margin),
-                height=0.62 * ANCHOR_HEIGHT,
-                color=ends_colour,
-                zorder=2,
-            )
+            _draw_anchor(ax, rows_y[-1], verdict.deserved_margin, ends_colour)
 
             # A club's mark at each end, so the two totals are read as "this
             # team's game" without having to parse a sign. The actual end wears

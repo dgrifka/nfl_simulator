@@ -316,3 +316,23 @@ their costs are visible too.
   floor at all.
 - **And a row exactly at the floor is still about two pixels**, by arithmetic —
   `2023_01_DAL_NYG` full has two of them. That is inherent to any floor.
+
+## 8. Parked after round 12 (2026-08-29)
+
+Raised by the round-11 tail read (§7d), decided in the round-12 brainstorm, and
+**not acted on**. Parked is not rejected: either is a legitimate answer to "what
+else could we try" in a later round.
+
+- **N3 — two dark clubs give two identical side tints.** NYJ green against PIT
+  black, HOU navy against NYJ black: both `X wins` half-plane washes come out the
+  same pale grey, on `2022_04_NYJ_PIT`, `2022_05_HOU_JAX`, `2018_15_HOU_NYJ` and
+  `2021_16_PIT_KC`. Side identity rests on the corner labels and the club marks,
+  which are present on every figure, so colour is not the only encoding.
+  Severity cosmetic.
+- **N4 — a same-hue matchup collapses the whole colour system.** KC bright red
+  against SF dark red, DET light blue against LA dark blue: bars, legend
+  swatches, both side tints and the `wins by` key read as one hue family, on
+  `2022_07_KC_SF`, `2025_15_DET_LA` and `2025_19_LA_CAR`. `teams.resolve_pair`
+  separates the two **bar** colours and does not touch the tints or the key, so
+  the fix is a rule about the tints rather than about the pair. Severity
+  cosmetic.
