@@ -1593,12 +1593,33 @@ FOLD_BY_TEAM = (*VARIANT_COMPONENTS, POSSESSION_CAP)
 # Round 11 makes it relative, because an absolute floor cannot mean one thing.
 # 0.05 pt is a bar a reader can see on a three-point game and no bar at all on a
 # fifty-point blowout, and the absolute floor left 270 rows across the corpus
-# still drawing nothing. Half a percent of the axis's span is 0.015 pt on the
-# first game and 0.25 pt on the second, so "visible" means the same thing on
-# both. The span comes from :func:`waterfall_span` — the three numbers the axis
-# is built on, fixed before any fold, so the floor cannot depend on what the
-# floor did.
+# still drawing nothing. Half a percent of the axis is 0.015 pt on the first
+# game and 0.25 pt on the second, so "visible" means the same thing on both.
+#
+# **Round 12: the base is the drawn frame, not the span.** Document 63 §7d N5.
+# The span is `max(0, actual, deserved) − min(0, actual, deserved)`, but the
+# frame the reader sees adds a pad at both ends and a lane for the arrow rail
+# and reaches every running total, so it is at least 1.58x the span and on
+# `2023_02_WAS_DEN` is 6x. A floor taken on the span was never more than 0.32%
+# of the axis, and on a narrow game far less. See :func:`waterfall_frame` and
+# :func:`fold_to_frame`; document 60 §12 carries the dated amendment.
 DRAW_FLOOR_SHARE = 0.005
+
+# The frame the waterfall draws, as shares of the width its bars occupy. Named
+# here rather than written inline in `plot_luck_ledger` because the floor is now
+# measured on this frame, so two places have to agree on it exactly.
+FRAME_PAD_SHARE = 0.20
+FRAME_PAD_SHARE_PLAIN = 0.12
+FRAME_PAD_MIN = 0.5
+FRAME_RAIL_SHARE = 0.18
+FRAME_RAIL_MIN = 0.8
+
+# How many times the frame may be re-measured before the fold is accepted as it
+# stands. The pass is a fixed point — measure the frame, fold to it, measure
+# again — and on 450 games sampled across both editions it settled in at most
+# three passes and never cycled. The cap is here so a game that did cycle would
+# stop rather than spin; Part E counts the games that reach it.
+FRAME_PASSES = 8
 
 # The ledger's fumble classes are `{play type}/{live|aborted}`, which is the
 # simulator's vocabulary rather than a reader's. "aborted" is nflverse's word
@@ -1989,11 +2010,84 @@ def waterfall_span(verdict: GameVerdict) -> float:
     return max(ends) - min(ends)
 
 
+def waterfall_frame(
+    verdict: GameVerdict, bars: Sequence[LuckBar], *, logos: bool = True
+) -> tuple[float, float, float, float]:
+    """``(low, high, pad, rail_room)`` — the frame this bar list would be drawn in.
+
+    The axis runs from ``low - pad`` to ``high + pad + rail_room``, which is
+    exactly what :func:`plot_luck_ledger` passes to ``set_xlim``. Both call this,
+    so the floor and the drawn frame cannot disagree by a rounding.
+
+    ``low`` and ``high`` reach further than :func:`waterfall_span`'s three
+    numbers: the running totals walk from the actual margin to the deserved one
+    and can swing outside both on the way. That is the whole of document 63
+    §7d's N5 — the span the floor was taken on was not the axis the reader saw.
+    """
+    spans = running_totals(bars, verdict.actual_margin)
+    xs = [0.0, float(verdict.actual_margin), float(verdict.deserved_margin)]
+    xs += [x for span in spans for x in span]
+    low, high = min(xs), max(xs)
+    # The end bars' club marks hang outside their own ends, so a game with logos
+    # needs more room at both edges than one without.
+    pad = max((FRAME_PAD_SHARE if logos else FRAME_PAD_SHARE_PLAIN) * (high - low), FRAME_PAD_MIN)
+    # The luck arrow runs down a rail outside the bars, and its label is rotated
+    # against that rail, so the frame reserves a lane for both.
+    rail_room = max(FRAME_RAIL_SHARE * (high - low), FRAME_RAIL_MIN)
+    return low, high, pad, rail_room
+
+
+def frame_width(verdict: GameVerdict, bars: Sequence[LuckBar], *, logos: bool = True) -> float:
+    """How wide that frame is, in points of margin — the axis the reader sees."""
+    low, high, pad, rail_room = waterfall_frame(verdict, bars, logos=logos)
+    return (high - low) + 2.0 * pad + rail_room
+
+
+def fold_to_frame(
+    verdict: GameVerdict,
+    bars: Sequence[LuckBar],
+    *,
+    logos: bool = True,
+    passes: int = FRAME_PASSES,
+) -> tuple[list[LuckBar], float]:
+    """Fold to a floor that is half a percent of the frame the fold is drawn in.
+
+    **Why this is a loop and not one pass.** The round was specified as two
+    passes — measure the frame from the unfolded bars, then fold to it — on the
+    premise that "the anchors and running totals are fixed by the sums, which
+    folding preserves". The sums are preserved; the *running totals* are not.
+    Folding replaces a tail of alternating sub-threshold steps with one heap per
+    club, and two heaps that cancel swing out and back through an excursion
+    wider than anything the unfolded tail reached. Measured over 450 sampled
+    game-editions, one pass left the floor measured on an axis more than 10%
+    away from the drawn one on **27 of them** — which is the pre-registered
+    check in Part E, missed by construction.
+
+    So the pass repeats until the frame stops moving. It is a fixed point, not a
+    convergence argument: when ``frame_width`` of the folded bars equals the
+    frame they were folded to, the floor the reader's axis implies and the floor
+    the fold used are the same number. On the same 450 that took one further
+    pass on 169 games, two on 2, and never more; ``passes`` caps it so a game
+    that did cycle stops with the last frame it measured rather than spinning.
+
+    Returns ``(folded bars, frame width)``.
+    """
+    frame = frame_width(verdict, bars, logos=logos)
+    folded = list(bars)
+    for _ in range(passes):
+        folded = group_rows(bars, frame=frame)
+        measured = frame_width(verdict, folded, logos=logos)
+        if measured == frame:
+            break
+        frame = measured
+    return folded, frame
+
+
 def group_rows(
     bars: Sequence[LuckBar],
     threshold: float = GROUP_THRESHOLD,
     *,
-    span: float = 0.0,
+    frame: float = 0.0,
 ) -> list[LuckBar]:
     """Fold the sub-threshold bars so a Full-edition waterfall stays a figure.
 
@@ -2014,13 +2108,16 @@ def group_rows(
     was. Split by charged team it is two rows, each with its club's mark.
 
     **And nothing draws an empty row.** A fold worth less than
-    :data:`DRAW_FLOOR_SHARE` of ``span`` is absorbed into its club's heap,
+    :data:`DRAW_FLOOR_SHARE` of ``frame`` is absorbed into its club's heap,
     because a bar with no width tells a reader nothing while still costing them
-    a row to read. ``span`` is the waterfall's own axis width — see
-    :func:`waterfall_span` — so the same fold is a visible bar on a three-point
-    game and an empty row on a fifty-point one, which is what round 11 changed:
-    an absolute floor left 270 rows across the corpus drawing nothing. A caller
-    with no axis to speak of passes no span, and then no fold meets a floor.
+    a row to read. ``frame`` is the width of the axis the figure ends at — see
+    :func:`waterfall_frame`, and :func:`fold_to_frame` for the pass that
+    supplies it — so the same fold is a visible bar on a three-point game and an
+    empty row on a fifty-point one, which is what round 11 changed: an absolute
+    floor left 270 rows across the corpus drawing nothing. Round 12 moved the
+    base from the span to the frame, because the two differ by a factor of
+    between 1.58 and 6. A caller with no axis to speak of passes no frame, and
+    then no fold meets a floor.
 
     **Round 11: a heap of one is the event.** A club whose remainder is a single
     event keeps that event under its own words whatever it is worth. `1 small
@@ -2034,7 +2131,7 @@ def group_rows(
     went into it, so the waterfall still reconciles its two ends whatever
     ``span`` is.
     """
-    floor = abs(span) * DRAW_FLOOR_SHARE
+    floor = abs(frame) * DRAW_FLOOR_SHARE
     # A row that is already a heap joins its club's heap whatever it is worth.
     # `luck_bars` folds under a tenth of a point and this folds under a point,
     # so a Full game arrives with a club's remainder in two pieces — and on
@@ -2526,10 +2623,15 @@ def plot_luck_ledger(
     # Chronological order is the game's story and grouping would break it: a
     # folded row has no place on a timeline. Every other reading is the
     # adjudication's, and there the fold is what keeps fifty events a figure.
+    frame_low = frame_high = frame_pad = frame_rail = None
     if not chronological:
         # The floor a row has to clear to be worth drawing is a share of this
-        # figure's own axis, so the figure is what supplies it.
-        bars = group_rows(bars, span=waterfall_span(verdict))
+        # figure's own axis, so the figure is what supplies it — and the frame
+        # the fold was measured on is the frame the figure is then drawn in.
+        bars, _frame = fold_to_frame(verdict, bars, logos=bool(logos))
+        frame_low, frame_high, frame_pad, frame_rail = waterfall_frame(
+            verdict, bars, logos=bool(logos)
+        )
     gap = verdict.deserved_margin - verdict.actual_margin
     drift = abs(sum(bar.points for bar in bars) - gap)
     if drift > 1e-6:
@@ -2709,15 +2811,12 @@ def plot_luck_ledger(
             # The outermost bar ends at the outermost x, and its value label sits
             # beyond that — without room reserved for it the label runs out of the
             # frame and lands on the row names.
-            xs = [0.0, verdict.actual_margin, verdict.deserved_margin]
-            xs += [x for span in spans for x in span]
-            low, high = min(xs), max(xs)
-            # The end bars' club marks hang outside their own ends, so a game
-            # with logos needs more room at both edges than one without.
-            pad = max((0.20 if logos else 0.12) * (high - low), 0.5)
-            # The luck arrow runs down a rail outside the bars, and its label is
-            # rotated against that rail, so the frame reserves a lane for both.
-            rail_room = max(0.18 * (high - low), 0.8)
+            # The frame the fold was measured on, re-used rather than recomputed:
+            # a chronological figure does not fold and measures its own here.
+            if frame_low is None:
+                low, high, pad, rail_room = waterfall_frame(verdict, bars, logos=bool(logos))
+            else:
+                low, high, pad, rail_room = frame_low, frame_high, frame_pad, frame_rail
             x_rail = high + pad * 0.9
             ax.set_xlim(low - pad, high + pad + rail_room)
             # `shield=True`, as the distribution passes. Document 60 §7 justified

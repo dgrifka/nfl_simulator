@@ -46,7 +46,7 @@ from nfl_simulator import paths  # noqa: E402
 from nfl_simulator.plots import (  # noqa: E402
     ARROW_FLOOR,
     DRAW_FLOOR_SHARE,
-    group_rows,
+    fold_to_frame,
     luck_bars,
     plot_luck_ledger,
     verdict_from_row,
@@ -231,10 +231,14 @@ def measure(task: tuple[str, str, str]) -> dict:
     )
     bars = luck_bars(rows, points_per_epa=sources.slope)
     span = waterfall_span(verdict)
-    floor = span * DRAW_FLOOR_SHARE
-    grouped = group_rows(bars, span=span)
-    colours = pair_colors(verdict.home_team, verdict.away_team)
-    logos = {team: team_logo(team) for team in (verdict.home_team, verdict.away_team)}
+    season = verdict.season
+    colours = pair_colors(verdict.home_team, verdict.away_team, season)
+    logos = {team: team_logo(team, season) for team in (verdict.home_team, verdict.away_team)}
+    # Round 12: the floor is a share of the drawn frame, and the frame is what
+    # the fold settles on — so the fold has to be run exactly as the figure runs
+    # it, `logos` included, or the number measured is not the number drawn.
+    grouped, frame = fold_to_frame(verdict, bars, logos=bool(logos))
+    floor = frame * DRAW_FLOOR_SHARE
 
     layout = _dtw_layout(verdict, colours, logos)
     layout |= _waterfall_layout(verdict, rows, sources.slope, colours, logos)

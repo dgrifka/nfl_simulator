@@ -3014,7 +3014,7 @@ def test_a_row_that_would_draw_nothing_joins_its_clubs_heap():
     # One event too small to draw, and two of its club's own to join.
     rows = [ledger_row(0.01 / PPE, play_id=1.0, charged_team="GB")]
     rows += [ledger_row(0.4, play_id=float(i), charged_team="GB") for i in (2, 3)]
-    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=10.0)
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=10.0)
     assert grouped.label == "3 small events (GB)"
     assert grouped.n_events == 3
 
@@ -3028,7 +3028,7 @@ def test_a_fold_worth_less_than_the_draw_floor_is_absorbed_too():
     # Two drops that cancel to a third of a tenth, and a fumble to absorb them.
     rows = [drop_row(0.5, 1.0, team="GB"), drop_row(-0.5 + 0.03 / PPE, 2.0, team="GB")]
     rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
-    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=10.0)
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=10.0)
     assert [bar.label for bar in grouped] == ["3 small events (GB)"]
     assert all(abs(bar.points) >= 0.05 for bar in grouped)
 
@@ -3068,7 +3068,7 @@ def test_a_fold_that_would_draw_nothing_on_a_fifty_point_axis_is_absorbed():
     # Two drops that cancel to a fifth of a point, and a fumble to absorb them.
     rows = [drop_row(1.0, 1.0, team="GB"), drop_row(-1.0 + 0.2 / PPE, 2.0, team="GB")]
     rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
-    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=50.0)
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=50.0)
     assert [bar.label for bar in grouped] == ["3 small events (GB)"]
     assert grouped[0].n_events == 3
 
@@ -3081,7 +3081,7 @@ def test_the_same_fold_keeps_its_own_row_on_a_ten_point_axis():
 
     rows = [drop_row(1.0, 1.0, team="GB"), drop_row(-1.0 + 0.2 / PPE, 2.0, team="GB")]
     rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
-    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=10.0)
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=10.0)
     assert "2 smaller GB drops" in [bar.label for bar in grouped]
 
 
@@ -3097,7 +3097,7 @@ def test_a_heap_of_one_is_the_event_whatever_it_is_worth():
     rows = [ledger_row(2.0, play_id=1.0, charged_team="KC")]
     rows += [ledger_row(-0.2 / PPE, play_id=2.0, charged_team="SEA")]
     bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
-    labels = [bar.label for bar in group_rows(bars, span=50.0)]
+    labels = [bar.label for bar in group_rows(bars, frame=50.0)]
     assert "1 small event (SEA)" not in labels
     assert labels[-1] == bars[-1].label
 
@@ -3113,7 +3113,7 @@ def test_the_lone_event_rule_wins_over_the_floor_on_jax_cle_s_seven_hundredths()
     rows = [ledger_row(4.0, play_id=1.0, charged_team="JAX")]
     rows += [ledger_row(0.07 / PPE, play_id=2.0, charged_team="CLE")]
     bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
-    labels = [bar.label for bar in group_rows(bars, span=15.0)]
+    labels = [bar.label for bar in group_rows(bars, frame=15.0)]
     assert labels[-1] == bars[-1].label
     assert not any("small event" in label for label in labels)
 
@@ -3127,7 +3127,7 @@ def test_a_club_heap_of_two_that_cancels_under_the_floor_is_kept_and_counted():
     rows = [ledger_row(3.0, play_id=1.0, charged_team="KC")]
     rows += [ledger_row(0.5, play_id=2.0, charged_team="SEA")]
     rows += [ledger_row(-0.5 + 0.02 / PPE, play_id=3.0, charged_team="SEA")]
-    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=50.0)
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=50.0)
     heap = next(bar for bar in grouped if bar.team == "SEA")
     assert heap.label == "2 small events (SEA)"
     assert heap.n_events == 2
@@ -3144,7 +3144,7 @@ def test_grouping_still_reconciles_whatever_the_axis_span_is():
     rows += [ledger_row(0.3, play_id=4.0), ledger_row(-0.9, play_id=5.0)]
     bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
     for span in (0.0, 3.0, 12.0, 50.0):
-        assert sum(bar.points for bar in group_rows(bars, span=span)) == pytest.approx(
+        assert sum(bar.points for bar in group_rows(bars, frame=span)) == pytest.approx(
             sum(bar.points for bar in bars), abs=1e-9
         )
 
@@ -4532,3 +4532,122 @@ def test_the_sentence_stays_centred_on_the_rail_when_it_reaches_no_corner():
     ticks = ax.get_yticks()
     rail = [ax.transData.transform((0.0, float(y)))[1] for y in (ticks[0], ticks[-1])]
     assert (box.y0 + box.y1) / 2 == pytest.approx(sum(rail) / 2, abs=1.0)
+
+
+# --------------------------------------------------------------------------
+# round 12 Part B: the draw floor is measured on the frame the reader sees
+# --------------------------------------------------------------------------
+
+
+def _mark() -> np.ndarray:
+    """A 4x4 opaque RGBA square, enough for the layout to place a club's mark."""
+    array = np.zeros((4, 4, 4), dtype=np.uint8)
+    array[:, :, 3] = 255
+    return array
+
+
+def _ledger_reaching(verdict_, bars_epa, team="DET"):
+    """Ledger rows whose bars carry the verdict from its actual to its deserved end."""
+    rows = [ledger_row(epa, play_id=float(i), charged_team=team) for i, epa in enumerate(bars_epa)]
+    moved = sum(-epa * PPE for epa in bars_epa)
+    return rows, replace(verdict_, deserved_margin=verdict_.actual_margin + moved)
+
+
+def test_the_frame_is_the_axis_the_waterfall_actually_draws():
+    """The frame is the span plus a pad at both ends plus the arrow's rail lane,
+    which is what `set_xlim` ends at. Reading it off a helper rather than off a
+    drawn figure is what lets the floor be measured before the fold."""
+    from nfl_simulator.plots import waterfall_frame
+
+    rows, game = _ledger_reaching(verdict(actual_margin=12.0), [0.5, -0.3, 0.2])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    low, high, pad, rail = waterfall_frame(game, bars, logos=True)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE, logos={"DET": _mark()})
+    drawn_low, drawn_high = ax.get_xlim()
+    assert (low - pad, high + pad + rail) == pytest.approx((drawn_low, drawn_high))
+
+
+def test_the_frame_is_wider_than_the_span_by_the_pad_and_the_rail():
+    """Document 63 §7d N5's arithmetic: `pad` is 20% of the drawn width at each
+    end and `rail_room` another 18%, so the frame is at least 1.58x the span. A
+    floor taken on the span is never more than 0.32% of what the reader sees."""
+    from nfl_simulator.plots import waterfall_frame, waterfall_span
+
+    rows, game = _ledger_reaching(verdict(actual_margin=2.0), [0.4, -0.2])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    low, high, pad, rail = waterfall_frame(game, bars, logos=True)
+    frame = (high - low) + 2 * pad + rail
+    assert frame >= 1.58 * waterfall_span(game)
+
+
+def test_the_floor_is_half_a_percent_of_the_axis_the_figure_ends_at():
+    """The pre-registered check, as a unit test: the floor the fold used and the
+    axis the reader sees are the same number, so their ratio is exactly
+    `DRAW_FLOOR_SHARE` rather than a share of some narrower quantity."""
+    from nfl_simulator.plots import DRAW_FLOOR_SHARE, fold_to_frame
+
+    rows, game = _ledger_reaching(verdict(actual_margin=12.0), [0.9, -0.4, 0.02, -0.01, 0.3])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    _folded, frame = fold_to_frame(game, bars, logos=True)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE, logos={"DET": _mark()})
+    drawn = float(np.diff(ax.get_xlim())[0])
+    assert frame == pytest.approx(drawn)
+    assert (frame * DRAW_FLOOR_SHARE) / drawn == pytest.approx(DRAW_FLOOR_SHARE)
+
+
+def test_a_narrow_game_gets_a_floor_the_span_alone_would_not_have_given_it():
+    """`2023_02_WAS_DEN` strict is the worked case: a 2.0-pt span put the floor
+    at 0.01 pt while the frame ran about 12 pt, so a -0.04-pt row cleared the
+    floor and drew one pixel. On the frame the same game's floor is 0.05 pt and
+    that row is folded."""
+    from nfl_simulator.plots import DRAW_FLOOR_SHARE, fold_to_frame, waterfall_span
+
+    rows, game = _ledger_reaching(verdict(actual_margin=2.0, dtw_home=0.6), [0.4, -0.2, 0.045])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    _folded, frame = fold_to_frame(game, bars, logos=True)
+    span_floor = waterfall_span(game) * DRAW_FLOOR_SHARE
+    # N5's arithmetic: pad at both ends plus the rail lane make the frame at
+    # least 1.58x the span, so the floor is at least 1.58x what the span gave.
+    assert frame * DRAW_FLOOR_SHARE >= 1.58 * span_floor
+
+
+def test_the_frame_pass_repeats_until_the_frame_stops_moving():
+    """Folding does **not** preserve the running totals' extremes: two club heaps
+    that cancel replace a tail of alternating steps with one step out and one
+    back, and that excursion can be wider than anything the unfolded bars
+    reached. A single pass would then measure the floor on a narrower axis than
+    the one drawn, so the pass repeats to a fixed point."""
+    from nfl_simulator.plots import fold_to_frame, waterfall_frame
+
+    # Alternating sub-threshold events on two clubs: unfolded they oscillate in
+    # place, folded they become one +heap and one -heap that swing wide.
+    rows = [ledger_row(-0.9, play_id=float(i), charged_team="DET") for i in range(6)]
+    rows += [ledger_row(0.9, play_id=float(i + 10), charged_team="GB") for i in range(6)]
+    game = replace(verdict(actual_margin=6.0), deserved_margin=6.0)
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    folded, frame = fold_to_frame(game, bars, logos=True)
+    low, high, pad, rail = waterfall_frame(game, folded, logos=True)
+    assert frame == pytest.approx((high - low) + 2 * pad + rail), "the fixed point is reached"
+
+
+def test_a_folded_waterfall_still_reconciles_its_two_ends():
+    """Folding is not dropping, whatever the frame turns out to be."""
+    from nfl_simulator.plots import fold_to_frame
+
+    rows, game = _ledger_reaching(verdict(actual_margin=9.0), [1.1, -0.6, 0.02, -0.03, 0.4, 0.01])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    folded, _frame = fold_to_frame(game, bars, logos=True)
+    assert sum(bar.points for bar in folded) == pytest.approx(
+        game.deserved_margin - game.actual_margin
+    )
+
+
+def test_the_group_rows_keyword_names_the_frame_it_is_a_share_of():
+    """The base changed, so the parameter's name changes with it. A kwarg still
+    called `span` would be the one place the module said the old rule."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [ledger_row(0.01 / PPE, play_id=1.0, charged_team="GB")]
+    rows += [ledger_row(0.4, play_id=float(i), charged_team="GB") for i in (2, 3)]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=10.0)
+    assert grouped.label == "3 small events (GB)"

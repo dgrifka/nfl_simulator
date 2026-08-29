@@ -778,6 +778,15 @@ the new `waterfall_span` and fixed before any fold, a club heap holding exactly
 one event keeps that event's own words whatever it is worth, and a club heap of
 two or more that still cancels under the floor is kept and counted.
 
+> **Amendment, 2026-08-29 (round 12, §13b).** The base is no longer the span. It
+> is the **drawn frame** — the axis `set_xlim` ends at, which reaches every
+> running total and adds a pad at both ends plus the arrow's rail lane, and is
+> between 1.58× and 6× the span. `DRAW_FLOOR_SHARE` keeps its name and its
+> value; `group_rows`' keyword is `frame` rather than `span`; `waterfall_frame`
+> and `fold_to_frame` are the two new functions, and `waterfall_span` survives
+> only as a reported statistic. Everything else in §11a stands unchanged —
+> rules 2 and 3 in particular.
+
 Nine tests, written first and watched fail. 864 → **873**, ruff clean.
 
 ### 12b. What the corpus said
