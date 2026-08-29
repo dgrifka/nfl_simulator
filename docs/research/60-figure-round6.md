@@ -606,3 +606,130 @@ corner label on a lopsided game — that last one because the waterfall passes
 `shield=False` where the distribution passes `shield=True`, which §7's comment
 justifies on the grounds that the waterfall has nothing crossing that band. It
 has: its own zero rule.
+
+## 11. Round 10 — the name, the corner, the band, the shield and the heap
+
+the maintainer's five settled fixes after reading document 63, executed on
+`fix/figure-round-10` from `handoff-2026-08-28-figures-r10.md`, with the
+whole-corpus re-run as the verification against eight pre-registered numbers.
+Presentation only — hard constraint 1 was again that no statistic move, and all
+**3,900 game-editions replay at 0.00e+00** after every part.
+
+### 11a. What a reader sees now
+
+**No two games can share a file.** `figure_filename` opens with the game id —
+`2018_05_GB_DET_23-31--95-5_strict_dtw.png` — and the rest of the name is
+unchanged. The old name was the game id with its season and its week taken off,
+which is why two Miami–Jets games seven seasons apart and a 2018 Oakland game
+beside a 2023 Las Vegas one wrote the same eleven characters. Eight PNGs of
+11,044 were being lost silently. A game id is unique by construction.
+
+**The credit stamp is in the bottom-right corner, below the footer.** It was in
+the top-right, painted onto the saved pixels after layout, and the title ran
+under it on 2,325 of 2,759 Strict distribution figures and 1,016 of 1,139 Full
+ones. The title cannot see a stamp that is added after it is placed, so the
+corner is the only thing that could move. `stamp_box` is public — the strip
+reservation and the corpus read both need to know where the stamp will land —
+and `finalize` grows the canvas at the bottom when the figure reached into the
+stamp's own columns, so the room is made rather than borrowed. Only the stamp's
+columns are consulted: both cards put their footers at the **left** edge, and
+growing every image to clear a footer the stamp is nowhere near would change two
+fixed shapes for nothing.
+
+**The band above the plot is two rows, on every figure.** Round 8 built the
+second row for a near-tie and lifted only on a measured collision; §10b reported
+what the corpus says about that premise — the labels collide on **93.2% of
+Strict and 94.6% of Full**, because each box is about 130 px wide and centred on
+its own margin. The exception was the rule. `Deserved:` now takes the upper row
+and `Actual:` the lower one always, and the header gives the same room back
+always. Furniture that moves between games is furniture a reader cannot compare
+across them. `_lift_colliding_label` keeps the conditional behaviour for the
+team-points figure, whose axis is a score rather than a margin and which the
+corpus was not read on.
+
+**The waterfall's corner labels wear the distribution's shield.** §7 justified
+`shield=False` here on the grounds that the waterfall has nothing crossing that
+band. It has: its own dashed zero rule, which printed straight through `PIT
+wins`, `ARI wins`, `JAX wins` and `TEN wins` on four lopsided games. The rotated
+arrow sentence, which runs the height of the rail and on a short waterfall is
+most of the figure, is lowered until its top clears the corner band — measured
+rather than reserved, because how far it reaches depends on the row count and on
+how many digits the number takes.
+
+**Every bar on the page belongs to a club.** The un-teamed remainder splits by
+charged team: `30 small events (HOU)` under Houston's mark and `23 small events
+(LAC)` under the Chargers', each carrying its own exact sum. `81 events under 1
+pt` at −2.1 pt was the third-largest bar on `2025_02_NYG_DAL` and wore nothing
+at all. One row per club and not two — a bar that is already a heap joins its
+club's heap whatever it is worth, because `luck_bars` folds under a tenth of a
+point and `group_rows` under a point, and on `2024_19_LAC_HOU` the larger piece
+cleared the threshold and stood beside a second row of the same words.
+
+**And a floor on what is worth a row.** `DRAW_FLOOR = 0.05` pt: any row, single
+event or fold, worth less than that is absorbed into its club's heap regardless
+of the lone-event rule. A row that draws nothing tells the reader nothing while
+still costing them a row to read.
+
+### 11b. What the corpus said, including where the round fell short
+
+15,600 PNGs — 4 × 3,900, matching exactly — in 34.9 minutes on 12 workers, worst
+replay gap `0.00e+00`. Eight of the nine pre-registered numbers landed exactly:
+files on disk, the replay gap, zero title/stamp overlaps, zero corner strikes,
+zero arrow-sentence overlaps, zero rows still labelled `events under`, zero rows
+with no club, and all 3,900 distribution figures on two rule rows. Waterfall
+rows rose by exactly one at both maxima — 15 Strict and 25 Full against round
+9's 14 and 24 — which is the second heap, as predicted.
+
+**One missed. `DRAW_FLOOR` leaves 270 rows drawing nothing**, against a
+pre-registered zero: 255 rows in 249 Strict game-editions (9.0%) and 15 in 15
+Full ones (1.3%). The rule terminates before it can reach them. A row under the
+floor is absorbed into its club's heap; when a club's *whole* sub-threshold
+remainder is under the floor, that heap is the smallest row the club has and
+there is nothing larger of its own to absorb it. Of twelve re-derived row by
+row, eight are a heap of one — `1 small event (SEA)` at +0.018 pt, a row that
+has traded the event's own words for a count and bought no visibility — and four
+are heaps that cancel, like `5 small events (KC)` at −0.039 pt. Splitting the
+remainder by club is what exposes most of them: the mixed heap was hiding them
+by cancelling one club's slivers against the other's.
+
+**And the floor cannot be the whole answer even where it fires.**
+`2017_11_JAX_CLE` Strict draws `CLE extra point · Gonzalez, made (92% kick)` at
+−0.07 pt — above the floor, kept by the lone-event rule, and still two pixels
+wide against a fifteen-point axis. Whether a bar can be seen is a share of the
+**axis span**, not an absolute number of points. A relative floor would say what
+this one is trying to say; it is a different rule and it is the maintainer's, not this
+round's.
+
+### 11c. What was rendered
+
+Nine share sets after each of Parts A–E, all replaying at `0.00e+00`; then every
+game in both editions — 15,600 PNGs, 34.9 minutes, worst replay gap
+`0.00e+00`. Five of the forty tail PNGs the handoff names were opened, a
+deviation recorded in the round's log and in document 63 §5.
+
+### 11d. Register — closed this round
+
+| Item | Where |
+|---|---|
+| Two pairs of Strict games share a filename (doc 63 §3a) | 11a — the game id leads |
+| The title runs under the credit stamp on 84–89% of figures (doc 63 §3) | 11a — bottom-right, with the strip reserved |
+| The zero rule prints through a waterfall corner label (doc 63 §3, §10e) | 11a — `shield=True` |
+| The rotated arrow sentence overlaps a corner label (doc 63 §3) | 11a — lowered under the band |
+| The biggest anonymous heap outranks all but two named events (doc 63 §3) | 11a — one heap per club, with its mark |
+| Fold rows worth ±0.02–0.03 pt draw nothing (doc 63 §3) | 11a — `DRAW_FLOOR`, as far as it reaches |
+| Stacking is the common case, not the exception (doc 63 §2) | 11a — two rows always |
+
+**Open, carried forward.** Everything in §8c's "Open" table is unchanged, plus
+the entries in document 63 §3 this round did not touch — blowout compression,
+the degenerate game's empty arrow band, the zero-anchored `wins by` key, the
+`2025_09_MIN_DET` contrast, the three byte-identical rows on `2025_19_GB_CHI`,
+and the two mark-on-tint clashes — and the three new entries in 63 §5.
+
+### 11e. Raised this round, not acted on
+
+The 270 sub-floor rows and the −0.07 pt lone event are one question with three
+answers, and choosing between them is a rule change rather than a layout fix:
+make the floor **relative** to the axis span, **exempt a heap of one** from the
+override so it keeps the event's words, or **accept them** as a sub-pixel row at
+the bottom of an order nobody reads that far down. Document 63 §5 carries all
+three with their costs.
