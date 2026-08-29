@@ -336,3 +336,80 @@ else could we try" in a later round.
   separates the two **bar** colours and does not touch the tints or the key, so
   the fix is a rule about the tints rather than about the pair. Severity
   cosmetic.
+
+## 9. After round 12 (2026-08-29)
+
+`fix/figure-round-12`, from `handoff-2026-08-29-figures-r12.md`. The corpus was
+re-rendered from an empty `research/outputs/all/` and an empty checkpoint:
+**15,600 PNGs in 73.8 minutes on 12 workers, worst replay gap `0.00e+00`**.
+Document 60 §13 is the round's record; this section is what §7d's list looks
+like after it.
+
+### 9a. Closed
+
+| §7d row | Closed by | Evidence |
+|---|---|---|
+| **N6** — a 2017/2019 Oakland game named `LV` on every surface | the season decides the club code, applied where the codes enter the figures | **0** texts naming a code wrong for its season, and **0** such codes in the verdict or the prepared rows, over the **79** game-editions where a club had not yet moved |
+| **N5** — the floor's span is not the axis the reader sees | the floor is a share of the drawn frame, resolved to a fixed point | floor / drawn axis is **0.5000%** on all 3,900, median and maximum alike; **0** outside 0.5% ± 0.05% |
+| **N1** — the arrow floor is absolute | `ARROW_FLOOR_SHARE = 0.03` against the pinned axis | **0** drawn spans shorter than 3% of their axis; 3,080 games cleared the old 1-pt floor and 1,866 clear the new one |
+| **N2** — an anchor of zero draws no bar | a 2-pt tick at x = 0 on any anchor the figure calls `even` | **29** `even` anchors, **29** ticks, **0** without one |
+
+The "two Raiders marks on one figure" half of N6 **did not reproduce** and is
+withdrawn. One `logos` map feeds the corner, the anchor ends and the row column,
+and there is no second source in the module; the round-11 corpus render of
+`2023_15_LAC_LV` cropped at 4× shows the same `RAIDERS` shield in both places,
+drawn at `0.22 × 0.15 in` in the corner and `0.46 × 0.22 in` on the anchors. The
+invariant is now locked by a test and measured corpus-wide at **0** figures
+carrying two marks for one club and **0** marks drawn from outside the map.
+
+### 9b. Raised after round 12, not acted on
+
+**A game where the floor and the fold do not have a fixed point.** `2022_02_IND_JAX`
+full is the corpus's only `rows_under_floor_other`, pre-registered at 0 and
+therefore a **miss, reported rather than loosened**. Its `8 smaller JAX drops`
+row is worth −0.214 pt and the frame–fold map has a **2-cycle** on it: fold at a
+0.2138-pt floor and the frame measures 44.03 pt (20 rows); fold at that frame's
+0.2201-pt floor and the frame measures 42.75 pt (19 rows), and back. There is no
+assignment that satisfies both pre-registered checks on this one game — the fold
+that clears the row leaves the floor at 0.515% of the axis it is then drawn in,
+outside the ±0.05 pp band. Severity: cosmetic; the row sorts last, is labelled
+and carries its club's mark. See document 60 §13d for the arithmetic and the
+one-line tie-break that would clear it.
+
+**`2022_07_KC_SF` full keeps a stub span.** Its luck gap is 3.01% of its axis,
+a hundredth of a percentage point over the settled `ARROW_FLOOR_SHARE`, and the
+figure draws an arrowhead with barely any shaft — the shape N1 named. The other
+two games §7d listed under N1, `2022_03_CIN_NYJ` (1.61%) and `2025_19_GB_CHI`
+(2.14%), are clean.
+
+**The zero-anchor tick lands on the dashed zero rule.** At x = 0 the tick sits
+on the waterfall's own zero rule. It is distinguishable — 2 pt and continuous
+against the rule's 1 pt and dashed, in the anchor's dark ink — and reads clearly
+on `2022_01_IND_HOU`, `2018_15_HOU_NYJ` and `2025_05_TEN_ARI`. On
+`2025_09_MIN_DET` it reads as a solid segment interrupting the dashes rather
+than as a mark of its own. Severity: cosmetic.
+
+**More rows draw under the floor, not fewer.** 717 (686 Strict, 31 Full) against
+round 11's 392, in 648 game-editions. Every one is a rule-2 lone event (244) or a
+rule-3 cancelling heap (472), except the one above. The floor went up and the two
+exemptions did not, so the count could only grow; it is the residue those rules
+buy, not a rule failing to terminate.
+
+### 9c. Still open, carried forward
+
+Everything in §7c is unchanged — the blowout compressions on
+`2019_01_BAL_MIA`, `2019_02_NE_MIA` and `2023_01_DAL_NYG`, the byte-identical
+repeat rows on `2025_19_GB_CHI`, the dashed rule's contrast on a saturated fill,
+the rule-label boxes flush with the figure edge, and the zero-anchored `wins by`
+key on a blowout. §8's parked N3 and N4 are confirmed on the page:
+`2018_15_HOU_NYJ` strict draws one legend entry and two identical pale tints,
+and `2022_07_KC_SF` full is one hue family end to end.
+
+### 9d. What was opened
+
+**33 PNGs from the final corpus, all of them opened**: the four N6 games'
+waterfalls, the five N5 games' waterfalls, the three N1 games' distributions,
+the ten smallest-|deserved| game-editions per edition as waterfalls, and
+`2022_02_IND_JAX` full — the round's one pre-registered miss. Plus, during the
+parts, ten renders from `research/outputs/r12/` and four crops of the round-11
+corpus used to check §7d's claims before building on them.
