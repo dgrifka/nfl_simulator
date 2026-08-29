@@ -1572,17 +1572,19 @@ GROUP_THRESHOLD = 1.0
 # mixes them says only that something small happened many times.
 FOLD_BY_TEAM = (*VARIANT_COMPONENTS, POSSESSION_CAP)
 
-# The smallest bar worth a row. Document 63 found rows worth +0.03 and -0.02 pt
-# taking a full row and drawing nothing on `2022_05_SF_CAR`, and `64 events
-# under 1 pt` at +0.02 on `2022_10_JAX_KC`. A row that draws nothing tells the
-# reader nothing, so anything under this — a single event or a fold, and
-# regardless of the lone-event rule — is absorbed into its club's heap, which
-# keeps its exact sum and adds its count.
+# The smallest bar worth a row, as a share of the axis it is drawn on. Document
+# 63 found rows worth +0.03 and -0.02 pt taking a full row and drawing nothing
+# on `2022_05_SF_CAR`, and round 10 answered with an absolute 0.05 pt.
 #
-# 0.05 rather than 0.1: the value label beside a bar is printed to two decimals
-# under a tenth, so a bar of 0.06 pt still says what it is worth. What the floor
-# is for is a row whose bar has no width at all.
-DRAW_FLOOR = 0.05
+# Round 11 makes it relative, because an absolute floor cannot mean one thing.
+# 0.05 pt is a bar a reader can see on a three-point game and no bar at all on a
+# fifty-point blowout, and the absolute floor left 270 rows across the corpus
+# still drawing nothing. Half a percent of the axis's span is 0.015 pt on the
+# first game and 0.25 pt on the second, so "visible" means the same thing on
+# both. The span comes from :func:`waterfall_span` — the three numbers the axis
+# is built on, fixed before any fold, so the floor cannot depend on what the
+# floor did.
+DRAW_FLOOR_SHARE = 0.005
 
 # The ledger's fumble classes are `{play type}/{live|aborted}`, which is the
 # simulator's vocabulary rather than a reader's. "aborted" is nflverse's word
@@ -1956,7 +1958,29 @@ def _is_heap(bar: LuckBar) -> bool:
     return bar.play_id is None and bar.component is None and bar.n_events > 1
 
 
-def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> list[LuckBar]:
+def waterfall_span(verdict: GameVerdict) -> float:
+    """How wide the waterfall's axis is, in points of margin.
+
+    The three numbers the axis is built on: zero, the actual margin and the
+    deserved one. Zero is in there because it is where the two clubs' sides
+    meet, and the frame reaches it on every game — so a twelve-point win whose
+    deserved margin is 8.8 spans twelve points, not the 3.2 between its ends.
+
+    Taken from the verdict rather than from the drawn frame on purpose. The
+    frame is padded, and the pad is a fraction of the span, so reading the span
+    back off the axis would make the floor depend on itself. This is the same
+    number before and after any fold.
+    """
+    ends = (0.0, float(verdict.actual_margin), float(verdict.deserved_margin))
+    return max(ends) - min(ends)
+
+
+def group_rows(
+    bars: Sequence[LuckBar],
+    threshold: float = GROUP_THRESHOLD,
+    *,
+    span: float = 0.0,
+) -> list[LuckBar]:
     """Fold the sub-threshold bars so a Full-edition waterfall stays a figure.
 
     A median Full ledger holds about fifty events. Fifty bars is a table with a
@@ -1975,16 +1999,28 @@ def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> l
     third-largest bar on `2025_02_NYG_DAL` with nothing on it to say whose it
     was. Split by charged team it is two rows, each with its club's mark.
 
-    **And nothing draws an empty row.** Any row — a single event or a fold —
-    worth less than :data:`DRAW_FLOOR` is absorbed into its club's heap
-    regardless of the lone-event rule, because a bar with no width tells a
-    reader nothing while still costing them a row to read.
+    **And nothing draws an empty row.** A fold worth less than
+    :data:`DRAW_FLOOR_SHARE` of ``span`` is absorbed into its club's heap,
+    because a bar with no width tells a reader nothing while still costing them
+    a row to read. ``span`` is the waterfall's own axis width — see
+    :func:`waterfall_span` — so the same fold is a visible bar on a three-point
+    game and an empty row on a fifty-point one, which is what round 11 changed:
+    an absolute floor left 270 rows across the corpus drawing nothing. A caller
+    with no axis to speak of passes no span, and then no fold meets a floor.
+
+    **Round 11: a heap of one is the event.** A club whose remainder is a single
+    event keeps that event under its own words whatever it is worth. `1 small
+    event (SEA)` renames a row without shrinking it — the reader loses the
+    event and keeps the same invisible bar — and eight of the twelve sub-floor
+    rows document 63 sampled were exactly that. A club heap of two or more that
+    still cancels to under the floor is kept as it is, because there is nowhere
+    left to fold it, and round 11 counts that residue rather than hiding it.
 
     Folding is not dropping. Every folded row carries the **exact sum** of what
-    went into it, so the waterfall still reconciles its two ends, and a lone
-    small event a reader can see is left where it is: `1 smaller GB drops` is a
-    worse row than the drop it hides.
+    went into it, so the waterfall still reconciles its two ends whatever
+    ``span`` is.
     """
+    floor = abs(span) * DRAW_FLOOR_SHARE
     # A row that is already a heap joins its club's heap whatever it is worth.
     # `luck_bars` folds under a tenth of a point and this folds under a point,
     # so a Full game arrives with a club's remainder in two pieces — and on
@@ -2027,15 +2063,17 @@ def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> l
     for bar in folded:
         # The draw floor, applied after the component folds so a fold that
         # cancels to nothing meets it too — `2022_05_SF_CAR`'s +0.03 and −0.02.
-        # A row at or above the threshold cannot reach it: the threshold is
-        # twenty times the floor.
-        (kept if abs(bar.points) >= DRAW_FLOOR else heaps.setdefault(bar.team, [])).append(bar)
+        (kept if abs(bar.points) >= floor else heaps.setdefault(bar.team, [])).append(bar)
 
     for team, group in heaps.items():
-        if len(group) == 1 and abs(group[0].points) >= DRAW_FLOOR:
+        count = sum(bar.n_events for bar in group)
+        # A heap of one is the event: it keeps its own label whatever it is
+        # worth, and the floor never reaches it. Nothing is gained by turning
+        # one event into `1 small event (SEA)` — the bar is the same width and
+        # the words are gone.
+        if count == 1:
             kept.extend(group)
             continue
-        count = sum(bar.n_events for bar in group)
         kept.append(
             LuckBar(
                 label=_heap_label(team, count, threshold),
@@ -2475,7 +2513,9 @@ def plot_luck_ledger(
     # folded row has no place on a timeline. Every other reading is the
     # adjudication's, and there the fold is what keeps fifty events a figure.
     if not chronological:
-        bars = group_rows(bars)
+        # The floor a row has to clear to be worth drawing is a share of this
+        # figure's own axis, so the figure is what supplies it.
+        bars = group_rows(bars, span=waterfall_span(verdict))
     gap = verdict.deserved_margin - verdict.actual_margin
     drift = abs(sum(bar.points for bar in bars) - gap)
     if drift > 1e-6:

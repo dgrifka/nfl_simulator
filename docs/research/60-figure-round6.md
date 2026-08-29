@@ -139,6 +139,9 @@ A median Full ledger holds about **fifty** events; `2022_13_WAS_NYG` holds 77 an
   exact sum. And no row draws an empty bar — anything under `DRAW_FLOOR =
   0.05` pt, a single event or a fold, is absorbed into its club's row
   regardless of the lone-event rule below.
+  **Amended again 2026-08-29 (round 11, §11a).** The floor is a share of the
+  axis, `DRAW_FLOOR_SHARE = 0.005`, and it no longer overrides the lone-event
+  rule: a club whose remainder is one event keeps that event's own words.
 - every folded row carries the **exact sum** of what went into it, so the
   waterfall still reconciles its two ends to 1e-9;
 - a lone small event is left as itself — `1 smaller receiver drops (GB)` is a
@@ -670,6 +673,31 @@ event or fold, worth less than that is absorbed into its club's heap regardless
 of the lone-event rule. A row that draws nothing tells the reader nothing while
 still costing them a row to read.
 
+**Amendment, 2026-08-29 — round 11 replaces that floor with a relative one.**
+`DRAW_FLOOR` is removed and `DRAW_FLOOR_SHARE = 0.005` takes its place: a row
+has to be worth half a percent of the waterfall's axis span to be worth drawing.
+The span is `max(0, actual, deserved) − min(0, actual, deserved)`, taken from the
+verdict by `waterfall_span` and fixed before any fold, so the floor cannot depend
+on what the floor did. That is 0.015 pt on a three-point game and 0.25 pt on a
+fifty-point one, which is what §11b's own closing paragraph asked for: whether a
+bar can be seen is a share of the axis, not an absolute number of points.
+
+Two clauses come with it, and they are what stops the floor eating rows it
+should not:
+
+1. **A heap of one is the event.** If a club's heap would hold exactly one
+   event, that event is kept under its own label whatever it is worth. The old
+   rule's "regardless of the lone-event rule" is withdrawn — it produced `1
+   small event (SEA)` at +0.018 pt, which is the same invisible bar with the
+   event's words taken off it, and eight of §11b's twelve re-derived rows were
+   exactly that.
+2. **A club heap of two or more that still cancels to under the floor is kept as
+   it is and counted.** There is nowhere left to fold it, so it stays, and round
+   11 reports the residue rather than hiding it — see document 63 §7.
+
+Ordering is unchanged, and reconciliation is unchanged: the fold moves rows,
+never points, on any span.
+
 ### 11b. What the corpus said, including where the round fell short
 
 15,600 PNGs — 4 × 3,900, matching exactly — in 34.9 minutes on 12 workers, worst
@@ -733,3 +761,60 @@ make the floor **relative** to the axis span, **exempt a heap of one** from the
 override so it keeps the event's words, or **accept them** as a sub-pixel row at
 the bottom of an order nobody reads that far down. Document 63 §5 carries all
 three with their costs.
+
+## 12. Round 11 — a floor the eye can see, and the whole tail read
+
+`fix/figure-round-11`, from `handoff-2026-08-29-figures-r11.md`. Two things: the
+draw floor became a share of the axis, and the tail pick list was opened in full
+rather than sampled.
+
+### 12a. The rule
+
+`DRAW_FLOOR = 0.05` pt is removed; `DRAW_FLOOR_SHARE = 0.005` replaces it. §11a
+carries the full amendment. In short: a row has to be worth half a percent of
+the waterfall's axis span to be worth drawing, the span is
+`max(0, actual, deserved) − min(0, actual, deserved)` taken from the verdict by
+the new `waterfall_span` and fixed before any fold, a club heap holding exactly
+one event keeps that event's own words whatever it is worth, and a club heap of
+two or more that still cancels under the floor is kept and counted.
+
+Nine tests, written first and watched fail. 864 → **873**, ruff clean.
+
+### 12b. What the corpus said
+
+15,600 PNGs — 4 × 3,900, matching exactly — in 34.7 minutes on 12 workers, worst
+replay gap `0.00e+00`. **Every pre-registered zero landed**: no row labelled `1
+small event`, no under-floor row outside the two classes rules 2 and 3 allow, no
+title/stamp overlap, no corner strike, no arrow-sentence overlap, no row still
+labelled `events under`, no row without a club, and all 3,900 distribution
+figures on two rule rows. Waterfall rows at the maximum are unchanged, 15 Strict
+and 25 Full.
+
+**One reported number came in above expectation and is reported, not loosened.**
+The handoff expected rows drawing under the floor "well under 270"; the count is
+**392** (375 Strict, 17 Full, in 378 game-editions). It is not the same
+measurement as round 10's 270. The floor is now higher than 0.05 pt on every
+game whose axis spans more than 10 points — its median is 0.05 pt and its
+maximum 0.25 pt — so it catches rows the absolute floor called visible on a
+blowout and never should have. And 204 of the 392 are lone events that **rule 2
+deliberately keeps**, which round 10's rule would have folded away; the other
+188 are the rule-3 residue. Neither class is a rule failing to terminate. The
+honest reading is that 392 is the first true count of invisible rows, not a
+regression from 270.
+
+### 12c. The tail, read in full
+
+194 PNGs across 97 game-editions, every one opened — see document 63 §7. Eight
+of document 63 §3's defects are confirmed closed on the games that raised them,
+six are confirmed still open, and six classes are new. The one worth a round of
+its own is **N5**: the span the floor is a share of is not the axis the reader
+sees. The frame adds a pad at both ends and a lane for the arrow rail, so it is
+never less than 1.58× the span, and the floor is therefore never more than 0.32%
+of the drawn width — much less on a narrow game, where those pads have absolute
+minimums. `2023_02_WAS_DEN`'s span is 2 pt and its frame is about 12.
+
+The others: **N6**, a 2017 Oakland game named LV throughout and two different
+Raiders marks on one figure; **N1**, the luck arrow's floor is still absolute, so
+a 1.1-pt arrow on a 55-pt axis is a bare arrowhead; **N2**, an anchor of zero
+draws no bar at all, on 19 of the 97; **N3** and **N4**, two dark clubs or two
+shades of one hue collapsing the side tints, the legend and the key.
