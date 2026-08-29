@@ -83,19 +83,59 @@ def ledger_frame() -> pl.DataFrame:
 # --------------------------------------------------------------------------
 
 
-def test_the_filename_follows_the_baseball_pattern(game):
-    assert figure_filename(game, "dtw") == "GB_DET_23-31--95-5_strict_dtw.png"
+def test_the_filename_opens_with_the_game_id(game):
+    """Round 10: the game id leads, and the rest of the name is unchanged.
+
+    Document 63 §3a: the name used to open with the two clubs, which carries no
+    season and no week, so two meetings of the same pair with the same scoreline
+    and the same split wrote the same file and one of them was lost.
+    """
+    assert figure_filename(game, "dtw") == "2018_05_GB_DET_23-31--95-5_strict_dtw.png"
 
 
 def test_every_suffix_names_a_different_file(game):
     names = {figure_filename(game, suffix) for suffix in SUFFIXES}
     assert len(names) == len(SUFFIXES) == 4
     assert names == {
-        "GB_DET_23-31--95-5_strict_dtw.png",
-        "GB_DET_23-31--95-5_strict_luck_ledger.png",
-        "GB_DET_23-31--95-5_strict_card.png",
-        "GB_DET_23-31--95-5_strict_waterfall.png",
+        "2018_05_GB_DET_23-31--95-5_strict_dtw.png",
+        "2018_05_GB_DET_23-31--95-5_strict_luck_ledger.png",
+        "2018_05_GB_DET_23-31--95-5_strict_card.png",
+        "2018_05_GB_DET_23-31--95-5_strict_waterfall.png",
     }
+
+
+def test_the_two_pairs_that_collided_in_the_corpus_now_write_four_names(game):
+    """Document 63 §3a's eight lost PNGs, as four distinct names.
+
+    `2016_15_MIA_NYJ` and `2023_12_MIA_NYJ` share a scoreline and a split;
+    `2018_16_DEN_OAK` and `2023_18_DEN_LV` share those *and* a pair of clubs,
+    because the relocation alias resolves Oakland to Las Vegas. The season and
+    the week are the only things that ever told either pair apart.
+    """
+    pairs = [
+        ("2016_15_MIA_NYJ", "NYJ", "MIA", 34, 13),
+        ("2023_12_MIA_NYJ", "NYJ", "MIA", 34, 13),
+        ("2018_16_DEN_OAK", "LV", "DEN", 14, 27),
+        ("2023_18_DEN_LV", "LV", "DEN", 14, 27),
+    ]
+    names = {
+        figure_filename(
+            replace(
+                game,
+                game_id=game_id,
+                home_team=home,
+                away_team=away,
+                away_score=away_score,
+                home_score=home_score,
+                dtw_home=1.0,
+            ),
+            "dtw",
+        )
+        for game_id, home, away, away_score, home_score in pairs
+    }
+    assert len(names) == 4
+    assert "2018_16_DEN_OAK_14-27--0-100_strict_dtw.png" in names
+    assert "2023_18_DEN_LV_14-27--0-100_strict_dtw.png" in names
 
 
 def test_the_share_ledger_and_the_article_waterfall_are_different_figures():
@@ -316,7 +356,9 @@ def test_the_card_puts_the_overtime_line_under_the_interval_line(game):
 
 
 def test_the_article_file_is_named_for_the_figure_it_is_a_version_of(game):
-    assert figure_filename(game, ARTICLE_SUFFIX) == "GB_DET_23-31--95-5_strict_dtw_article.png"
+    assert (
+        figure_filename(game, ARTICLE_SUFFIX) == "2018_05_GB_DET_23-31--95-5_strict_dtw_article.png"
+    )
     assert ARTICLE_SUFFIX not in SUFFIXES, "the article is an extra, not a fourth share image"
 
 
@@ -529,8 +571,8 @@ def test_the_filename_carries_the_edition_so_two_of_them_never_collide(game):
     """One game has two adjudications and they are two different images."""
     strict = replace(game, edition="strict")
     full = replace(game, edition="full", dtw_home=0.37, dtw_interval=(0.30, 0.44))
-    assert figure_filename(strict, "card") == "GB_DET_23-31--95-5_strict_card.png"
-    assert figure_filename(full, "card") == "GB_DET_23-31--63-37_full_card.png"
+    assert figure_filename(strict, "card") == "2018_05_GB_DET_23-31--95-5_strict_card.png"
+    assert figure_filename(full, "card") == "2018_05_GB_DET_23-31--63-37_full_card.png"
     assert figure_filename(strict, "card") != figure_filename(full, "card")
 
 

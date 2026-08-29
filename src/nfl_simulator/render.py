@@ -110,11 +110,21 @@ DTW_ARTICLE_FIGURE = DTW_FIGURE | {"callout": True}
 
 
 def figure_filename(verdict: GameVerdict, suffix: str) -> str:
-    """`"GB_DET_23-31--95-5_strict_dtw.png"` — the baseball simulator's pattern.
+    """`"2018_05_GB_DET_23-31--95-5_strict_dtw.png"` — the baseball pattern, keyed.
 
-    Away team first, then home, then the scoreline, then the two shares, then
-    the edition, then what the figure is. The name is the caption for anyone
-    scrolling a folder of them, which is why the verdict's own numbers are in it.
+    The game id first — season, week, away team, home team — then the scoreline,
+    then the two shares, then the edition, then what the figure is. The name is
+    the caption for anyone scrolling a folder of them, which is why the verdict's
+    own numbers are in it.
+
+    **Round 10: the game id leads.** The name used to open with the two clubs,
+    which is the game id with its season and its week taken off, and document 63
+    §3a found two pairs of games that therefore wrote the same file: two
+    Miami–Jets games seven seasons apart with the same scoreline and the same
+    split, and a 2018 Oakland game whose relocation alias makes it the same
+    eleven characters as a 2023 Las Vegas one. Eight PNGs of 11,044 were
+    overwritten, silently. A game id is unique by construction, so no two games
+    can share a name again.
 
     **The edition is in the name, not only in the stamp.** One game has two
     adjudications and they differ in exactly the numbers the rest of the name is
@@ -133,7 +143,7 @@ def figure_filename(verdict: GameVerdict, suffix: str) -> str:
         return f"{verdict.game_id}_{verdict.edition}_{suffix}.png"
     home_share = round(verdict.dtw_home * 100)
     return (
-        f"{verdict.away_team}_{verdict.home_team}_"
+        f"{verdict.game_id}_"
         f"{verdict.away_score:.0f}-{verdict.home_score:.0f}--"
         f"{100 - home_share}-{home_share}_{verdict.edition}_{suffix}.png"
     )
