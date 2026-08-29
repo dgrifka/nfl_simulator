@@ -2466,6 +2466,16 @@ HOW_TO_READ = (
 # already has one of those at x = 0.
 ANCHOR_TICK_WIDTH = 2.0
 
+# When an anchor is close enough to zero that the figure calls it `even`. One
+# constant for two rules — :func:`anchor_label` prints the word and
+# :func:`_draw_anchor` draws the tick — because the round-12 tail read found
+# them disagreeing: `2025_18_KC_LV`'s deserved margin is 0.043 pt, the label
+# said `Deserved: even`, and a bar 0.75% of the axis wide was drawn under it.
+# That is under the 0.5% floor the same round set for event rows: a row a reader
+# cannot see, beneath a label saying there is nothing to see. 16 of the 29
+# `even` anchors in the corpus were that shape.
+ANCHOR_EVEN_EPS = 0.05
+
 
 def anchor_colour(home_colour: str, away_colour: str) -> str:
     """Ink for the two totals, stepping to the neutral when a club sits too near it.
@@ -2521,7 +2531,7 @@ def anchor_label(kind: str, margin: float, verdict: GameVerdict) -> str:
     one to a tenth because it is an estimate — the same rule
     :func:`margin_sentence` already states.
     """
-    if abs(margin) < 0.05:
+    if abs(margin) < ANCHOR_EVEN_EPS:
         return f"{kind}: even"
     size = f"{abs(margin):.0f}" if kind == "Actual" else f"{abs(margin):.1f}"
     return f"{kind}: {_favoured(margin, verdict)} by {size}"
@@ -2613,8 +2623,13 @@ def _draw_anchor(ax, y: float, margin: float, colour: str) -> None:
     the row keeps its label and its mark and gains a short tick of the anchor
     colour at x = 0, the height of the bar it stands in for, so the eye can find
     the row's position on the axis.
+
+    "Zero" is :data:`ANCHOR_EVEN_EPS` — the same threshold
+    :func:`anchor_label` prints `even` at, so the words and the mark can never
+    disagree. An exactly-zero anchor is rare (13 of 3,900); an anchor the figure
+    already calls `even` and then draws a two-pixel bar under is not (16 more).
     """
-    if margin == 0.0:
+    if abs(margin) < ANCHOR_EVEN_EPS:
         half = 0.31 * ANCHOR_HEIGHT
         (tick,) = ax.plot(
             [0.0, 0.0],

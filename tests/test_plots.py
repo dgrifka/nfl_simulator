@@ -45,6 +45,7 @@ from nfl_simulator.plots import (  # noqa: E402
     GameVerdict,
     OvertimeToss,
     _draw_luck_arrow,
+    anchor_label,
     attach_overtime_sidebar,
     band_sweep,
     bucket_label,
@@ -4797,3 +4798,42 @@ def test_an_anchor_with_a_margin_still_draws_its_bar_and_no_tick():
     fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
     assert not _ticks(ax)
     assert len(_anchor_bars(ax)) == 2
+
+
+def test_an_anchor_the_figure_calls_even_gets_the_tick_even_when_it_is_not_exactly_zero():
+    """The tail read's finding on `2025_18_KC_LV`: the label says `Deserved:
+    even` at 0.043 pt and the bar was drawn anyway — 0.75% of the axis, under
+    the 0.5% floor the round just set for event rows, and a row a reader cannot
+    see under a label that says there is nothing to see. One constant decides
+    both: if the figure calls it even, it draws the tick."""
+    from nfl_simulator.plots import ANCHOR_EVEN_EPS
+
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.043), deserved_margin=0.043)
+    assert ANCHOR_EVEN_EPS == 0.05
+    assert anchor_label("Deserved", game.deserved_margin, game) == "Deserved: even"
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert len(_ticks(ax)) == 1
+    assert len(_anchor_bars(ax)) == 1, "only the actual end still has a bar"
+
+
+def test_an_anchor_just_over_the_even_threshold_keeps_its_bar():
+    """The control at the other side of the same constant."""
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.06), deserved_margin=0.06)
+    assert anchor_label("Deserved", game.deserved_margin, game) == "Deserved: MIN by 0.1"
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert not _ticks(ax)
+    assert len(_anchor_bars(ax)) == 2
+
+
+def test_the_label_and_the_tick_never_disagree():
+    """Whatever the threshold is, the two rules read it from one place."""
+    from nfl_simulator.plots import ANCHOR_EVEN_EPS
+
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    for margin in (0.0, 0.01, ANCHOR_EVEN_EPS * 0.99, ANCHOR_EVEN_EPS, 0.2, 3.0):
+        game = replace(verdict(actual_margin=2.0 + margin), deserved_margin=margin)
+        fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+        says_even = anchor_label("Deserved", margin, game).endswith("even")
+        assert bool(_ticks(ax)) == says_even, f"{margin} disagrees"
