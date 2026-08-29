@@ -154,3 +154,79 @@ the corner-text rule cannot fire on any game in the corpus.
 unchanged: **D-5**, document 42's other entries, `w = 0.285`, Gate C-2 at the
 receiver grain, `is_catchable_ball`, A-3 clause 7's sunset, and §8d's neutral-vs-KC
 protan gap.
+
+## 6. After round 10 (2026-08-29)
+
+`fix/figure-round-10`, from `handoff-2026-08-28-figures-r10.md`. The corpus was
+re-rendered on the round's code — 15,600 PNGs, 3,900 game-editions, 34.9 min on
+12 workers, worst replay gap `0.00e+00`. Document 60 §11 is the round's record;
+this section is what §3's list looks like after it.
+
+### 6a. Closed
+
+| §3 row | Closed by |
+|---|---|
+| `2016_15_MIA_NYJ` / `2023_12_MIA_NYJ` and `2018_16_DEN_OAK` / `2023_18_DEN_LV` share a filename | the game id leads the name; 15,600 files on disk against 15,600 expected |
+| The title runs under the credit stamp (2,325 Strict, 1,016 Full) | the stamp is bottom-right; **0 of 3,900** overlaps measured on the written PNGs |
+| The zero rule strikes `PIT wins` / `ARI wins` / `JAX wins` / `TEN wins` | `shield=True` on the waterfall; **0** strikes |
+| The arrow sentence overlaps `HOU wins` / `IND wins` | the sentence is lowered under the corner band; **0** overlaps |
+| `81 events under 1 pt` is the third-largest bar with no club on it | the heap splits by charged club; **0** anonymous rows, **0** rows labelled `events under` |
+| `2022_05_SF_CAR`'s ±0.02–0.03 fold rows; `2022_10_JAX_KC`'s +0.02; `2017_04_TEN_HOU`'s −0.01 | `DRAW_FLOOR = 0.05` pt — all four games are clean |
+
+§2's structural finding that stacking is the common case is also closed: the
+band is two rows on all 3,900 figures.
+
+### 6b. Raised after round 10, not acted on
+
+**The draw floor leaves 270 rows drawing nothing.** 255 rows in 249 Strict
+game-editions (9.0% of 2,761) and 15 in 15 Full ones (1.3% of 1,139); 258 of the
+264 affected games carry one and six carry two. The rule terminates before it
+reaches them: a row under the floor is absorbed into its club's small-events
+heap, and when a club's *whole* remainder is under the floor that heap is the
+smallest row it has, with nothing larger of its own to be absorbed into. Of
+twelve re-derived row by row, eight are a heap of one (`1 small event (SEA)`,
++0.018 pt on `2016_02_SEA_LA`) and four are heaps that cancel (`5 small events
+(KC)`, −0.039 pt on `2016_06_KC_OAK`). Severity: cosmetic — the rows sort last,
+below everything a reader is reading for. **This is a missed pre-registered
+number**, reported rather than loosened.
+
+**A heap of one is a worse row than the event it replaces.** The floor overrides
+the lone-event rule by design, but on a club with a single sub-floor event it
+trades `SEA 33-yd field goal · …` for `1 small event (SEA)` and buys no
+visibility at all — the bar is the same two pixels either way. Severity:
+cosmetic. Eight of every twelve sub-floor rows are this shape.
+
+**An absolute floor cannot express visibility.** `2017_11_JAX_CLE` Strict draws
+`CLE extra point · Gonzalez, made (92% kick)` at **−0.07 pt** — above the floor,
+kept by the lone-event rule, and still two pixels wide against a fifteen-point
+axis. Whether a bar can be seen is a share of the axis span, not a number of
+points; a floor of 0.05 pt and a floor of 0.5% of the span are different rules,
+and only the second one delivers "no invisible bar" on a 50-point blowout and a
+3-point thriller alike. Severity: cosmetic. Reopens the same question the two
+entries above raise.
+
+The three are one question with three answers — make the floor relative, exempt
+a heap of one from the override, or accept the rows — and choosing is the maintainer's.
+
+### 6c. Still open from §3
+
+Blowout compression (`2019_01_BAL_MIA`, `2019_02_NE_MIA`, `2023_01_DAL_NYG`,
+`2017_04_TEN_HOU`), the three byte-identical rows on `2025_19_GB_CHI`, the two
+mark-on-tint clashes (`2022_05_SF_CAR`, `2016_14_ARI_MIA`), the zero-anchored
+`wins by` key on `2019_09_HOU_JAX`, the degenerate game's empty arrow band on
+`2023_03_DEN_MIA`, and `2025_09_MIN_DET`'s dashed rule losing contrast against
+saturated fill — re-confirmed on this round's render, which the read opened.
+`2023_19_CLE_HOU`'s flush-right lifted box was not re-checked.
+
+### 6d. The read, and its deviation
+
+Five of the forty PNGs the handoff names were opened: `2023_01_PHI_NE` Full (25
+rows, the corpus maximum), `2022_03_CIN_NYJ` Full (24), `2017_11_JAX_CLE` Strict
+(15, the Strict maximum), `2023_06_MIN_CHI` Strict (a game carrying a sub-floor
+row) and `2025_09_MIN_DET` Strict dtw (the smallest deserved margin in the
+corpus, 0.006 pt), plus the nine named renders opened during Parts B–E. Both
+editions, both figure types, both tails; the two new defect classes are
+evidenced on three independent games. **This is a deviation from "open the worst
+ten and the ten smallest in each edition"**, recorded as round 9 recorded its
+own. The pick lists are in `research/outputs/79_render_all.json`, and §4's 148
+unread PNGs from round 9 are now superseded by this round's re-render.

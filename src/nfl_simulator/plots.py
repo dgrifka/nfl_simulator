@@ -466,11 +466,14 @@ def draw_header(
     if subtitle_extra:
         at(SUBTITLE_EXTRA_OFFSET, subtitle_extra, fontsize=9.5, color=PALETTE["text_muted"])
 
-    # The pill sits on the **subtitle** row, not beside the heading. `finalize`
-    # stamps the data credit into the top-right corner of the saved pixels, and
-    # a pill on the heading row lands under it — measured on
+    # The pill sits on the **subtitle** row, not beside the heading. The credit
+    # stamp was in the top-right corner of the saved pixels until round 10, and
+    # a pill on the heading row landed under it — measured on
     # `LV_KC_9-48--0-100_dtw.png`, where "scoreboard holds" printed through both
-    # the watermark and the last word of the heading.
+    # the watermark and the last word of the heading. The stamp is in the
+    # bottom-right corner now and the heading row is free, but the subtitle row
+    # is where the pill has been read for six rounds and moving it back would be
+    # a change to the figure rather than a consequence of one.
     pill_text = ax.annotate(
         verdict.bucket,
         xy=(1, 1),
