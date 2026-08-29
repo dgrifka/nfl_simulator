@@ -740,10 +740,17 @@ ARROW_OFFSET = -28.0
 ARROW_LABEL_OFFSET = -33.0
 UNDER_AXIS_BAND = 30.0
 
-# The smallest luck gap that gets a drawn span, in points of margin. Under it
-# the patch is a few pixels wide and reads as a stray glyph under the axis
-# rather than as a distance; the sentence keeps the number either way.
-ARROW_FLOOR = 1.0
+# The smallest luck gap that gets a drawn span, as a share of the distribution's
+# own axis. Under it the patch is a few pixels wide and reads as a stray glyph
+# under the axis rather than as a distance; the sentence keeps the number either
+# way.
+#
+# **Round 12: a share, not a point.** Document 63 §7d N1. `ARROW_FLOOR = 1.0` pt
+# was absolute, so `2022_03_CIN_NYJ` Full's 1.1-pt gap cleared it and drew a
+# bare arrowhead with no shaft on a 55-pt axis — the same defect round 11 fixed
+# for the draw floor, one figure over. Three percent of the drawn width is a
+# distance a reader can measure by eye on any game.
+ARROW_FLOOR_SHARE = 0.03
 
 # How much taller than its tallest bar the plot is drawn. The annotations above
 # are placed by rule rather than by inspection, so the room they need is made
@@ -857,17 +864,23 @@ def _draw_luck_arrow(ax, verdict: GameVerdict):
     Sign convention: ``actual - deserved`` is what luck added to the home team's
     margin, so a positive gap is luck that helped the home team.
 
-    Under ``ARROW_FLOOR`` the span is dropped and only the sentence is drawn —
-    on `2025_13_DEN_WAS` Full a 0.35 pt gap spanned 17.8 px, which is a stray
-    glyph under the axis rather than a measured distance. Returns
-    ``(None, label)`` there, so a caller can tell a floored figure from one
-    that never asked for an arrow at all.
+    Under :data:`ARROW_FLOOR_SHARE` of the drawn axis the span is dropped and
+    only the sentence is drawn — on `2025_13_DEN_WAS` Full a 0.35 pt gap spanned
+    17.8 px, which is a stray glyph under the axis rather than a measured
+    distance. Returns ``(None, label)`` there, so a caller can tell a floored
+    figure from one that never asked for an arrow at all.
+
+    The floor is read off ``ax.get_xlim()``, which the caller has already pinned
+    — the three rules are drawn with ``clip_on=False`` and count toward the
+    autoscale, so a limit read before they land is not the limit the reader
+    sees.
     """
     gap = verdict.actual_margin - verdict.deserved_margin
     toward = verdict.home_team if gap > 0 else verdict.away_team
     rail = _under_axis(ax, ARROW_OFFSET)
+    low, high = ax.get_xlim()
     span = None
-    if abs(gap) >= ARROW_FLOOR:
+    if abs(gap) >= (high - low) * ARROW_FLOOR_SHARE:
         span = ax.annotate(
             "",
             xy=(verdict.deserved_margin, 0.0),

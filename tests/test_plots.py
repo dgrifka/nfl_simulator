@@ -28,7 +28,7 @@ from matplotlib.patches import FancyArrowPatch  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from nfl_simulator.plots import (  # noqa: E402
-    ARROW_FLOOR,
+    ARROW_FLOOR_SHARE,
     BAND_HIGH,
     BAND_LOW,
     CLEAR_FLIP,
@@ -4326,12 +4326,17 @@ def test_the_floored_sentence_sits_where_a_drawn_arrow_s_sentence_sits():
     assert offsets[0] == pytest.approx(offsets[1], abs=1.0)
 
 
-def test_a_gap_of_exactly_a_point_still_draws_its_span():
-    """The floor is exclusive: 1.0 is drawn, so the rule has one edge, not a
-    band of games that may or may not have an arrow."""
-    _fig, ax = plot_bootstrap_distribution(_tiny_gap_game(deserved_margin=2.0), arrow=True)
-    assert len(_spans(ax)) == 1
-    assert _arrow_sentence(ax).get_text() == "luck moved the margin 1.0 points toward DET"
+def test_a_gap_of_exactly_the_share_still_draws_its_span():
+    """The floor is inclusive at its own edge, so the rule has one edge rather
+    than a band of games that may or may not have an arrow. Measured against the
+    helper on an axis already pinned, because moving a verdict's deserved margin
+    moves the rule that helps set the limits the share is taken from."""
+    fig, ax = plot_bootstrap_distribution(_tiny_gap_game(), arrow=True)
+    width = float(np.diff(ax.get_xlim())[0])
+    over = _tiny_gap_game(deserved_margin=3.0 - width * ARROW_FLOOR_SHARE * 1.01)
+    under = _tiny_gap_game(deserved_margin=3.0 - width * ARROW_FLOOR_SHARE * 0.99)
+    assert _draw_luck_arrow(ax, over)[0] is not None
+    assert _draw_luck_arrow(ax, under)[0] is None
 
 
 def test_the_arrow_helper_returns_no_span_under_the_floor():
@@ -4341,7 +4346,61 @@ def test_the_arrow_helper_returns_no_span_under_the_floor():
     span, label = _draw_luck_arrow(ax, _tiny_gap_game())
     assert span is None
     assert label.get_text().startswith("luck moved the margin")
-    assert ARROW_FLOOR == 1.0
+
+
+# ---- round 12 Part C: the arrow floor is a share of the axis too ----------
+
+
+def test_the_arrow_floor_is_a_share_of_the_axis_rather_than_a_fixed_point():
+    """Document 63 §7d N1. `ARROW_FLOOR = 1.0` pt was absolute, so a 1.1-pt gap
+    on a 55-pt axis drew as a bare arrowhead with no shaft — the same defect
+    round 11 fixed for the draw floor, one figure over."""
+    import nfl_simulator.plots as plots
+
+    assert plots.ARROW_FLOOR_SHARE == 0.03
+    assert not hasattr(plots, "ARROW_FLOOR")
+
+
+def test_a_gap_that_is_a_point_on_a_wide_axis_draws_no_span():
+    """The `2022_03_CIN_NYJ` Full case: 1.1 pt cleared the old absolute floor
+    and drew about eighteen pixels of shaft on a fifty-five-point axis."""
+    wide = branded(actual_margin=1.1, deserved_margin=0.0, draws=np.linspace(-27.0, 28.0, 512))
+    fig, ax = plot_bootstrap_distribution(wide, arrow=True)
+    width = float(np.diff(ax.get_xlim())[0])
+    assert width > 50.0, "the fixture's premise: a wide axis"
+    assert 1.1 > 1.0, "and a gap the absolute floor would have drawn"
+    assert not _spans(ax)
+
+
+def test_the_same_gap_on_a_narrow_axis_keeps_its_span():
+    """The rule's whole point: one absolute floor cannot be right for both. On a
+    twelve-point axis 1.1 pt is nearly a tenth of the width and is a distance a
+    reader can measure by eye."""
+    narrow = branded(actual_margin=1.1, deserved_margin=0.0, draws=np.linspace(-5.0, 6.0, 512))
+    fig, ax = plot_bootstrap_distribution(narrow, arrow=True)
+    assert float(np.diff(ax.get_xlim())[0]) < 20.0, "the fixture's premise: a narrow axis"
+    assert len(_spans(ax)) == 1
+
+
+def test_the_sentence_is_drawn_whatever_the_span_does():
+    """The number is never lost: the floor takes the patch, not the words."""
+    for game in (
+        branded(actual_margin=1.1, deserved_margin=0.0, draws=np.linspace(-27.0, 28.0, 512)),
+        branded(actual_margin=1.1, deserved_margin=0.0, draws=np.linspace(-5.0, 6.0, 512)),
+    ):
+        _fig, ax = plot_bootstrap_distribution(game, arrow=True)
+        assert _arrow_sentence(ax).get_text().startswith("luck moved the margin 1.1 points")
+
+
+def test_the_two_games_the_round_pins_the_rule_on_keep_their_verdicts():
+    """`2025_13_DEN_WAS` Full — 0.35 pt on about 50 — still has no span, and
+    `2024_19_LAC_HOU` — 19.1 pt on about 55 — still has one."""
+    den_was = branded(actual_margin=1.35, deserved_margin=1.0, draws=np.linspace(-24.0, 26.0, 512))
+    lac_hou = branded(actual_margin=20.0, deserved_margin=0.9, draws=np.linspace(-15.0, 40.0, 512))
+    _fig, ax = plot_bootstrap_distribution(den_was, arrow=True)
+    assert not _spans(ax)
+    _fig, ax = plot_bootstrap_distribution(lac_hou, arrow=True)
+    assert len(_spans(ax)) == 1
 
 
 # --------------------------------------------------------------------------

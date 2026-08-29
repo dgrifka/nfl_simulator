@@ -44,7 +44,7 @@ from matplotlib.patches import FancyArrowPatch  # noqa: E402
 
 from nfl_simulator import paths  # noqa: E402
 from nfl_simulator.plots import (  # noqa: E402
-    ARROW_FLOOR,
+    ARROW_FLOOR_SHARE,
     DRAW_FLOOR_SHARE,
     fold_to_frame,
     luck_bars,
@@ -556,7 +556,7 @@ def main() -> None:
                 "elapsed_seconds": elapsed,
                 "files_written": written,
                 "replay_tolerance": REPLAY_TOLERANCE,
-                "arrow_floor": ARROW_FLOOR,
+                "arrow_floor_share": ARROW_FLOOR_SHARE,
                 "draw_floor_share": DRAW_FLOOR_SHARE,
                 "files_on_disk": on_disk,
                 "checks": {
