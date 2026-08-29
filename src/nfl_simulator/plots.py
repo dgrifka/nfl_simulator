@@ -2096,12 +2096,21 @@ def _stamp_row_logos(ax, bars, rows_y, logos) -> None:
         )
 
 
-def _draw_ledger_arrow(ax, verdict: GameVerdict, rows_y, x_rail: float) -> None:
+def _draw_ledger_arrow(
+    ax, verdict: GameVerdict, rows_y, x_rail: float, corners: Sequence[Text] = ()
+) -> None:
     """The same span the distribution draws, run down the waterfall's right side.
 
     Head at the **actual** end, because that is the direction luck pushed the
     game; the label is the distribution's, word for word, so the two figures say
     the same sentence about the same game.
+
+    ``corners`` are the two side headers, so the rotated sentence can be moved
+    out from under them. It runs the height of the rail, and on a waterfall with
+    two or three rows the rail is most of the figure — document 63 caught the
+    sentence over `HOU wins` on `2017_04_TEN_HOU` and over `IND wins` on
+    `2020_03_NYJ_IND`. The sentence is the half that moves: the corner label is
+    a fixed key a reader looks for in the same place on every figure.
     """
     gap = verdict.actual_margin - verdict.deserved_margin
     toward = verdict.home_team if gap > 0 else verdict.away_team
@@ -2122,7 +2131,7 @@ def _draw_ledger_arrow(ax, verdict: GameVerdict, rows_y, x_rail: float) -> None:
         annotation_clip=False,
         zorder=5,
     )
-    ax.text(
+    sentence = ax.text(
         x_rail,
         (top + bottom) / 2.0,
         f"luck moved the margin {abs(gap):.1f} points toward {toward}",
@@ -2133,6 +2142,31 @@ def _draw_ledger_arrow(ax, verdict: GameVerdict, rows_y, x_rail: float) -> None:
         fontsize=8.5,
         color=PALETTE["text_muted"],
         zorder=5,
+    )
+    _lower_under_corners(ax, sentence, corners)
+
+
+def _lower_under_corners(ax, label: Text, corners: Sequence[Text]) -> None:
+    """Drop ``label`` until its top clears the corner band, or leave it alone.
+
+    Measured rather than reserved: how far the rotated sentence reaches depends
+    on how many rows the game has and how many characters the number takes, and
+    a fixed inset that fitted a two-row waterfall would waste a lane on a
+    twenty-row one.
+    """
+    from matplotlib.transforms import offset_copy
+
+    wanted = [corner for corner in corners if corner.get_text()]
+    if not wanted:
+        return
+    renderer = _renderer(ax.figure)
+    clearance = CORNER_CLEARANCE / 72.0 * ax.figure.dpi
+    floor = min(corner.get_window_extent(renderer).y0 for corner in wanted) - clearance
+    overlap = label.get_window_extent(renderer).y1 - floor
+    if overlap <= 0:
+        return
+    label.set_transform(
+        offset_copy(label.get_transform(), fig=ax.figure, x=0, y=-overlap, units="dots")
     )
 
 
@@ -2538,7 +2572,11 @@ def plot_luck_ledger(
             rail_room = max(0.18 * (high - low), 0.8)
             x_rail = high + pad * 0.9
             ax.set_xlim(low - pad, high + pad + rail_room)
-            _draw_side_tints(ax, verdict, home_colour, away_colour, logos)
+            # `shield=True`, as the distribution passes. Document 60 §7 justified
+            # the bare label here on the grounds that the waterfall has nothing
+            # crossing this band; document 63 found what does — its own dashed
+            # zero rule, straight through `PIT wins` on a lopsided game.
+            corners = _draw_side_tints(ax, verdict, home_colour, away_colour, logos, shield=True)
 
             ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
             ax.set_axisbelow(True)
@@ -2553,7 +2591,7 @@ def plot_luck_ledger(
             )
             ax.set_xlabel("")
             _draw_wins_by_labels(fig, ax, verdict, home_colour, away_colour)
-            _draw_ledger_arrow(ax, verdict, rows_y, x_rail)
+            _draw_ledger_arrow(ax, verdict, rows_y, x_rail, corners)
             # Before the marks: they take their column from where the labels
             # start, and until this runs every label starts somewhere else.
             _left_align_row_labels(ax)

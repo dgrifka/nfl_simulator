@@ -4209,3 +4209,88 @@ def test_the_title_and_the_stamp_are_at_opposite_ends_of_the_image(tmp_path):
     pixels = np.asarray(image, dtype=float).mean(axis=2)
     title_rows = np.nonzero((pixels[: int(top * 0.5)] < FOREIGN_INK).any(axis=1))[0]
     assert title_rows.min() < top, "the title is above the stamp, not in it"
+
+
+# --------------------------------------------------------------------------
+# round 10 Part D: the waterfall's corner labels
+# --------------------------------------------------------------------------
+
+
+def _lopsided(bars: int = 2):
+    """A 43-point game with almost nothing between its two ends.
+
+    `2017_04_TEN_HOU` in Strict and `2023_11_PIT_CLE` in Full: the axis is so
+    long that zero sits under the left-hand corner label, and with two bars on
+    the page the rotated arrow sentence is nearly as tall as the plot.
+    """
+    game = branded(
+        game_id="2017_04_TEN_HOU",
+        actual_margin=43.0,
+        deserved_margin=0.5,
+        dtw_home=0.9,
+        draws=np.linspace(-5.0, 45.0, 512),
+    )
+    step = (game.actual_margin - game.deserved_margin) / PPE / bars
+    rows = [ledger_row(step, play_id=100.0 + i) for i in range(bars)]
+    return plot_luck_ledger(game, rows, points_per_epa=PPE)
+
+
+def _corner_label(ax, team):
+    return next(t for t in ax.texts if t.get_text() == f"{team} wins")
+
+
+def _zero_rule(ax):
+    return next(line for line in ax.lines if list(line.get_xdata()) == [0.0, 0.0])
+
+
+def test_the_zero_rule_cannot_print_through_a_waterfalls_corner_label():
+    """Document 63 found the dashed zero rule struck through `PIT wins`,
+    `ARI wins`, `JAX wins` and `TEN wins` on four lopsided games.
+
+    Document 60 §7 justified `shield=False` here on the grounds that the
+    waterfall has nothing crossing that band. It has: its own zero rule. The
+    shield is the distribution's own device, and the assertion is that the
+    rule is *behind* an opaque box rather than that the two never meet — on a
+    43-point game they meet by geometry, and moving the corner label is not the
+    settled fix.
+    """
+    from matplotlib.colors import to_hex
+
+    fig, ax = _lopsided()
+    fig.canvas.draw()
+    corner = _corner_label(ax, "GB")
+    box = corner.get_window_extent(fig.canvas.get_renderer())
+    rule_x = ax.transData.transform((0.0, 0.0))[0]
+    assert box.x0 <= rule_x <= box.x1, "this game does not have the defect under test"
+
+    shield = corner.get_bbox_patch()
+    assert shield is not None, "the corner label is unshielded"
+    assert to_hex(shield.get_facecolor()) == PALETTE["bg"].lower()
+    assert shield.get_facecolor()[3] == 1.0, "a translucent shield is not a shield"
+    assert corner.get_zorder() > _zero_rule(ax).get_zorder()
+
+
+def test_the_rotated_arrow_sentence_gives_way_to_the_corner_label():
+    """`2017_04_TEN_HOU` and `2020_03_NYJ_IND`: the sentence runs the height of
+    the rail, and on a short waterfall the rail is most of the figure. The
+    sentence is the one that moves — the corner label is a fixed key."""
+    fig, ax = _lopsided(bars=1)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    sentence = next(t for t in ax.texts if t.get_text().startswith("luck moved"))
+    for team in ("GB", "DET"):
+        corner = _corner_label(ax, team).get_window_extent(renderer)
+        assert not sentence.get_window_extent(renderer).overlaps(corner)
+
+
+def test_the_sentence_stays_centred_on_the_rail_when_it_reaches_no_corner():
+    """The move is geometric, so a waterfall with room keeps the rail it had:
+    the sentence's own middle is still the middle of the span it measures."""
+    fig, ax = _lopsided(bars=8)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    sentence = next(t for t in ax.texts if t.get_text().startswith("luck moved"))
+    box = sentence.get_window_extent(renderer)
+    ticks = ax.get_yticks()
+    rail = [ax.transData.transform((0.0, float(y)))[1] for y in (ticks[0], ticks[-1])]
+    assert (box.y0 + box.y1) / 2 == pytest.approx(sum(rail) / 2, abs=1.0)
