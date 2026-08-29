@@ -260,14 +260,46 @@ def measure(task: tuple[str, str, str]) -> dict:
         "events_under_a_point": sum(1 for bar in bars if abs(bar.points) < 1.0),
         # --- round 10's five, one per part -----------------------------
         "stamp_overlap_px": _stamp_overlap_px(dtw_png, edition) if dtw_png else None,
-        "rows_under_draw_floor": sum(1 for bar in grouped if abs(bar.points) < floor),
         "rows_named_events_under": sum(1 for bar in grouped if "events under" in bar.label),
         "anonymous_rows": sum(1 for bar in grouped if bar.team is None),
+        # --- round 11's four, and the axis they are measured against ------
+        "waterfall_span": span,
+        "draw_floor": floor,
+        "rows_named_one_small_event": sum(
+            1 for bar in grouped if bar.label.startswith("1 small event")
+        ),
+        **_under_floor(grouped, floor),
         # --- and what the canvas decided -------------------------------
         **layout,
         "longest_label_text": longest,
         "is_degenerate": bool(verdict.is_degenerate),
         "bucket": verdict.bucket,
+    }
+
+
+def _under_floor(grouped, floor: float) -> dict:
+    """The rows that still draw nothing, sorted into what the round 11 rules allow.
+
+    Two classes are allowed and one is not. A **lone event** is kept whatever it
+    is worth, because `1 small event (SEA)` is the same invisible bar with the
+    event's words taken off it — rule 2. A **club heap of two or more** that
+    cancels to under the floor is kept because there is nowhere left to fold it
+    — rule 3, and this is the residue the round reports rather than hides.
+
+    **Anything else** is a bug rather than a residue: a component fold under the
+    floor should have been absorbed into its club's heap before it ever reached
+    a row, so the third count is pre-registered at zero.
+    """
+    under = [bar for bar in grouped if abs(bar.points) < floor]
+    heaps = [
+        bar for bar in under if bar.n_events > 1 and bar.component is None and bar.play_id is None
+    ]
+    lone = [bar for bar in under if bar.n_events == 1]
+    return {
+        "rows_under_draw_floor": len(under),
+        "rows_under_floor_lone_event": len(lone),
+        "rows_under_floor_cancelled_heap": len(heaps),
+        "rows_under_floor_other": len(under) - len(lone) - len(heaps),
     }
 
 
@@ -305,9 +337,72 @@ def _summarise(records: list[dict], edition: str) -> dict:
         "n_sentence_overlaps": int(frame["sentence_overlaps"].sum()),
         "n_rows_under_draw_floor": int(frame["rows_under_draw_floor"].sum()),
         "n_games_with_a_row_under_the_floor": int((frame["rows_under_draw_floor"] > 0).sum()),
+        "n_rows_under_floor_lone_event": int(frame["rows_under_floor_lone_event"].sum()),
+        "n_rows_under_floor_cancelled_heap": int(frame["rows_under_floor_cancelled_heap"].sum()),
+        "n_rows_under_floor_other": int(frame["rows_under_floor_other"].sum()),
+        "n_rows_named_one_small_event": int(frame["rows_named_one_small_event"].sum()),
+        "draw_floor_median": float(frame["draw_floor"].median()),
+        "draw_floor_max": float(frame["draw_floor"].max()),
         "n_rows_named_events_under": int(frame["rows_named_events_under"].sum()),
         "n_anonymous_rows": int(frame["anonymous_rows"].sum()),
     }
+
+
+# The sorts document 63 §4 reads the tail by, and the direction each extreme
+# lies in. The fifth of round 9's six — the smallest gap between the two rule
+# labels — is dropped: round 10 put the labels on two rows, so there is no gap
+# left to be small.
+PICK_SORTS = (
+    ("longest_label", True),
+    ("n_waterfall_rows", True),
+    ("actual_margin", True),
+    ("deserved_margin", False),
+    ("events_under_a_point", True),
+)
+PICKS_PER_SORT = 10
+PICK_FIGURES = ("dtw", "waterfall")
+PICK_LIST = "79_pick_list.json"
+
+
+def _pick_lists(records: list[dict], root: Path) -> list[dict]:
+    """The PNGs the tail read opens: the worst ten of each sort, both editions.
+
+    One game is usually extreme on more than one sort, so the lists overlap
+    heavily and the deduplicated result is much smaller than five sorts times
+    ten times two editions times two figures. Every sort a PNG was picked by is
+    kept on its entry, because "why is this one here" is the first question the
+    read asks of a figure that looks fine.
+    """
+    picked: dict[tuple[str, str, str], dict] = {}
+    for edition in ("strict", "full"):
+        rows = [r for r in records if r["edition"] == edition]
+        for name, biggest_first in PICK_SORTS:
+            worst = sorted(rows, key=lambda r: r[name], reverse=biggest_first)
+            for record in worst[:PICKS_PER_SORT]:
+                for figure in PICK_FIGURES:
+                    key = (record["game_id"], edition, figure)
+                    entry = picked.setdefault(
+                        key,
+                        {
+                            "game_id": record["game_id"],
+                            "edition": edition,
+                            "figure": figure,
+                            "sorts": [],
+                            "path": _figure_path(root, record["game_id"], edition, figure),
+                        },
+                    )
+                    entry["sorts"].append(f"{name}={record[name]}")
+    return sorted(picked.values(), key=lambda e: (e["edition"], e["game_id"], e["figure"]))
+
+
+def _figure_path(root: Path, game_id: str, edition: str, figure: str) -> str | None:
+    """Where this game-edition's figure landed, or None if it is not on disk.
+
+    The filename carries the scoreboard and the two DTW shares, so it cannot be
+    spelled from the game id alone — it is matched rather than constructed.
+    """
+    matches = sorted((root / edition).glob(f"{game_id}_*_{edition}_{figure}.png"))
+    return str(matches[0]) if matches else None
 
 
 def _load_checkpoint(path: Path) -> list[dict]:
@@ -391,8 +486,12 @@ def main() -> None:
         "title_stamp_overlaps": (sum(s["n_stamp_overlaps"] for s in summary.values()), 0),
         "corner_strikes": (sum(s["n_corner_strikes"] for s in summary.values()), 0),
         "sentence_overlaps": (sum(s["n_sentence_overlaps"] for s in summary.values()), 0),
-        "rows_under_draw_floor": (
-            sum(s["n_rows_under_draw_floor"] for s in summary.values()),
+        "rows_named_one_small_event": (
+            sum(s["n_rows_named_one_small_event"] for s in summary.values()),
+            0,
+        ),
+        "rows_under_floor_other": (
+            sum(s["n_rows_under_floor_other"] for s in summary.values()),
             0,
         ),
         "rows_named_events_under": (
@@ -405,10 +504,34 @@ def main() -> None:
             total,
         ),
     }
-    print(f"\n{'=' * 76}\nROUND 10 — PRE-REGISTERED CHECKS\n{'=' * 76}")
+    print(f"\n{'=' * 76}\nROUND 11 — PRE-REGISTERED CHECKS\n{'=' * 76}")
     for name, (got, want) in checks.items():
         verdict_word = "ok" if got == want else "MISS"
         print(f"  {name:<28} {got!s:>12}  expected {want!s:<12} {verdict_word}", flush=True)
+
+    # Reported, not pre-registered to a number: the residue rules 2 and 3 allow,
+    # and the widest waterfall the corpus draws.
+    print(f"\n{'=' * 76}\nROUND 11 — REPORTED\n{'=' * 76}")
+    for name in (
+        "n_rows_under_draw_floor",
+        "n_rows_under_floor_lone_event",
+        "n_rows_under_floor_cancelled_heap",
+        "n_rows_under_floor_other",
+        "n_games_with_a_row_under_the_floor",
+    ):
+        by_edition = "  ".join(f"{e} {summary[e][name]}" for e in ("strict", "full"))
+        print(f"  {name:<38} {sum(summary[e][name] for e in summary):>6}   ({by_edition})")
+    print(
+        "  waterfall rows, max                    "
+        f"{max(summary[e]['n_waterfall_rows']['max'] for e in summary):>6.0f}   "
+        + "  ".join(f"{e} {summary[e]['n_waterfall_rows']['max']:.0f}" for e in ("strict", "full"))
+    )
+    for edition in ("strict", "full"):
+        print(
+            f"  draw floor, {edition:<7} median "
+            f"{summary[edition]['draw_floor_median']:.3f} pt   "
+            f"max {summary[edition]['draw_floor_max']:.3f} pt"
+        )
 
     print(f"\n{'=' * 76}\nDISTRIBUTIONS\n{'=' * 76}")
     for edition, block in summary.items():
@@ -441,6 +564,14 @@ def main() -> None:
             handle,
             indent=2,
         )
+    picks = _pick_lists(records, root)
+    missing = [pick for pick in picks if pick["path"] is None]
+    print(f"\n{'=' * 76}\nTAIL READ — THE PICK LIST\n{'=' * 76}")
+    print(f"  {len(picks)} distinct PNGs after deduplication, {len(missing)} not on disk")
+    with (paths.RESEARCH_OUTPUT_DIR / PICK_LIST).open("w") as handle:
+        json.dump({"n_picks": len(picks), "picks": picks}, handle, indent=2)
+    print(f"  {paths.RESEARCH_OUTPUT_DIR / PICK_LIST}")
+
     print(f"\n  {paths.RESEARCH_OUTPUT_DIR / RESULTS}")
 
 

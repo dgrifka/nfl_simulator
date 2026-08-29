@@ -230,3 +230,89 @@ evidenced on three independent games. **This is a deviation from "open the worst
 ten and the ten smallest in each edition"**, recorded as round 9 recorded its
 own. The pick lists are in `research/outputs/79_render_all.json`, and §4's 148
 unread PNGs from round 9 are now superseded by this round's re-render.
+
+## 7. The full tail read after round 11 (2026-08-29)
+
+`fix/figure-round-11`, from `handoff-2026-08-29-figures-r11.md`, after Part A
+made the draw floor a share of the axis. The corpus was re-rendered from an
+empty `research/outputs/all/` and an empty checkpoint: **15,600 PNGs in 34.7
+minutes on 12 workers, worst replay gap `0.00e+00`**.
+
+### 7a. What was opened
+
+The pick lists were rebuilt from the fresh JSON by `_pick_lists` in
+`research/79_render_all.py` and written to `research/outputs/79_pick_list.json`.
+Five sorts — longest label, most waterfall rows, widest actual margin, smallest
+|deserved margin|, most events under a point — worst ten of each, both editions,
+both figure types. The sixth sort round 9 used, the smallest gap between the two
+rule labels, is dropped: round 10 put those labels on two rows, so there is no
+gap left to be small.
+
+Deduplicated, that is **194 distinct PNGs across 97 game-editions** (94 Full, 100
+Strict), and **all 194 were opened** — no sampling, no stopping at saturation.
+This closes round 9's deviation (27 of 175) and round 10's (5 of 40).
+
+### 7b. Closed by rounds 10 and 11, confirmed on the games that raised them
+
+| Defect from §3 | Game re-opened | Status |
+|---|---|---|
+| Zero rule prints through `PIT wins` | `2023_11_PIT_CLE` full | **closed** — shielded corner label |
+| Zero rule strikes `ARI wins` | `2016_14_ARI_MIA` strict | **closed** |
+| Zero rule strikes `TEN wins` | `2017_04_TEN_HOU` strict | **closed** |
+| Arrow sentence overlaps `HOU wins` | `2017_04_TEN_HOU` strict | **closed** |
+| Arrow sentence overlaps `IND wins` | `2020_03_NYJ_IND` strict | **closed** |
+| `81 events under 1 pt`, anonymous, third-largest bar | `2025_02_NYG_DAL` full | **closed** — now `43 small events (DAL)` and `38 small events (NYG)`, each with its club's mark |
+| Fold rows at +0.03 / −0.02 drawing nothing | `2022_05_SF_CAR` full | **closed** — absorbed into the two club heaps |
+| Title running under the corner credit stamp | corpus-wide | **closed** — 0 of 3,900 |
+
+### 7c. Still open from §3, re-confirmed
+
+| Game | Edition | Figure | Defect | Severity |
+|---|---|---|---|---|
+| `2019_01_BAL_MIA` | strict | waterfall | 49-pt margin: three event bars occupy ~5% of the plot width | legibility |
+| `2019_02_NE_MIA` | strict | waterfall | 43-pt margin, three bars against a 55-pt axis | legibility |
+| `2023_01_DAL_NYG` | full | waterfall | 40-pt margin, 17 bars in a 5-pt strip | legibility |
+| `2025_19_GB_CHI` | full | waterfall | `GB fumble on a pass, retained` ×3, byte-identical | cosmetic |
+| `2025_09_MIN_DET` | strict | dtw | The dashed `Deserved: even` rule at x=0 loses contrast against the saturated fill | cosmetic |
+| `2023_19_CLE_HOU` class | strict | dtw | Rule label boxes flush with the figure edge (seen again on `2018_11_PHI_NO`, `2019_01_BAL_MIA` at the *left* edge, `2020_13_NE_LAC`, `2024_11_JAX_DET`) | cosmetic |
+| blowouts generally | both | dtw | Zero-anchored `wins by` key sits far from the bars; degenerate games reserve an arrow band they do not use | cosmetic (both decided) |
+
+### 7d. New in this read
+
+| Game | Edition | Figure | Defect | Severity |
+|---|---|---|---|---|
+| `2023_02_WAS_DEN`, `2024_16_CLE_CIN`, `2016_14_DAL_NYG`, `2016_07_MIN_PHI`, `2023_06_MIN_CHI` | both | waterfall | **N5 — the span the floor uses is not the axis the reader sees.** The settled span is `max(0, actual, deserved) − min(0, actual, deserved)`, but the drawn frame adds a pad at both ends and a lane for the arrow rail, and the running totals can swing outside both margins. `2023_02_WAS_DEN`'s span is 2.0 pt (floor 0.01) while its frame runs about 12 pt, so a −0.04-pt row clears the floor and draws one pixel. Arithmetically the floor is **never more than 0.32% of the drawn axis** and is far less on a narrow game: `pad` is 20% of the drawn width at each end and `rail_room` another 18%, so the frame is at least 1.58× the span. | legibility |
+| `2017_16_OAK_PHI`, `2019_17_OAK_DEN` | strict | both | **N6 — a 2017/2019 Oakland game is named LV everywhere**: headline, corner label, every row, legend and key. The relocation alias document 63 §3a found collapsing *filenames* also rewrites the visible club name. Worse: the same figure carries two different Raiders marks at once, the vintage wordmark on the anchor rows and the modern shield in the corner (also on `2023_15_LAC_LV` and `2025_18_KC_LV`, where the name is right and the two marks still disagree). | legibility |
+| `2022_03_CIN_NYJ`, `2022_07_KC_SF`, `2025_19_GB_CHI` | full | dtw | **N1 — the luck arrow's floor is absolute too.** `ARROW_FLOOR = 1.0` pt, so a 1.1-pt arrow draws on a 55-pt axis as a bare arrowhead with no shaft. The same defect round 11 just fixed for the draw floor, one figure over. | cosmetic |
+| `2022_03_GB_TB`, `2022_09_GB_DET`, `2022_12_NO_SF`, `2023_05_JAX_BUF`, `2023_12_CHI_MIN`, `2023_12_JAX_HOU`, `2024_11_SEA_SF`, `2025_01_ARI_NO`, `2025_01_MIN_CHI`, `2018_15_HOU_NYJ`, `2019_02_JAX_HOU`, `2022_01_IND_HOU`, `2023_10_DEN_BUF`, `2025_02_PHI_KC`, `2025_05_TEN_ARI`, `2025_09_MIN_DET`, `2025_18_CLE_CIN`, `2025_18_KC_LV`, `2025_19_LA_CAR` | both | waterfall | **N2 — an anchor of zero draws no bar.** `Deserved: even` (and `Actual: even` on a tie, `2022_01_IND_HOU`) leaves the anchor row as a label and a club mark floating with nothing between them. Nineteen of the 97 game-editions read. The anchors are exempt from the draw floor by design — they are the two ends, not events — so this needs its own rule if it needs one. | cosmetic |
+| `2022_04_NYJ_PIT`, `2022_05_HOU_JAX`, `2018_15_HOU_NYJ`, `2021_16_PIT_KC` | both | both | **N3 — two dark clubs give two identical side tints.** NYJ green against PIT black, HOU navy against NYJ black: the two `X wins` regions are the same pale grey and side identity rests entirely on the corner labels and marks, which are present. | cosmetic |
+| `2022_07_KC_SF`, `2025_15_DET_LA`, `2025_19_LA_CAR` | both | both | **N4 — a same-hue matchup collapses the whole colour system.** KC bright red vs SF dark red, DET light blue vs LA dark blue: bars, legend swatches, both side tints and the `wins by` key all read as one hue family. Document 60 §8d logs KC's protan gap against the neutral; this is the normal-vision case, club against club. | cosmetic |
+| corpus-wide | both | dtw | **K6 widened.** Document 63 §3 recorded the *dashed deserved* rule losing contrast on saturated fill. The **solid actual rule** does the same and worse against a dark club — `2022_05_HOU_JAX`, `2023_15_LAC_LV` (black on black), `2024_07_CIN_CLE`, `2024_11_CLE_NO`, `2025_18_CLE_CIN`. Both rules also hide behind each other when the two margins are within a tenth (`2024_18_KC_DEN`, `2022_01_IND_HOU`). | cosmetic |
+
+**No new class** on: longest label (the 58-character maximum wraps and sits
+clear), most waterfall rows (`2023_01_PHI_NE` full at 25 rows is legible top to
+bottom), and most events under a point (the club heaps carry them and each wears
+its mark).
+
+### 7e. What the relative floor did, seen on the page
+
+The round's own rules are visible in the tail exactly as pre-registered, and
+their costs are visible too.
+
+- **Rule 2 keeps the words and loses the bar.** `2018_11_PHI_NO` strict has two
+  event rows and one of them, `PHI extra point · Elliott, made (96% kick)` at
+  **+0.04 pt** against a 0.205-pt floor, is a hairline. `2021_05_IND_BAL` strict
+  keeps `BAL 23-yd field goal · Tucker, made (100% kick)` at **−0.01 pt**, the
+  smallest row in the corpus. This is the trade the rule makes and it is not a
+  bug; whether it is the right trade is the maintainer's.
+- **Rule 3's residue is real and small.** `2017_04_TEN_HOU` strict is the
+  clearest picture: four event rows, two of them club heaps that cancel far
+  under a 0.215-pt floor — `9 small events (HOU)` at −0.06 and `2 small events
+  (TEN)` at +0.05.
+- **The floor works in the direction it was meant to.** On narrow games it keeps
+  rows an absolute 0.05 would have folded: `2022_09_LA_TB` full keeps a +0.1-pt
+  bar on a 5.4-pt span and it is a visible sliver. On wide ones it folds rows an
+  absolute floor kept: `2022_05_SF_CAR` full has nothing under its 0.139-pt
+  floor at all.
+- **And a row exactly at the floor is still about two pixels**, by arithmetic —
+  `2023_01_DAL_NYG` full has two of them. That is inherent to any floor.
