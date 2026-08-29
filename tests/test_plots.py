@@ -4000,9 +4000,14 @@ def test_a_lifted_rule_label_never_lands_in_the_header():
             assert not label.get_window_extent().overlaps(box.padded(clearance))
 
 
-def test_the_header_only_makes_way_on_a_game_that_stacks():
-    """A figure whose two labels sit side by side keeps the header it had — the
-    lift is paid for by the game that needs it, not by all of them."""
+def test_the_header_makes_the_same_way_on_every_game():
+    """Round 8 said the lift was "paid for by the game that needs it, not by all
+    of them". Document 63 measured which games need it: **93.2% of Strict and
+    94.6% of Full**, because the two centred boxes are about 130 px wide each
+    and the median game's two margins are far closer than that. The exception
+    was the rule, and furniture that moves between games is furniture a reader
+    cannot compare across them — so the band is two rows on every figure and the
+    header gives the same room back on every figure."""
     stacked = branded(deserved_margin=0.2, actual_margin=1.0, draws=np.linspace(-6.0, 8.0, 512))
     apart = branded()
     heights = []
@@ -4011,7 +4016,41 @@ def test_the_header_only_makes_way_on_a_game_that_stacks():
         fig.canvas.draw()
         subtitle = next(t for t in ax.texts if t.get_text() == game.subtitle_line())
         heights.append(subtitle.get_window_extent().y0 - ax.get_window_extent().y1)
-    assert heights[1] > heights[0]
+    assert heights[1] == pytest.approx(heights[0])
+
+
+# The two games the round is read on: `2024_19_LAC_HOU` Full, whose margins are
+# twenty points apart, and `2025_13_DEN_WAS` Full, whose margins are a point
+# apart. One used to stack and the other did not.
+WIDE_GAP = {"actual_margin": 20.0, "deserved_margin": 0.9}
+NEAR_TIE = {"actual_margin": 1.0, "deserved_margin": 0.2}
+
+
+def _rows_of(**margins):
+    game = branded(draws=np.linspace(-6.0, 24.0, 512), **margins)
+    fig, ax = plot_bootstrap_distribution(game)
+    fig.canvas.draw()
+    deserved = next(t for t in _callouts(ax) if t.get_text().startswith("Deserved"))
+    actual = next(t for t in _callouts(ax) if t.get_text().startswith("Actual"))
+    return deserved.get_window_extent(), actual.get_window_extent()
+
+
+@pytest.mark.parametrize("margins", [WIDE_GAP, NEAR_TIE], ids=["wide gap", "near tie"])
+def test_the_two_rule_labels_are_on_two_rows_whatever_the_gap(margins):
+    """`Deserved:` on the upper row and `Actual:` on the lower, always."""
+    deserved, actual = _rows_of(**margins)
+    assert deserved.y0 > actual.y0, "the deserved label holds the upper row"
+    assert not deserved.overlaps(actual)
+
+
+def test_the_two_rows_are_the_same_two_rows_on_every_game():
+    """Not merely two rows each: the *same* two, so a reader who has learnt
+    where `Actual:` sits on one game finds it there on the next."""
+    wide_deserved, wide_actual = _rows_of(**WIDE_GAP)
+    tie_deserved, tie_actual = _rows_of(**NEAR_TIE)
+    assert wide_actual.y0 == pytest.approx(tie_actual.y0)
+    assert wide_deserved.y0 == pytest.approx(tie_deserved.y0)
+    assert wide_deserved.y0 - wide_actual.y0 == pytest.approx(tie_deserved.y0 - tie_actual.y0)
 
 
 # --------------------------------------------------------------------------

@@ -417,7 +417,7 @@ def draw_header(
     ``lift`` raises the whole block, in points. The distribution's two rule
     labels sit in the band between the plot and this header, and a near-tie
     stacks them on a second row that would otherwise be the subtitle's — see
-    :func:`_lift_colliding_label`. The block moves as one, pill included, so the
+    :func:`_stack_rule_labels`. The block moves as one, pill included, so the
     header still reads as a block rather than as a heading that lost its
     subtitle.
 
@@ -555,37 +555,59 @@ def _wrap_to_width(fig, text: Text, width_px: float) -> None:
     text.set_text("\n".join(lines))
 
 
+def _label_row(fig, held: Annotation) -> float:
+    """One row of the band, in points: a label's own rendered height plus the
+    gap a label keeps off the spine, so the two rows are as far apart as a row
+    is tall whatever the font or the dpi turns out to be."""
+    return held.get_window_extent(_renderer(fig)).height / fig.dpi * 72.0 + RULE_LABEL_GAP
+
+
+def _stack_rule_labels(fig, lifted: Annotation, held: Annotation) -> float:
+    """Put the two rule labels on two rows — on every game, unconditionally.
+
+    Round 8 built the second row for a near-tie and lifted only when the two
+    centred boxes actually overlapped. Document 63 measured how often that is:
+    **93.2% of Strict games and 94.6% of Full ones**. Each box is about 130 px
+    wide and centred on its own margin, so any gap under roughly ten points puts
+    them on top of each other, and the median game's two margins are far closer
+    than that. The premise that stacking is the exception is what the corpus
+    refutes.
+
+    So the band is two rows always. Furniture that moves between games is
+    furniture a reader cannot compare across them: a reader who learns where
+    `Actual:` sits on one game finds it in the same place on the next, and the
+    header gives the same room back on all of them rather than on nineteen
+    games in twenty.
+
+    ``lifted`` takes the upper row; ``held`` keeps the lower one. Which is which
+    is the caller's choice and not a measurement: `Deserved:` is the one that
+    moves, because the lower row is the one a reader's eye meets first coming up
+    off the plot and `Actual:` is the scoreboard they already know.
+
+    Returns the points it lifted, which is what the header has to give back.
+    """
+    row = _label_row(fig, held)
+    x_points, y_points = lifted.xyann
+    lifted.xyann = (x_points, y_points + row)
+    return row
+
+
 def _lift_colliding_label(fig, lifted: Annotation, held: Annotation) -> float:
-    """Stack two rule labels that print on top of each other, on two rows.
+    """Stack two labels **only** when they print on top of each other.
 
-    Since round 8 both labels sit centred over their own rule in the band above
-    the top spine, so a game whose deserved and actual margins are close puts
-    two centred boxes at nearly the same x — `2025_13_DEN_WAS` at −3.3 and −1,
-    and the constructed near-tie at 0.2 and 1.0. The band is a band rather than
-    a line, so the answer is a second row rather than a nudge sideways.
+    The team-points figure's two rules are still on this rule. Its labels are
+    the same shape as the distribution's, but its axis is a team's score rather
+    than a margin, and the corpus was not read on it — the unconditional row
+    above is a change made against a measurement, and this figure has none.
 
-    ``lifted`` goes up; ``held`` keeps the lower row. Which is which is the
-    caller's choice and not a measurement: `Deserved:` is the one that moves,
-    because the lower row is the one a reader's eye meets first coming up off
-    the plot and `Actual:` is the scoreboard they already know.
-
-    One row is the held label's own rendered height plus the gap a label keeps
-    off the spine, so the two rows are as far apart as a row is tall whatever
-    the font or the dpi turns out to be.
-
-    Returns the points it lifted, ``0.0`` if it did not: the second row is cut
-    out of the band the header sits above, so the caller has to give the header
-    the same room back.
+    Returns the points it lifted, ``0.0`` if it did not.
     """
     renderer = _renderer(fig)
     clearance = CORNER_CLEARANCE / 72.0 * fig.dpi
     room = held.get_window_extent(renderer).padded(clearance)
     if not lifted.get_window_extent(renderer).overlaps(room):
         return 0.0
-    row = held.get_window_extent(renderer).height / fig.dpi * 72.0 + RULE_LABEL_GAP
-    x_points, y_points = lifted.xyann
-    lifted.xyann = (x_points, y_points + row)
-    return row
+    return _stack_rule_labels(fig, lifted, held)
 
 
 # The gap a rule label keeps from a corner label, in points. A bare
@@ -1160,13 +1182,12 @@ def plot_bootstrap_distribution(
         )
 
         # The band above the spine is settled before the header is drawn over
-        # it. Corners first, then the two labels against each other: a label
-        # moved off a corner can land on the other rule's label, and the lift is
-        # the move that always works. What the lift costs is handed to the
-        # header, which gives the same room back rather than being printed into.
+        # it. Corners first, then the two labels onto their two rows. What the
+        # second row costs is handed to the header, which gives the same room
+        # back rather than being printed into.
         for rule_label in (deserved_label, actual_label):
             _clear_corner_labels(fig, rule_label, corners)
-        lift = _lift_colliding_label(fig, deserved_label, actual_label)
+        lift = _stack_rule_labels(fig, deserved_label, actual_label)
 
         # The count is the number of re-adjudications actually drawn — 200
         # posterior draws x 800 coin draws on the shipped settings — not the
