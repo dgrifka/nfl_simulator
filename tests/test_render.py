@@ -248,11 +248,15 @@ def test_every_saved_figure_lands_on_the_house_cream(game, tmp_path, suffix):
 
 @pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
 def test_every_saved_figure_carries_its_data_credit(game, tmp_path, suffix):
-    """nflverse asks for credit, so no figure leaves this module without it."""
+    """nflverse asks for credit, so no figure leaves this module without it.
+
+    Bottom-right since round 10 — the corner document 63 measured the title
+    running into when the stamp was in the top one.
+    """
     path = finalize(figures(game)[suffix], tmp_path / f"{suffix}.png")
     pixels = np.asarray(Image.open(path).convert("RGB"), dtype=float)
     height, width = pixels.shape[:2]
-    corner = pixels[: int(height * 0.06), int(width * 0.88) :]
+    corner = pixels[int(height * 0.94) :, int(width * 0.80) :]
     assert corner.mean(axis=2).min() < 200
 
 

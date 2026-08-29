@@ -451,12 +451,114 @@ def draw_title_block(
     return ax
 
 
+# Where the stamp lives on the saved pixels, as fractions of the image. The
+# horizontal inset is the one it has always had; ``STAMP_INSET`` is measured up
+# from the **bottom** edge since round 10 rather than down from the top.
+STAMP_MARGIN = 0.02
+STAMP_INSET = 0.012
+# The font, the logo's height and the gap between the two, all as fractions of
+# the image's short side so a card and a distribution wear the same stamp at
+# their own sizes.
+STAMP_FONT_SCALE = 0.0095
+STAMP_LOGO_SCALE = 0.028
+STAMP_GAP_SCALE = 0.003
+
+# Anything darker than this, on the cream, is an artist rather than the surface.
+# Used only to decide whether the stamp's corner is occupied.
+_SURFACE_INK = 240
+
+
+def _stamp_font(reference: int):
+    """The stamp's face at the size the image asks for, or matplotlib's own."""
+    from PIL import ImageFont
+
+    size = max(10, int(reference * STAMP_FONT_SCALE))
+    try:
+        import matplotlib.font_manager as fm
+
+        return ImageFont.truetype(fm.findfont(fm.FontProperties(family="DejaVu Sans")), size)
+    except Exception:  # pragma: no cover - a machine with no findable font
+        return ImageFont.load_default()
+
+
+def stamp_box(
+    size: tuple[int, int], text: str = WATERMARK, *, logo_height: int = 0
+) -> tuple[int, int, int, int]:
+    """The pixels the credit stamp will take, as ``(left, top, right, bottom)``.
+
+    Public because two callers outside :func:`apply_watermark` need it: the
+    strip reservation below, which has to know whether anything was drawn there
+    before the stamp covers it, and the corpus read, which counts foreign ink
+    inside it on a written PNG.
+
+    **Bottom-right since round 10.** Document 63 measured the title running
+    under the top-right stamp on 2,325 of 2,759 Strict distribution figures and
+    1,016 of 1,139 Full ones. The stamp is painted after layout, so the title
+    cannot see it and move; the only thing that can change is which corner the
+    stamp takes, and the bottom-right is the one no artist is laid out in.
+    """
+    from PIL import Image, ImageDraw
+
+    width, height = size
+    font = _stamp_font(min(width, height))
+    draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    gap = int(min(width, height) * STAMP_GAP_SCALE) if logo_height else 0
+
+    block_w = max(text_w, 0)
+    block_h = logo_height + gap + text_h
+    right = width - int(width * STAMP_MARGIN)
+    bottom = height - int(height * STAMP_INSET)
+    return (right - block_w, bottom - block_h, right, bottom)
+
+
+def reserve_stamp_strip(filepath: str | Path, text: str = WATERMARK) -> None:
+    """Grow the canvas at the bottom if the figure reaches into the stamp's box.
+
+    ``bbox_inches="tight"`` crops to whatever the figure drew, so how close the
+    footer comes to the bottom edge is a per-game fact — a two-line caveat and a
+    one-line one crop to two different images. Rather than ask every figure to
+    leave room for a stamp it cannot see, the room is made here, in the same
+    pixels the stamp is painted into.
+
+    Only the stamp's own columns are consulted. The two card figures put their
+    footers at the **left** edge, and growing every image to clear a footer the
+    stamp is nowhere near would change two fixed shapes for no legibility gain.
+    """
+    from PIL import Image
+
+    filepath = Path(filepath)
+    image = Image.open(filepath).convert("RGB")
+    width, height = image.size
+    left, top, _right, _bottom = stamp_box(image.size, text)
+    block_h = height - int(height * STAMP_INSET) - top
+    # One block of air between the stamp and whatever is above it, so the credit
+    # reads as its own line rather than as the footer's last word.
+    clearance = block_h
+
+    columns = np.asarray(image, dtype=float)[:, max(0, left - clearance) :].mean(axis=2)
+    occupied = np.nonzero((columns < _SURFACE_INK).any(axis=1))[0]
+    lowest = int(occupied.max()) if occupied.size else -1
+    if lowest < top - clearance:
+        return
+
+    # Solve for the height at which the box's top clears the ink: the box is
+    # anchored to the bottom edge, so growing the canvas moves it down with it.
+    grown = int(np.ceil((lowest + 1 + clearance + block_h) / (1.0 - STAMP_INSET))) + 2
+    canvas = Image.new("RGB", (width, max(grown, height)), tuple(_rgb255(PALETTE["bg"])))
+    canvas.paste(image, (0, 0))
+    canvas.save(filepath)
+
+
+def _rgb255(colour: str) -> tuple[int, int, int]:
+    return tuple(int(round(channel * 255)) for channel in to_rgb(colour))
+
+
 def apply_watermark(
     filepath: str | Path,
     *,
     logo_path: str | Path | None = None,
-    position: str = "top-right",
-    y_pct: float | None = None,
     text: str = WATERMARK,
 ) -> None:
     """Stamp the credit line — and optionally a logo — onto a saved PNG.
@@ -466,6 +568,11 @@ def apply_watermark(
     its longest tick label happened to be. A corner in pixels is the same corner
     on every image the product ships.
 
+    The corner is the **bottom-right** since round 10 — see :func:`stamp_box`
+    for what the corpus measured in the top-right one. ``position`` and
+    ``y_pct`` are gone with it: the corner is settled, and a parameter nothing
+    passes is a corner a figure could still be stamped into by accident.
+
     ``logo_path=None`` draws the text line alone. The project has no mark yet,
     so that is the shipped path; the slot exists so adding one later does not
     move the text.
@@ -474,7 +581,7 @@ def apply_watermark(
     on disk and correct, and losing the whole render over a missing font would
     be the worse outcome. The credit's absence is visible on the image itself.
     """
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
 
     filepath = Path(filepath)
     try:
@@ -491,36 +598,20 @@ def apply_watermark(
             pixels[near_white, 3] = 0
             pixels[:, :, 3] = (pixels[:, :, 3].astype(float) * 0.85).astype(np.uint8)
             logo = Image.fromarray(pixels)
-            logo_h = max(20, int(reference * 0.028))
+            logo_h = max(20, int(reference * STAMP_LOGO_SCALE))
             logo_w = int(logo_h * logo.width / logo.height)
             logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
 
-        font_size = max(10, int(reference * 0.0095))
-        try:
-            import matplotlib.font_manager as fm
-
-            font = ImageFont.truetype(
-                fm.findfont(fm.FontProperties(family="DejaVu Sans")), font_size
-            )
-        except Exception:
-            font = ImageFont.load_default()
-
+        font = _stamp_font(reference)
         draw = ImageDraw.Draw(image)
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
+        left, top, right, _bottom = stamp_box(image.size, text, logo_height=logo_h)
+        gap = int(reference * STAMP_GAP_SCALE) if logo is not None else 0
+        centre_x = (left + right) // 2
 
-        margin = int(width * 0.02)
-        gap = int(reference * 0.003)
-        block_w = max(logo_w, text_w)
-        center_x = (
-            margin + block_w // 2 if position == "top-left" else width - margin - block_w // 2
-        )
-
-        top_y = int(height * y_pct) if y_pct is not None else int(height * 0.012)
         if logo is not None:
-            image.paste(logo, (center_x - logo_w // 2, top_y), logo)
+            image.paste(logo, (centre_x - logo_w // 2, top), logo)
         draw.text(
-            (center_x - text_w // 2, top_y + logo_h + (gap if logo is not None else 0)),
+            (left, top + logo_h + gap),
             text,
             fill=(140, 140, 140),
             font=font,
@@ -558,11 +649,12 @@ def finalize(
     fig.savefig(
         filepath, dpi=dpi, bbox_inches=bbox_inches, facecolor=PALETTE["bg"], edgecolor="none"
     )
-    apply_watermark(
-        filepath,
-        logo_path=logo_path,
-        text=WATERMARK if edition is None else edition_stamp(edition),
-    )
+    stamp = WATERMARK if edition is None else edition_stamp(edition)
+    # Room first, then the stamp: the strip the credit lives in is reserved on
+    # the saved pixels when the figure reached into it, so the credit is never
+    # painted over a footer and a footer is never painted over.
+    reserve_stamp_strip(filepath, stamp)
+    apply_watermark(filepath, logo_path=logo_path, text=stamp)
     if close:
         plt.close(fig)
     return filepath

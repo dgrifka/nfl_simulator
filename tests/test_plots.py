@@ -4100,3 +4100,73 @@ def test_the_ledger_card_still_lifts_the_cap_row_s_first_letter():
     from nfl_simulator.plots import sentence_case
 
     assert sentence_case(event_phrase(cap_row())) == "Possession cap · Q3 drive 7"
+
+
+# --------------------------------------------------------------------------
+# round 10 Part B: the credit stamp's corner
+# --------------------------------------------------------------------------
+
+# Anything darker than this is somebody's artist. The stamp's own line is
+# painted at 140 grey on a 249 cream, and the title is #1A1A1A at 26, so a
+# threshold between them separates the two without measuring the title's box in
+# a coordinate system the crop has already moved.
+FOREIGN_INK = 120
+
+
+def _stamped(fig, tmp_path, name):
+    """A figure through the shipped exit, and the box the stamp took."""
+    from nfl_simulator.style import edition_stamp, stamp_box
+
+    path = finalize(fig, tmp_path / name, edition="strict")
+    image = Image.open(path).convert("RGB")
+    return image, stamp_box(image.size, edition_stamp("strict"))
+
+
+@pytest.mark.parametrize("figure", ["dtw", "waterfall"])
+def test_nothing_is_drawn_where_the_credit_stamp_is_painted(figure, tmp_path):
+    """Document 63: the title ran under the stamp on 84–89% of distributions.
+
+    The stamp is painted on the saved pixels after layout, so no artist can see
+    it coming and no artist can move out of its way. The corner it takes has to
+    be one nothing is laid out in — and on a `bbox_inches="tight"` save that is
+    only true if the strip is reserved when the footer reaches it.
+    """
+    game = branded(draws=np.linspace(-20, 6, 160_000))
+    fig = (
+        plot_bootstrap_distribution(game, coverage=False)[0]
+        if figure == "dtw"
+        else waterfall(game)[0]
+    )
+    image, (left, top, right, bottom) = _stamped(fig, tmp_path, f"{figure}.png")
+    pixels = np.asarray(image, dtype=float).mean(axis=2)
+    foreign = pixels[top:bottom, left:right] < FOREIGN_INK
+    assert not foreign.any(), f"{int(foreign.sum())} px of somebody else's ink under the stamp"
+
+
+@pytest.mark.parametrize("figure", ["dtw", "waterfall"])
+def test_the_stamp_sits_below_everything_that_shares_its_columns(figure, tmp_path):
+    """The strip is reserved, not borrowed: the footer keeps its own room."""
+    game = branded(draws=np.linspace(-20, 6, 160_000))
+    fig = (
+        plot_bootstrap_distribution(game, coverage=False)[0]
+        if figure == "dtw"
+        else waterfall(game)[0]
+    )
+    image, (left, top, _right, _bottom) = _stamped(fig, tmp_path, f"{figure}.png")
+    pixels = np.asarray(image, dtype=float).mean(axis=2)
+    column = pixels[:, left:]
+    ink_rows = np.nonzero((column < FOREIGN_INK).any(axis=1))[0]
+    assert ink_rows.size, "the figure drew nothing in the stamp's columns at all"
+    assert ink_rows.max() < top, "an artist reaches into the stamp's strip"
+
+
+def test_the_title_and_the_stamp_are_at_opposite_ends_of_the_image(tmp_path):
+    """The two the corpus found on top of each other, measured apart."""
+    game = branded(draws=np.linspace(-20, 6, 160_000))
+    fig, ax = plot_bootstrap_distribution(game, coverage=False)
+    heading = next(t for t in ax.texts if t.get_text().startswith("Deserve-to-Win"))
+    assert heading.get_text(), "the title this test is about"
+    image, (_left, top, _right, _bottom) = _stamped(fig, tmp_path, "title.png")
+    pixels = np.asarray(image, dtype=float).mean(axis=2)
+    title_rows = np.nonzero((pixels[: int(top * 0.5)] < FOREIGN_INK).any(axis=1))[0]
+    assert title_rows.min() < top, "the title is above the stamp, not in it"
