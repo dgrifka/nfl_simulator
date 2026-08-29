@@ -2087,8 +2087,13 @@ def test_a_row_carries_its_club_s_mark_beside_its_label():
     assert len(_row_marks(ax)) == 3
 
 
-def test_a_folded_row_has_no_club_to_mark():
-    """ "4 events under 0.1 pt" is not one team's event, so it gets no mark."""
+def test_a_folded_row_wears_the_mark_of_the_club_it_is_charged_to():
+    """Round 10: the remainder splits by charged team, so it has a club.
+
+    `81 events under 1 pt` was the third-largest bar on `2025_02_NYG_DAL` and
+    wore nothing at all — the biggest heap on the page outranked all but two
+    named events and told the reader only that something small happened often.
+    """
     rows = [ledger_row(3.42, charged_team="GB", play_id=1.0)] + [
         ledger_row(0.02, charged_team="GB", play_id=float(index)) for index in (2, 3)
     ]
@@ -2097,8 +2102,11 @@ def test_a_folded_row_has_no_club_to_mark():
         game, rows, points_per_epa=PPE, logos={"GB": synthetic_mark(), "DET": synthetic_mark()}
     )
     labels = [t.get_text() for t in ax.get_yticklabels()]
-    assert any("events under" in label for label in labels)
-    assert len(_row_marks(ax)) == 3
+    assert any("small events (GB)" in label for label in labels)
+    assert not any("events under" in label for label in labels)
+    # Four marks where there were three: the two anchors, the named event, and
+    # the heap, which used to be the one row on the page wearing nothing.
+    assert len(_row_marks(ax)) == 4
 
 
 def test_the_two_tables_never_run_into_each_other():
@@ -2703,16 +2711,20 @@ def test_every_value_label_carries_a_surface_so_a_rule_cannot_strike_it_through(
 
 
 def test_a_sub_half_point_bar_hangs_its_label_off_a_leader():
-    """Round 6 grouping folds this game's two slivers into one -0.4 row.
+    """Round 4 saw two leadered labels here, `-0.3` and a folded `-0.01`.
 
-    Round 4 saw two leadered labels here, `-0.3` and a folded `-0.01`; both are
-    under a point, so `group_rows` now folds them together and the single row
-    they make is still narrower than its own label. The fix D-4 shipped is what
-    is under test, not the number of rows it applies to."""
+    Round 6 folded them into one -0.4 row; round 10 splits the remainder by
+    club and separates them again — Detroit's slivers are Detroit's row and
+    Minnesota's three are Minnesota's. The fix D-4 shipped is what is under
+    test, not the number of rows it applies to.
+
+    Minnesota's row is the case the draw floor cannot reach: its whole
+    remainder is a hundredth of a point, so there is no larger row of its own
+    club's to absorb it. Recorded rather than ruled on."""
     fig, ax = det_min_waterfall()
     fig.canvas.draw()
     leaders = [t for t in _value_labels(ax) if t.arrow_patch is not None]
-    assert {t.get_text() for t in leaders} == {"-0.4"}
+    assert {t.get_text() for t in leaders} == {"-0.4", "-0.01"}
 
 
 def test_no_two_value_labels_print_through_each_other_on_det_min():
@@ -2926,14 +2938,109 @@ def test_the_small_dropped_picks_are_counted_under_their_own_name():
     assert grouped.team == "DET"
 
 
-def test_the_strict_components_keep_the_row_they_have_always_had():
-    """Fumbles and kicks fold into one un-teamed row, as they did before Full."""
-    from nfl_simulator.plots import GROUP_THRESHOLD, group_rows
+def test_the_strict_components_fold_into_their_own_clubs_heap():
+    """Round 10: the remainder is not one anonymous row any more.
+
+    A fumble and a kick charged to the same club fold together, under that
+    club's name and that club's mark, because a heap nobody is charged with is
+    a bar a reader cannot ask a question about.
+    """
+    from nfl_simulator.plots import group_rows
 
     rows = [ledger_row(0.5, play_id=1.0), ledger_row(-0.4, play_id=2.0, component="field_goal")]
     (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
-    assert grouped.label == f"2 events under {GROUP_THRESHOLD:g} pt"
-    assert grouped.team is None
+    assert grouped.label == "2 small events (DET)"
+    assert grouped.team == "DET"
+    assert grouped.n_events == 2
+
+
+def test_a_club_gets_exactly_one_heap_however_small_its_events_were():
+    """`luck_bars` folds under a tenth of a point and `group_rows` under a
+    point, so a Full game reaches here with a club's remainder already in two
+    pieces — and on `2024_19_LAC_HOU` the larger piece was worth 1.2 pt, over
+    the grouping threshold, so it stood as a row of its own. Two rows reading
+    `28 small events (HOU)` and `2 small events (HOU)` are one row too many:
+    nothing on the page says why there are two. A row that is already a heap
+    joins its club's heap whatever it is worth."""
+    from nfl_simulator.plots import group_rows
+
+    # Eighty slivers fold to 1.34 pt, over the grouping threshold, which is how
+    # `2024_19_LAC_HOU` came to carry two of these rows.
+    rows = [ledger_row(0.02, play_id=float(i), charged_team="GB") for i in range(1, 81)]
+    rows += [ledger_row(0.5, play_id=float(i), charged_team="GB") for i in range(81, 84)]
+    bars = luck_bars(rows, points_per_epa=PPE)
+    assert abs(bars[-1].points) > 1.0, "the pre-fold has to clear the threshold"
+    heaps = [bar for bar in group_rows(bars) if "small events" in bar.label]
+    assert len(heaps) == 1
+    assert heaps[0].label == "83 small events (GB)"
+    assert heaps[0].points == pytest.approx(sum(bar.points for bar in bars))
+
+
+def test_the_remainder_splits_into_one_heap_per_club():
+    """`46 small events (LAC)` under the Chargers' mark and `35 small events
+    (HOU)` under Houston's, each the exact sum of its own members."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [ledger_row(0.5, play_id=float(i), charged_team="GB") for i in range(1, 4)]
+    rows += [ledger_row(-0.4, play_id=float(i), charged_team="DET") for i in range(4, 6)]
+    bars = luck_bars(rows, points_per_epa=PPE)
+    grouped = {bar.team: bar for bar in group_rows(bars)}
+    assert set(grouped) == {"GB", "DET"}
+    assert grouped["GB"].label == "3 small events (GB)"
+    assert grouped["DET"].label == "2 small events (DET)"
+    assert grouped["GB"].points == pytest.approx(-3 * 0.5 * PPE)
+    assert grouped["DET"].points == pytest.approx(2 * 0.4 * PPE)
+    assert not any(bar.team is None for bar in group_rows(bars))
+
+
+def test_the_two_heaps_still_reconcile_with_what_went_into_them():
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-0.4, float(i), team="GB") for i in range(1, 5)]
+    rows += [ledger_row(0.3, play_id=float(i), charged_team="DET") for i in range(5, 9)]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    assert sum(bar.points for bar in group_rows(bars)) == pytest.approx(
+        sum(bar.points for bar in bars), abs=1e-9
+    )
+
+
+def test_a_row_that_would_draw_nothing_joins_its_clubs_heap():
+    """`DRAW_FLOOR`: a row worth a hundredth of a point takes a full row and
+    draws no bar at all. Document 63 found two of them on `2022_05_SF_CAR` and
+    one apiece on `2022_10_JAX_KC` and `2017_04_TEN_HOU`. A row that draws
+    nothing tells the reader nothing, so it is absorbed regardless of the
+    lone-event rule — the sum is kept and the count goes up."""
+    from nfl_simulator.plots import DRAW_FLOOR, group_rows
+
+    assert DRAW_FLOOR == 0.05
+    # One event too small to draw, and two of its club's own to join.
+    rows = [ledger_row(0.01 / PPE, play_id=1.0, charged_team="GB")]
+    rows += [ledger_row(0.4, play_id=float(i), charged_team="GB") for i in (2, 3)]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0))
+    assert grouped.label == "3 small events (GB)"
+    assert grouped.n_events == 3
+
+
+def test_a_fold_worth_less_than_the_draw_floor_is_absorbed_too():
+    """`2022_05_SF_CAR`: two fold rows worth +0.03 and −0.02 each took a row and
+    drew nothing. A fold is a row like any other and meets the same floor."""
+    from nfl_simulator.plots import group_rows
+
+    # Two drops that cancel to a third of a tenth, and a fumble to absorb them.
+    rows = [drop_row(0.5, 1.0, team="GB"), drop_row(-0.5 + 0.03 / PPE, 2.0, team="GB")]
+    rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0))
+    assert [bar.label for bar in grouped] == ["3 small events (GB)"]
+    assert all(abs(bar.points) >= 0.05 for bar in grouped)
+
+
+def test_a_lone_small_event_a_reader_can_see_is_still_left_as_itself():
+    """The lone-event rule survives the draw floor: `1 smaller GB drops` is a
+    worse row than the drop it hides, as long as the drop draws something."""
+    from nfl_simulator.plots import group_rows
+
+    bars = luck_bars([drop_row(-3.0, 1.0), drop_row(-0.4, 2.0)], points_per_epa=PPE, floor=0.0)
+    assert [bar.label for bar in group_rows(bars)][-1] == bars[-1].label
 
 
 def test_grouping_never_loses_a_point_of_luck():
@@ -4000,9 +4107,14 @@ def test_a_lifted_rule_label_never_lands_in_the_header():
             assert not label.get_window_extent().overlaps(box.padded(clearance))
 
 
-def test_the_header_only_makes_way_on_a_game_that_stacks():
-    """A figure whose two labels sit side by side keeps the header it had — the
-    lift is paid for by the game that needs it, not by all of them."""
+def test_the_header_makes_the_same_way_on_every_game():
+    """Round 8 said the lift was "paid for by the game that needs it, not by all
+    of them". Document 63 measured which games need it: **93.2% of Strict and
+    94.6% of Full**, because the two centred boxes are about 130 px wide each
+    and the median game's two margins are far closer than that. The exception
+    was the rule, and furniture that moves between games is furniture a reader
+    cannot compare across them — so the band is two rows on every figure and the
+    header gives the same room back on every figure."""
     stacked = branded(deserved_margin=0.2, actual_margin=1.0, draws=np.linspace(-6.0, 8.0, 512))
     apart = branded()
     heights = []
@@ -4011,7 +4123,41 @@ def test_the_header_only_makes_way_on_a_game_that_stacks():
         fig.canvas.draw()
         subtitle = next(t for t in ax.texts if t.get_text() == game.subtitle_line())
         heights.append(subtitle.get_window_extent().y0 - ax.get_window_extent().y1)
-    assert heights[1] > heights[0]
+    assert heights[1] == pytest.approx(heights[0])
+
+
+# The two games the round is read on: `2024_19_LAC_HOU` Full, whose margins are
+# twenty points apart, and `2025_13_DEN_WAS` Full, whose margins are a point
+# apart. One used to stack and the other did not.
+WIDE_GAP = {"actual_margin": 20.0, "deserved_margin": 0.9}
+NEAR_TIE = {"actual_margin": 1.0, "deserved_margin": 0.2}
+
+
+def _rows_of(**margins):
+    game = branded(draws=np.linspace(-6.0, 24.0, 512), **margins)
+    fig, ax = plot_bootstrap_distribution(game)
+    fig.canvas.draw()
+    deserved = next(t for t in _callouts(ax) if t.get_text().startswith("Deserved"))
+    actual = next(t for t in _callouts(ax) if t.get_text().startswith("Actual"))
+    return deserved.get_window_extent(), actual.get_window_extent()
+
+
+@pytest.mark.parametrize("margins", [WIDE_GAP, NEAR_TIE], ids=["wide gap", "near tie"])
+def test_the_two_rule_labels_are_on_two_rows_whatever_the_gap(margins):
+    """`Deserved:` on the upper row and `Actual:` on the lower, always."""
+    deserved, actual = _rows_of(**margins)
+    assert deserved.y0 > actual.y0, "the deserved label holds the upper row"
+    assert not deserved.overlaps(actual)
+
+
+def test_the_two_rows_are_the_same_two_rows_on_every_game():
+    """Not merely two rows each: the *same* two, so a reader who has learnt
+    where `Actual:` sits on one game finds it there on the next."""
+    wide_deserved, wide_actual = _rows_of(**WIDE_GAP)
+    tie_deserved, tie_actual = _rows_of(**NEAR_TIE)
+    assert wide_actual.y0 == pytest.approx(tie_actual.y0)
+    assert wide_deserved.y0 == pytest.approx(tie_deserved.y0)
+    assert wide_deserved.y0 - wide_actual.y0 == pytest.approx(tie_deserved.y0 - tie_actual.y0)
 
 
 # --------------------------------------------------------------------------
@@ -4084,8 +4230,11 @@ def test_the_cap_row_is_lowercase_like_every_other_component_name():
 
 
 def test_the_folded_cap_row_reads_in_the_same_case():
+    """Worth a quarter-point each since round 10: a fold of two caps worth two
+    hundredths between them is under `DRAW_FLOOR` and joins its club's heap
+    instead, so the wording under test needs a fold a reader can see."""
     bars = [
-        luck_bars([cap_row(luck_epa=-0.02, event_class=f"Q1 drive {i}")], points_per_epa=PPE)[0]
+        luck_bars([cap_row(luck_epa=-0.3, event_class=f"Q1 drive {i}")], points_per_epa=PPE)[0]
         for i in range(1, 3)
     ]
     (grouped,) = group_rows(bars)
@@ -4100,3 +4249,158 @@ def test_the_ledger_card_still_lifts_the_cap_row_s_first_letter():
     from nfl_simulator.plots import sentence_case
 
     assert sentence_case(event_phrase(cap_row())) == "Possession cap · Q3 drive 7"
+
+
+# --------------------------------------------------------------------------
+# round 10 Part B: the credit stamp's corner
+# --------------------------------------------------------------------------
+
+# Anything darker than this is somebody's artist. The stamp's own line is
+# painted at 140 grey on a 249 cream, and the title is #1A1A1A at 26, so a
+# threshold between them separates the two without measuring the title's box in
+# a coordinate system the crop has already moved.
+FOREIGN_INK = 120
+
+
+def _stamped(fig, tmp_path, name):
+    """A figure through the shipped exit, and the box the stamp took."""
+    from nfl_simulator.style import edition_stamp, stamp_box
+
+    path = finalize(fig, tmp_path / name, edition="strict")
+    image = Image.open(path).convert("RGB")
+    return image, stamp_box(image.size, edition_stamp("strict"))
+
+
+@pytest.mark.parametrize("figure", ["dtw", "waterfall"])
+def test_nothing_is_drawn_where_the_credit_stamp_is_painted(figure, tmp_path):
+    """Document 63: the title ran under the stamp on 84–89% of distributions.
+
+    The stamp is painted on the saved pixels after layout, so no artist can see
+    it coming and no artist can move out of its way. The corner it takes has to
+    be one nothing is laid out in — and on a `bbox_inches="tight"` save that is
+    only true if the strip is reserved when the footer reaches it.
+    """
+    game = branded(draws=np.linspace(-20, 6, 160_000))
+    fig = (
+        plot_bootstrap_distribution(game, coverage=False)[0]
+        if figure == "dtw"
+        else waterfall(game)[0]
+    )
+    image, (left, top, right, bottom) = _stamped(fig, tmp_path, f"{figure}.png")
+    pixels = np.asarray(image, dtype=float).mean(axis=2)
+    foreign = pixels[top:bottom, left:right] < FOREIGN_INK
+    assert not foreign.any(), f"{int(foreign.sum())} px of somebody else's ink under the stamp"
+
+
+@pytest.mark.parametrize("figure", ["dtw", "waterfall"])
+def test_the_stamp_sits_below_everything_that_shares_its_columns(figure, tmp_path):
+    """The strip is reserved, not borrowed: the footer keeps its own room."""
+    game = branded(draws=np.linspace(-20, 6, 160_000))
+    fig = (
+        plot_bootstrap_distribution(game, coverage=False)[0]
+        if figure == "dtw"
+        else waterfall(game)[0]
+    )
+    image, (left, top, _right, _bottom) = _stamped(fig, tmp_path, f"{figure}.png")
+    pixels = np.asarray(image, dtype=float).mean(axis=2)
+    column = pixels[:, left:]
+    ink_rows = np.nonzero((column < FOREIGN_INK).any(axis=1))[0]
+    assert ink_rows.size, "the figure drew nothing in the stamp's columns at all"
+    assert ink_rows.max() < top, "an artist reaches into the stamp's strip"
+
+
+def test_the_title_and_the_stamp_are_at_opposite_ends_of_the_image(tmp_path):
+    """The two the corpus found on top of each other, measured apart."""
+    game = branded(draws=np.linspace(-20, 6, 160_000))
+    fig, ax = plot_bootstrap_distribution(game, coverage=False)
+    heading = next(t for t in ax.texts if t.get_text().startswith("Deserve-to-Win"))
+    assert heading.get_text(), "the title this test is about"
+    image, (_left, top, _right, _bottom) = _stamped(fig, tmp_path, "title.png")
+    pixels = np.asarray(image, dtype=float).mean(axis=2)
+    title_rows = np.nonzero((pixels[: int(top * 0.5)] < FOREIGN_INK).any(axis=1))[0]
+    assert title_rows.min() < top, "the title is above the stamp, not in it"
+
+
+# --------------------------------------------------------------------------
+# round 10 Part D: the waterfall's corner labels
+# --------------------------------------------------------------------------
+
+
+def _lopsided(bars: int = 2):
+    """A 43-point game with almost nothing between its two ends.
+
+    `2017_04_TEN_HOU` in Strict and `2023_11_PIT_CLE` in Full: the axis is so
+    long that zero sits under the left-hand corner label, and with two bars on
+    the page the rotated arrow sentence is nearly as tall as the plot.
+    """
+    game = branded(
+        game_id="2017_04_TEN_HOU",
+        actual_margin=43.0,
+        deserved_margin=0.5,
+        dtw_home=0.9,
+        draws=np.linspace(-5.0, 45.0, 512),
+    )
+    step = (game.actual_margin - game.deserved_margin) / PPE / bars
+    rows = [ledger_row(step, play_id=100.0 + i) for i in range(bars)]
+    return plot_luck_ledger(game, rows, points_per_epa=PPE)
+
+
+def _corner_label(ax, team):
+    return next(t for t in ax.texts if t.get_text() == f"{team} wins")
+
+
+def _zero_rule(ax):
+    return next(line for line in ax.lines if list(line.get_xdata()) == [0.0, 0.0])
+
+
+def test_the_zero_rule_cannot_print_through_a_waterfalls_corner_label():
+    """Document 63 found the dashed zero rule struck through `PIT wins`,
+    `ARI wins`, `JAX wins` and `TEN wins` on four lopsided games.
+
+    Document 60 §7 justified `shield=False` here on the grounds that the
+    waterfall has nothing crossing that band. It has: its own zero rule. The
+    shield is the distribution's own device, and the assertion is that the
+    rule is *behind* an opaque box rather than that the two never meet — on a
+    43-point game they meet by geometry, and moving the corner label is not the
+    settled fix.
+    """
+    from matplotlib.colors import to_hex
+
+    fig, ax = _lopsided()
+    fig.canvas.draw()
+    corner = _corner_label(ax, "GB")
+    box = corner.get_window_extent(fig.canvas.get_renderer())
+    rule_x = ax.transData.transform((0.0, 0.0))[0]
+    assert box.x0 <= rule_x <= box.x1, "this game does not have the defect under test"
+
+    shield = corner.get_bbox_patch()
+    assert shield is not None, "the corner label is unshielded"
+    assert to_hex(shield.get_facecolor()) == PALETTE["bg"].lower()
+    assert shield.get_facecolor()[3] == 1.0, "a translucent shield is not a shield"
+    assert corner.get_zorder() > _zero_rule(ax).get_zorder()
+
+
+def test_the_rotated_arrow_sentence_gives_way_to_the_corner_label():
+    """`2017_04_TEN_HOU` and `2020_03_NYJ_IND`: the sentence runs the height of
+    the rail, and on a short waterfall the rail is most of the figure. The
+    sentence is the one that moves — the corner label is a fixed key."""
+    fig, ax = _lopsided(bars=1)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    sentence = next(t for t in ax.texts if t.get_text().startswith("luck moved"))
+    for team in ("GB", "DET"):
+        corner = _corner_label(ax, team).get_window_extent(renderer)
+        assert not sentence.get_window_extent(renderer).overlaps(corner)
+
+
+def test_the_sentence_stays_centred_on_the_rail_when_it_reaches_no_corner():
+    """The move is geometric, so a waterfall with room keeps the rail it had:
+    the sentence's own middle is still the middle of the span it measures."""
+    fig, ax = _lopsided(bars=8)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    sentence = next(t for t in ax.texts if t.get_text().startswith("luck moved"))
+    box = sentence.get_window_extent(renderer)
+    ticks = ax.get_yticks()
+    rail = [ax.transData.transform((0.0, float(y)))[1] for y in (ticks[0], ticks[-1])]
+    assert (box.y0 + box.y1) / 2 == pytest.approx(sum(rail) / 2, abs=1.0)

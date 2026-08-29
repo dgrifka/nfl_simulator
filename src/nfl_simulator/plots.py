@@ -417,7 +417,7 @@ def draw_header(
     ``lift`` raises the whole block, in points. The distribution's two rule
     labels sit in the band between the plot and this header, and a near-tie
     stacks them on a second row that would otherwise be the subtitle's — see
-    :func:`_lift_colliding_label`. The block moves as one, pill included, so the
+    :func:`_stack_rule_labels`. The block moves as one, pill included, so the
     header still reads as a block rather than as a heading that lost its
     subtitle.
 
@@ -466,11 +466,14 @@ def draw_header(
     if subtitle_extra:
         at(SUBTITLE_EXTRA_OFFSET, subtitle_extra, fontsize=9.5, color=PALETTE["text_muted"])
 
-    # The pill sits on the **subtitle** row, not beside the heading. `finalize`
-    # stamps the data credit into the top-right corner of the saved pixels, and
-    # a pill on the heading row lands under it — measured on
+    # The pill sits on the **subtitle** row, not beside the heading. The credit
+    # stamp was in the top-right corner of the saved pixels until round 10, and
+    # a pill on the heading row landed under it — measured on
     # `LV_KC_9-48--0-100_dtw.png`, where "scoreboard holds" printed through both
-    # the watermark and the last word of the heading.
+    # the watermark and the last word of the heading. The stamp is in the
+    # bottom-right corner now and the heading row is free, but the subtitle row
+    # is where the pill has been read for six rounds and moving it back would be
+    # a change to the figure rather than a consequence of one.
     pill_text = ax.annotate(
         verdict.bucket,
         xy=(1, 1),
@@ -555,37 +558,59 @@ def _wrap_to_width(fig, text: Text, width_px: float) -> None:
     text.set_text("\n".join(lines))
 
 
+def _label_row(fig, held: Annotation) -> float:
+    """One row of the band, in points: a label's own rendered height plus the
+    gap a label keeps off the spine, so the two rows are as far apart as a row
+    is tall whatever the font or the dpi turns out to be."""
+    return held.get_window_extent(_renderer(fig)).height / fig.dpi * 72.0 + RULE_LABEL_GAP
+
+
+def _stack_rule_labels(fig, lifted: Annotation, held: Annotation) -> float:
+    """Put the two rule labels on two rows — on every game, unconditionally.
+
+    Round 8 built the second row for a near-tie and lifted only when the two
+    centred boxes actually overlapped. Document 63 measured how often that is:
+    **93.2% of Strict games and 94.6% of Full ones**. Each box is about 130 px
+    wide and centred on its own margin, so any gap under roughly ten points puts
+    them on top of each other, and the median game's two margins are far closer
+    than that. The premise that stacking is the exception is what the corpus
+    refutes.
+
+    So the band is two rows always. Furniture that moves between games is
+    furniture a reader cannot compare across them: a reader who learns where
+    `Actual:` sits on one game finds it in the same place on the next, and the
+    header gives the same room back on all of them rather than on nineteen
+    games in twenty.
+
+    ``lifted`` takes the upper row; ``held`` keeps the lower one. Which is which
+    is the caller's choice and not a measurement: `Deserved:` is the one that
+    moves, because the lower row is the one a reader's eye meets first coming up
+    off the plot and `Actual:` is the scoreboard they already know.
+
+    Returns the points it lifted, which is what the header has to give back.
+    """
+    row = _label_row(fig, held)
+    x_points, y_points = lifted.xyann
+    lifted.xyann = (x_points, y_points + row)
+    return row
+
+
 def _lift_colliding_label(fig, lifted: Annotation, held: Annotation) -> float:
-    """Stack two rule labels that print on top of each other, on two rows.
+    """Stack two labels **only** when they print on top of each other.
 
-    Since round 8 both labels sit centred over their own rule in the band above
-    the top spine, so a game whose deserved and actual margins are close puts
-    two centred boxes at nearly the same x — `2025_13_DEN_WAS` at −3.3 and −1,
-    and the constructed near-tie at 0.2 and 1.0. The band is a band rather than
-    a line, so the answer is a second row rather than a nudge sideways.
+    The team-points figure's two rules are still on this rule. Its labels are
+    the same shape as the distribution's, but its axis is a team's score rather
+    than a margin, and the corpus was not read on it — the unconditional row
+    above is a change made against a measurement, and this figure has none.
 
-    ``lifted`` goes up; ``held`` keeps the lower row. Which is which is the
-    caller's choice and not a measurement: `Deserved:` is the one that moves,
-    because the lower row is the one a reader's eye meets first coming up off
-    the plot and `Actual:` is the scoreboard they already know.
-
-    One row is the held label's own rendered height plus the gap a label keeps
-    off the spine, so the two rows are as far apart as a row is tall whatever
-    the font or the dpi turns out to be.
-
-    Returns the points it lifted, ``0.0`` if it did not: the second row is cut
-    out of the band the header sits above, so the caller has to give the header
-    the same room back.
+    Returns the points it lifted, ``0.0`` if it did not.
     """
     renderer = _renderer(fig)
     clearance = CORNER_CLEARANCE / 72.0 * fig.dpi
     room = held.get_window_extent(renderer).padded(clearance)
     if not lifted.get_window_extent(renderer).overlaps(room):
         return 0.0
-    row = held.get_window_extent(renderer).height / fig.dpi * 72.0 + RULE_LABEL_GAP
-    x_points, y_points = lifted.xyann
-    lifted.xyann = (x_points, y_points + row)
-    return row
+    return _stack_rule_labels(fig, lifted, held)
 
 
 # The gap a rule label keeps from a corner label, in points. A bare
@@ -1160,13 +1185,12 @@ def plot_bootstrap_distribution(
         )
 
         # The band above the spine is settled before the header is drawn over
-        # it. Corners first, then the two labels against each other: a label
-        # moved off a corner can land on the other rule's label, and the lift is
-        # the move that always works. What the lift costs is handed to the
-        # header, which gives the same room back rather than being printed into.
+        # it. Corners first, then the two labels onto their two rows. What the
+        # second row costs is handed to the header, which gives the same room
+        # back rather than being printed into.
         for rule_label in (deserved_label, actual_label):
             _clear_corner_labels(fig, rule_label, corners)
-        lift = _lift_colliding_label(fig, deserved_label, actual_label)
+        lift = _stack_rule_labels(fig, deserved_label, actual_label)
 
         # The count is the number of re-adjudications actually drawn — 200
         # posterior draws x 800 coin draws on the shipped settings — not the
@@ -1542,11 +1566,23 @@ VARIANT_PLURALS = {"dropped_pick": "dropped picks", "receiver_drop": "drops"}
 GROUP_THRESHOLD = 1.0
 
 # The components a fold keeps apart, per component and per club, rather than
-# tipping into the one un-teamed `events under 1 pt` row. All three come in
-# dozens under the Full edition — a median ledger carries about fifty drops and,
-# since document 61, a cap row for every possession the clip bit — and a heap
-# that mixes them says only that something small happened many times.
+# tipping into their club's `small events` heap. All three come in dozens under
+# the Full edition — a median ledger carries about fifty drops and, since
+# document 61, a cap row for every possession the clip bit — and a heap that
+# mixes them says only that something small happened many times.
 FOLD_BY_TEAM = (*VARIANT_COMPONENTS, POSSESSION_CAP)
+
+# The smallest bar worth a row. Document 63 found rows worth +0.03 and -0.02 pt
+# taking a full row and drawing nothing on `2022_05_SF_CAR`, and `64 events
+# under 1 pt` at +0.02 on `2022_10_JAX_KC`. A row that draws nothing tells the
+# reader nothing, so anything under this — a single event or a fold, and
+# regardless of the lone-event rule — is absorbed into its club's heap, which
+# keeps its exact sum and adds its count.
+#
+# 0.05 rather than 0.1: the value label beside a bar is printed to two decimals
+# under a tenth, so a bar of 0.06 pt still says what it is worth. What the floor
+# is for is a row whose bar has no width at all.
+DRAW_FLOOR = 0.05
 
 # The ledger's fumble classes are `{play type}/{live|aborted}`, which is the
 # simulator's vocabulary rather than a reader's. "aborted" is nflverse's word
@@ -1838,28 +1874,62 @@ def luck_bars(
         )
         for row in rows
     ]
-    small = [bar for bar in bars if abs(bar.points) < floor]
-    # A lone sliver is left where it is — "1 events under 0.1 pt" is a worse row
-    # than the event itself.
-    if len(small) < 2:
-        small = []
-    kept = [bar for bar in bars if bar not in small]
+    # Round 10: the slivers fold **per charged club**, so the row they make is
+    # somebody's afternoon rather than an anonymous heap — see
+    # :func:`_heap_label`. A lone sliver is still left where it is: `1 small
+    # event (GB)` is a worse row than the event itself.
+    heaps: dict[str | None, list[LuckBar]] = {}
+    kept = []
+    for bar in bars:
+        if abs(bar.points) < floor:
+            heaps.setdefault(bar.team, []).append(bar)
+        else:
+            kept.append(bar)
+    folded = []
+    for team, group in heaps.items():
+        if len(group) < 2:
+            kept.extend(group)
+            continue
+        folded.append(
+            LuckBar(
+                label=_heap_label(team, len(group), floor),
+                points=sum(bar.points for bar in group),
+                play_id=None,
+                n_events=len(group),
+                team=team,
+                actor=team,
+            )
+        )
 
     if chronological:
         kept.sort(key=lambda bar: bar.play_id)
     else:
         kept.sort(key=lambda bar: abs(bar.points), reverse=True)
+    # The folds go last whatever the ordering: they have no play to sit at on a
+    # timeline, and `group_rows` re-sorts the adjudication's reading anyway.
+    return kept + folded
 
-    if small:
-        kept.append(
-            LuckBar(
-                label=f"{len(small)} events under {floor:g} pt",
-                points=sum(bar.points for bar in small),
-                play_id=None,
-                n_events=len(small),
-            )
-        )
-    return kept
+
+def _heap_label(team: str | None, count: int, threshold: float) -> str:
+    """What one club's remainder is called: `46 small events (LAC)`.
+
+    Round 10. The remainder used to be a single un-teamed row — `81 events
+    under 1 pt`, which document 63 found was the third-largest bar on
+    `2025_02_NYG_DAL` with no club on it at all. Split by the team each event is
+    charged to, the same row says whose afternoon it was and can wear that
+    club's mark, and the two heaps still carry their exact sums.
+
+    The club goes in parentheses rather than in front, as a fold of possession
+    caps does: nobody *performs* a small event, and `46 LAC small events` would
+    read as a kind of event rather than as a count of one club's.
+
+    A row with no charged team on file keeps the old wording. Nothing in the
+    corpus reaches it — every ledger row is charged to somebody — but a label
+    that named no club and no threshold either would say nothing at all.
+    """
+    if not team:
+        return f"{count} events under {threshold:g} pt"
+    return f"{count} small event{'' if count == 1 else 's'} ({team})"
 
 
 def _group_label(component: str | None, actor: str | None, count: int, threshold: float) -> str:
@@ -1873,7 +1943,17 @@ def _group_label(component: str | None, actor: str | None, count: int, threshold
         return f"{count} smaller {actor} {VARIANT_PLURALS[component]}"
     if component == POSSESSION_CAP and actor:
         return f"{count} smaller {POSSESSION_CAP_PLURAL} ({actor})"
-    return f"{count} events under {threshold:g} pt"
+    return _heap_label(actor, count, threshold)
+
+
+def _is_heap(bar: LuckBar) -> bool:
+    """Whether a bar is already one club's remainder rather than an event.
+
+    A heap has no play to sit at, no component of its own, and more than one
+    event in it — which is exactly what :func:`luck_bars` writes when it folds
+    under :data:`POINTS_FLOOR`, and nothing else in the module writes.
+    """
+    return bar.play_id is None and bar.component is None and bar.n_events > 1
 
 
 def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> list[LuckBar]:
@@ -1887,28 +1967,40 @@ def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> l
     Two kinds of fold, because the two kinds of remainder answer different
     questions. The hands-on-the-ball components fold **per component and per
     team** — `12 smaller GB drops` is a fact about Green Bay's afternoon and
-    wears Green Bay's mark — while the Strict components keep the single
-    un-teamed row they have always had, since a game has a handful of them
-    rather than dozens.
+    wears Green Bay's mark — and everything else folds into that club's own
+    `small events` heap.
+
+    **Round 10: the heap has a club.** The remainder used to be one un-teamed
+    row, and document 63 found `81 events under 1 pt` at −2.1 pt standing as the
+    third-largest bar on `2025_02_NYG_DAL` with nothing on it to say whose it
+    was. Split by charged team it is two rows, each with its club's mark.
+
+    **And nothing draws an empty row.** Any row — a single event or a fold —
+    worth less than :data:`DRAW_FLOOR` is absorbed into its club's heap
+    regardless of the lone-event rule, because a bar with no width tells a
+    reader nothing while still costing them a row to read.
 
     Folding is not dropping. Every folded row carries the **exact sum** of what
     went into it, so the waterfall still reconciles its two ends, and a lone
-    small event is left where it is: `1 smaller GB drops` is a worse row than
-    the drop it hides.
+    small event a reader can see is left where it is: `1 smaller GB drops` is a
+    worse row than the drop it hides.
     """
-    big = [bar for bar in bars if abs(bar.points) >= threshold]
-    small = [bar for bar in bars if abs(bar.points) < threshold]
+    # A row that is already a heap joins its club's heap whatever it is worth.
+    # `luck_bars` folds under a tenth of a point and this folds under a point,
+    # so a Full game arrives with a club's remainder in two pieces — and on
+    # `2024_19_LAC_HOU` the larger piece was worth 1.2 pt and stood as a row of
+    # its own beside a second `small events (HOU)`. Nothing on the page said
+    # why there were two, and one club's remainder is one fact.
+    big = [bar for bar in bars if abs(bar.points) >= threshold and not _is_heap(bar)]
+    small = [bar for bar in bars if abs(bar.points) < threshold or _is_heap(bar)]
 
-    buckets: dict[tuple[str | None, str | None], list[LuckBar]] = {}
+    buckets: dict[tuple[str, str], list[LuckBar]] = {}
+    heaps: dict[str | None, list[LuckBar]] = {}
     for bar in small:
-        # Everything that is not one of amendment A-3's two components shares
-        # the one un-teamed bucket, including a row that is already a fold.
-        key = (
-            (bar.component, bar.team)
-            if bar.component in FOLD_BY_TEAM and bar.team
-            else (None, None)
-        )
-        buckets.setdefault(key, []).append(bar)
+        if bar.component in FOLD_BY_TEAM and bar.team:
+            buckets.setdefault((bar.component, bar.team), []).append(bar)
+        else:
+            heaps.setdefault(bar.team, []).append(bar)
 
     folded = []
     for (component, team), group in buckets.items():
@@ -1931,8 +2023,31 @@ def group_rows(bars: Sequence[LuckBar], threshold: float = GROUP_THRESHOLD) -> l
             )
         )
 
-    order = sorted(big + folded, key=lambda bar: abs(bar.points), reverse=True)
-    return order
+    kept = []
+    for bar in folded:
+        # The draw floor, applied after the component folds so a fold that
+        # cancels to nothing meets it too — `2022_05_SF_CAR`'s +0.03 and −0.02.
+        # A row at or above the threshold cannot reach it: the threshold is
+        # twenty times the floor.
+        (kept if abs(bar.points) >= DRAW_FLOOR else heaps.setdefault(bar.team, [])).append(bar)
+
+    for team, group in heaps.items():
+        if len(group) == 1 and abs(group[0].points) >= DRAW_FLOOR:
+            kept.extend(group)
+            continue
+        count = sum(bar.n_events for bar in group)
+        kept.append(
+            LuckBar(
+                label=_heap_label(team, count, threshold),
+                points=sum(bar.points for bar in group),
+                play_id=None,
+                n_events=count,
+                team=team,
+                actor=team,
+            )
+        )
+
+    return sorted(big + kept, key=lambda bar: abs(bar.points), reverse=True)
 
 
 def running_totals(bars: Sequence[LuckBar], start: float) -> list[tuple[float, float]]:
@@ -2075,12 +2190,21 @@ def _stamp_row_logos(ax, bars, rows_y, logos) -> None:
         )
 
 
-def _draw_ledger_arrow(ax, verdict: GameVerdict, rows_y, x_rail: float) -> None:
+def _draw_ledger_arrow(
+    ax, verdict: GameVerdict, rows_y, x_rail: float, corners: Sequence[Text] = ()
+) -> None:
     """The same span the distribution draws, run down the waterfall's right side.
 
     Head at the **actual** end, because that is the direction luck pushed the
     game; the label is the distribution's, word for word, so the two figures say
     the same sentence about the same game.
+
+    ``corners`` are the two side headers, so the rotated sentence can be moved
+    out from under them. It runs the height of the rail, and on a waterfall with
+    two or three rows the rail is most of the figure — document 63 caught the
+    sentence over `HOU wins` on `2017_04_TEN_HOU` and over `IND wins` on
+    `2020_03_NYJ_IND`. The sentence is the half that moves: the corner label is
+    a fixed key a reader looks for in the same place on every figure.
     """
     gap = verdict.actual_margin - verdict.deserved_margin
     toward = verdict.home_team if gap > 0 else verdict.away_team
@@ -2101,7 +2225,7 @@ def _draw_ledger_arrow(ax, verdict: GameVerdict, rows_y, x_rail: float) -> None:
         annotation_clip=False,
         zorder=5,
     )
-    ax.text(
+    sentence = ax.text(
         x_rail,
         (top + bottom) / 2.0,
         f"luck moved the margin {abs(gap):.1f} points toward {toward}",
@@ -2112,6 +2236,31 @@ def _draw_ledger_arrow(ax, verdict: GameVerdict, rows_y, x_rail: float) -> None:
         fontsize=8.5,
         color=PALETTE["text_muted"],
         zorder=5,
+    )
+    _lower_under_corners(ax, sentence, corners)
+
+
+def _lower_under_corners(ax, label: Text, corners: Sequence[Text]) -> None:
+    """Drop ``label`` until its top clears the corner band, or leave it alone.
+
+    Measured rather than reserved: how far the rotated sentence reaches depends
+    on how many rows the game has and how many characters the number takes, and
+    a fixed inset that fitted a two-row waterfall would waste a lane on a
+    twenty-row one.
+    """
+    from matplotlib.transforms import offset_copy
+
+    wanted = [corner for corner in corners if corner.get_text()]
+    if not wanted:
+        return
+    renderer = _renderer(ax.figure)
+    clearance = CORNER_CLEARANCE / 72.0 * ax.figure.dpi
+    floor = min(corner.get_window_extent(renderer).y0 for corner in wanted) - clearance
+    overlap = label.get_window_extent(renderer).y1 - floor
+    if overlap <= 0:
+        return
+    label.set_transform(
+        offset_copy(label.get_transform(), fig=ax.figure, x=0, y=-overlap, units="dots")
     )
 
 
@@ -2517,7 +2666,11 @@ def plot_luck_ledger(
             rail_room = max(0.18 * (high - low), 0.8)
             x_rail = high + pad * 0.9
             ax.set_xlim(low - pad, high + pad + rail_room)
-            _draw_side_tints(ax, verdict, home_colour, away_colour, logos)
+            # `shield=True`, as the distribution passes. Document 60 §7 justified
+            # the bare label here on the grounds that the waterfall has nothing
+            # crossing this band; document 63 found what does — its own dashed
+            # zero rule, straight through `PIT wins` on a lopsided game.
+            corners = _draw_side_tints(ax, verdict, home_colour, away_colour, logos, shield=True)
 
             ax.grid(axis="x", color=PALETTE["grid"], linewidth=0.8)
             ax.set_axisbelow(True)
@@ -2532,7 +2685,7 @@ def plot_luck_ledger(
             )
             ax.set_xlabel("")
             _draw_wins_by_labels(fig, ax, verdict, home_colour, away_colour)
-            _draw_ledger_arrow(ax, verdict, rows_y, x_rail)
+            _draw_ledger_arrow(ax, verdict, rows_y, x_rail, corners)
             # Before the marks: they take their column from where the labels
             # start, and until this runs every label starts somewhere else.
             _left_align_row_labels(ax)

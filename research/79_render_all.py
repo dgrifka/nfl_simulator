@@ -38,14 +38,17 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 import polars as pl  # noqa: E402
 from matplotlib.patches import FancyArrowPatch  # noqa: E402
 
 from nfl_simulator import paths  # noqa: E402
 from nfl_simulator.plots import (  # noqa: E402
     ARROW_FLOOR,
+    DRAW_FLOOR,
     group_rows,
     luck_bars,
+    plot_luck_ledger,
     verdict_from_row,
 )
 from nfl_simulator.render import (  # noqa: E402
@@ -61,6 +64,7 @@ from nfl_simulator.render import (  # noqa: E402
     render_game,
     replay,
 )
+from nfl_simulator.style import edition_stamp, stamp_box  # noqa: E402
 from nfl_simulator.teams import pair_colors, team_logo  # noqa: E402
 
 RESULTS = "79_render_all.json"
@@ -75,6 +79,12 @@ CHECKPOINT = "79_render_all.jsonl"
 # The gate driver 58 applies per game, quoted rather than loosened: a figure is
 # only allowed to be drawn from a redraw that lands on the published row.
 REPLAY_TOLERANCE = 1e-9
+
+# Anything darker than this inside the stamp's box is somebody else's ink. The
+# stamp is painted at 140 grey on a 249 cream and the title is #1A1A1A at 26, so
+# a threshold between the two counts the overlap without having to map a title's
+# figure coordinates through `bbox_inches="tight"`'s crop.
+FOREIGN_INK = 120
 
 # One worker per core less two, so the machine stays usable while it runs and
 # the parent has room to collect. Each worker loads the artifacts once —
@@ -103,9 +113,12 @@ def _dtw_layout(verdict, colours, logos) -> dict:
     # Matched on the gid `_rule` stamps, not on the words: the subtitle opens
     # `Actual: LAC 12 - HOU 32` and a text match picks it up as a third rule.
     rules = [t for t in ax.texts if t.get_gid() == "rule-label"]
-    stacked, gap_px = False, None
+    stacked, gap_px, rule_rows = False, None, len(rules)
     if len(rules) == 2:
         boxes = [t.get_window_extent() for t in rules]
+        # Round 10 Part C: how many rows the band actually put them on, which is
+        # two on every figure now rather than on the 93-95% that collided.
+        rule_rows = len({round(box.y0, 1) for box in boxes})
         # `bool(...)`, not the bare comparison: the bbox coordinates are numpy
         # floats, so `>` returns a `numpy.bool_`, which `json.dumps` refuses.
         stacked = bool(abs(boxes[0].y0 - boxes[1].y0) > 1.0)
@@ -122,9 +135,63 @@ def _dtw_layout(verdict, colours, logos) -> dict:
     return {
         "rules_stacked": stacked,
         "rule_gap_px": gap_px,
+        "rule_rows": int(rule_rows),
         "corner_cleared": bool(corners_left < len(wanted)),
         "arrow_drawn": bool(spans),
     }
+
+
+def _waterfall_layout(verdict, rows, slope, colours, logos) -> dict:
+    """Draw the waterfall once more and measure what round 10 Part D fixed.
+
+    The same reason :func:`_dtw_layout` exists: whether the dashed zero rule
+    crosses a corner label, and whether the rotated arrow sentence reaches one,
+    are decided against a live canvas and cannot be read off a written PNG.
+
+    A **strike** is the rule crossing a corner label that is not shielded — the
+    defect document 63 recorded on four games. A shielded label the rule passes
+    behind is not a strike: the cream box is opaque and above it, which is the
+    settled fix. An **overlap** is the rotated sentence reaching a corner label,
+    which `_lower_under_corners` is supposed to make impossible.
+    """
+    fig, ax = plot_luck_ledger(verdict, rows, points_per_epa=slope, colors=colours, logos=logos)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+
+    wanted = {f"{verdict.home_team} wins", f"{verdict.away_team} wins"}
+    corners = [t for t in ax.texts if t.get_text() in wanted]
+    rule_x = ax.transData.transform((0.0, 0.0))[0]
+    strikes = 0
+    for corner in corners:
+        box = corner.get_window_extent(renderer)
+        if not (box.x0 <= rule_x <= box.x1):
+            continue
+        shield = corner.get_bbox_patch()
+        if shield is None or shield.get_facecolor()[3] < 1.0:
+            strikes += 1
+
+    overlaps = 0
+    sentences = [t for t in ax.texts if t.get_text().startswith("luck moved")]
+    for sentence in sentences:
+        span = sentence.get_window_extent(renderer)
+        overlaps += sum(1 for c in corners if span.overlaps(c.get_window_extent(renderer)))
+
+    plt.close(fig)
+    return {"corner_strikes": strikes, "sentence_overlaps": overlaps}
+
+
+def _stamp_overlap_px(path: Path, edition: str) -> int:
+    """Foreign ink inside the credit stamp's box on a written PNG.
+
+    Document 63 measured the title running under the stamp on 84-89% of
+    distribution figures by a median 19 px. This is the same measurement taken
+    on the shipped image rather than on a re-drawn figure.
+    """
+    from PIL import Image
+
+    pixels = np.asarray(Image.open(path).convert("RGB"), dtype=float).mean(axis=2)
+    left, top, right, bottom = stamp_box((pixels.shape[1], pixels.shape[0]), edition_stamp(edition))
+    return int((pixels[top:bottom, left:right] < FOREIGN_INK).sum())
 
 
 def measure(task: tuple[str, str, str]) -> dict:
@@ -167,9 +234,11 @@ def measure(task: tuple[str, str, str]) -> dict:
     logos = {team: team_logo(team) for team in (verdict.home_team, verdict.away_team)}
 
     layout = _dtw_layout(verdict, colours, logos)
+    layout |= _waterfall_layout(verdict, rows, sources.slope, colours, logos)
     written = render_game(game_id, Path(out_dir), edition=edition)
     plt.close("all")
 
+    dtw_png = next((path for path in written if path.name.endswith("_dtw.png")), None)
     labels = [bar.label for bar in grouped]
     longest = max(labels, key=len) if labels else ""
     return {
@@ -186,6 +255,11 @@ def measure(task: tuple[str, str, str]) -> dict:
         "actual_margin": abs(float(verdict.actual_margin)),
         "deserved_margin": abs(float(verdict.deserved_margin)),
         "events_under_a_point": sum(1 for bar in bars if abs(bar.points) < 1.0),
+        # --- round 10's five, one per part -----------------------------
+        "stamp_overlap_px": _stamp_overlap_px(dtw_png, edition) if dtw_png else None,
+        "rows_under_draw_floor": sum(1 for bar in grouped if abs(bar.points) < DRAW_FLOOR),
+        "rows_named_events_under": sum(1 for bar in grouped if "events under" in bar.label),
+        "anonymous_rows": sum(1 for bar in grouped if bar.team is None),
         # --- and what the canvas decided -------------------------------
         **layout,
         "longest_label_text": longest,
@@ -220,6 +294,16 @@ def _summarise(records: list[dict], edition: str) -> dict:
         "n_corner_cleared": int(frame["corner_cleared"].sum()),
         "n_arrow_drawn": int(frame["arrow_drawn"].sum()),
         "n_degenerate": int(frame["is_degenerate"].sum()),
+        # --- round 10's pre-registered checks, per edition --------------
+        "n_two_rule_rows": int((frame["rule_rows"] == 2).sum()),
+        "n_stamp_overlaps": int((frame["stamp_overlap_px"] > 0).sum()),
+        "stamp_overlap_px_total": int(frame["stamp_overlap_px"].sum()),
+        "n_corner_strikes": int(frame["corner_strikes"].sum()),
+        "n_sentence_overlaps": int(frame["sentence_overlaps"].sum()),
+        "n_rows_under_draw_floor": int(frame["rows_under_draw_floor"].sum()),
+        "n_games_with_a_row_under_the_floor": int((frame["rows_under_draw_floor"] > 0).sum()),
+        "n_rows_named_events_under": int(frame["rows_named_events_under"].sum()),
+        "n_anonymous_rows": int(frame["anonymous_rows"].sum()),
     }
 
 
@@ -294,7 +378,35 @@ def main() -> None:
     print(f"  elapsed  {elapsed:.0f} s ({elapsed / 60:.1f} min), this pass", flush=True)
     print(f"  worst replay gap across every game: {max(r['replay_worst'] for r in records):.2e}")
 
+    on_disk = sum(1 for _ in root.rglob("*.png"))
+    print(f"  files on disk: {on_disk} (expected {expected})", flush=True)
+
     summary = {edition: _summarise(records, edition) for edition in ("strict", "full")}
+    checks = {
+        "files_on_disk": (on_disk, expected),
+        "worst_replay_gap": (max(r["replay_worst"] for r in records), 0.0),
+        "title_stamp_overlaps": (sum(s["n_stamp_overlaps"] for s in summary.values()), 0),
+        "corner_strikes": (sum(s["n_corner_strikes"] for s in summary.values()), 0),
+        "sentence_overlaps": (sum(s["n_sentence_overlaps"] for s in summary.values()), 0),
+        "rows_under_draw_floor": (
+            sum(s["n_rows_under_draw_floor"] for s in summary.values()),
+            0,
+        ),
+        "rows_named_events_under": (
+            sum(s["n_rows_named_events_under"] for s in summary.values()),
+            0,
+        ),
+        "anonymous_rows": (sum(s["n_anonymous_rows"] for s in summary.values()), 0),
+        "figures_on_two_rule_rows": (
+            sum(s["n_two_rule_rows"] for s in summary.values()),
+            total,
+        ),
+    }
+    print(f"\n{'=' * 76}\nROUND 10 — PRE-REGISTERED CHECKS\n{'=' * 76}")
+    for name, (got, want) in checks.items():
+        verdict_word = "ok" if got == want else "MISS"
+        print(f"  {name:<28} {got!s:>12}  expected {want!s:<12} {verdict_word}", flush=True)
+
     print(f"\n{'=' * 76}\nDISTRIBUTIONS\n{'=' * 76}")
     for edition, block in summary.items():
         print(f"\n  {edition} ({block['n_games']} games)")
@@ -315,6 +427,11 @@ def main() -> None:
                 "files_written": written,
                 "replay_tolerance": REPLAY_TOLERANCE,
                 "arrow_floor": ARROW_FLOOR,
+                "draw_floor": DRAW_FLOOR,
+                "files_on_disk": on_disk,
+                "checks": {
+                    name: {"got": got, "want": want} for name, (got, want) in checks.items()
+                },
                 "summary": summary,
                 "games": records,
             },
