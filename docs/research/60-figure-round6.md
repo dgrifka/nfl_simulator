@@ -133,6 +133,12 @@ A median Full ledger holds about **fifty** events; `2022_13_WAS_NYG` holds 77 an
 - everything else folds into the single un-teamed `n events under 1 pt` row the
   waterfall has always had, since a game carries a handful of Strict events
   rather than dozens;
+  **Amended 2026-08-29 (round 10, §11).** That row is gone: the remainder
+  splits by charged team into `n small events (LAC)` and `n small events
+  (HOU)`, one row per club, each wearing that club's mark and carrying its own
+  exact sum. And no row draws an empty bar — anything under `DRAW_FLOOR =
+  0.05` pt, a single event or a fold, is absorbed into its club's row
+  regardless of the lone-event rule below.
 - every folded row carries the **exact sum** of what went into it, so the
   waterfall still reconciles its two ends to 1e-9;
 - a lone small event is left as itself — `1 smaller receiver drops (GB)` is a

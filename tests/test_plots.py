@@ -2087,8 +2087,13 @@ def test_a_row_carries_its_club_s_mark_beside_its_label():
     assert len(_row_marks(ax)) == 3
 
 
-def test_a_folded_row_has_no_club_to_mark():
-    """ "4 events under 0.1 pt" is not one team's event, so it gets no mark."""
+def test_a_folded_row_wears_the_mark_of_the_club_it_is_charged_to():
+    """Round 10: the remainder splits by charged team, so it has a club.
+
+    `81 events under 1 pt` was the third-largest bar on `2025_02_NYG_DAL` and
+    wore nothing at all — the biggest heap on the page outranked all but two
+    named events and told the reader only that something small happened often.
+    """
     rows = [ledger_row(3.42, charged_team="GB", play_id=1.0)] + [
         ledger_row(0.02, charged_team="GB", play_id=float(index)) for index in (2, 3)
     ]
@@ -2097,8 +2102,11 @@ def test_a_folded_row_has_no_club_to_mark():
         game, rows, points_per_epa=PPE, logos={"GB": synthetic_mark(), "DET": synthetic_mark()}
     )
     labels = [t.get_text() for t in ax.get_yticklabels()]
-    assert any("events under" in label for label in labels)
-    assert len(_row_marks(ax)) == 3
+    assert any("small events (GB)" in label for label in labels)
+    assert not any("events under" in label for label in labels)
+    # Four marks where there were three: the two anchors, the named event, and
+    # the heap, which used to be the one row on the page wearing nothing.
+    assert len(_row_marks(ax)) == 4
 
 
 def test_the_two_tables_never_run_into_each_other():
@@ -2703,16 +2711,20 @@ def test_every_value_label_carries_a_surface_so_a_rule_cannot_strike_it_through(
 
 
 def test_a_sub_half_point_bar_hangs_its_label_off_a_leader():
-    """Round 6 grouping folds this game's two slivers into one -0.4 row.
+    """Round 4 saw two leadered labels here, `-0.3` and a folded `-0.01`.
 
-    Round 4 saw two leadered labels here, `-0.3` and a folded `-0.01`; both are
-    under a point, so `group_rows` now folds them together and the single row
-    they make is still narrower than its own label. The fix D-4 shipped is what
-    is under test, not the number of rows it applies to."""
+    Round 6 folded them into one -0.4 row; round 10 splits the remainder by
+    club and separates them again — Detroit's slivers are Detroit's row and
+    Minnesota's three are Minnesota's. The fix D-4 shipped is what is under
+    test, not the number of rows it applies to.
+
+    Minnesota's row is the case the draw floor cannot reach: its whole
+    remainder is a hundredth of a point, so there is no larger row of its own
+    club's to absorb it. Recorded rather than ruled on."""
     fig, ax = det_min_waterfall()
     fig.canvas.draw()
     leaders = [t for t in _value_labels(ax) if t.arrow_patch is not None]
-    assert {t.get_text() for t in leaders} == {"-0.4"}
+    assert {t.get_text() for t in leaders} == {"-0.4", "-0.01"}
 
 
 def test_no_two_value_labels_print_through_each_other_on_det_min():
@@ -2926,14 +2938,109 @@ def test_the_small_dropped_picks_are_counted_under_their_own_name():
     assert grouped.team == "DET"
 
 
-def test_the_strict_components_keep_the_row_they_have_always_had():
-    """Fumbles and kicks fold into one un-teamed row, as they did before Full."""
-    from nfl_simulator.plots import GROUP_THRESHOLD, group_rows
+def test_the_strict_components_fold_into_their_own_clubs_heap():
+    """Round 10: the remainder is not one anonymous row any more.
+
+    A fumble and a kick charged to the same club fold together, under that
+    club's name and that club's mark, because a heap nobody is charged with is
+    a bar a reader cannot ask a question about.
+    """
+    from nfl_simulator.plots import group_rows
 
     rows = [ledger_row(0.5, play_id=1.0), ledger_row(-0.4, play_id=2.0, component="field_goal")]
     (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE))
-    assert grouped.label == f"2 events under {GROUP_THRESHOLD:g} pt"
-    assert grouped.team is None
+    assert grouped.label == "2 small events (DET)"
+    assert grouped.team == "DET"
+    assert grouped.n_events == 2
+
+
+def test_a_club_gets_exactly_one_heap_however_small_its_events_were():
+    """`luck_bars` folds under a tenth of a point and `group_rows` under a
+    point, so a Full game reaches here with a club's remainder already in two
+    pieces — and on `2024_19_LAC_HOU` the larger piece was worth 1.2 pt, over
+    the grouping threshold, so it stood as a row of its own. Two rows reading
+    `28 small events (HOU)` and `2 small events (HOU)` are one row too many:
+    nothing on the page says why there are two. A row that is already a heap
+    joins its club's heap whatever it is worth."""
+    from nfl_simulator.plots import group_rows
+
+    # Eighty slivers fold to 1.34 pt, over the grouping threshold, which is how
+    # `2024_19_LAC_HOU` came to carry two of these rows.
+    rows = [ledger_row(0.02, play_id=float(i), charged_team="GB") for i in range(1, 81)]
+    rows += [ledger_row(0.5, play_id=float(i), charged_team="GB") for i in range(81, 84)]
+    bars = luck_bars(rows, points_per_epa=PPE)
+    assert abs(bars[-1].points) > 1.0, "the pre-fold has to clear the threshold"
+    heaps = [bar for bar in group_rows(bars) if "small events" in bar.label]
+    assert len(heaps) == 1
+    assert heaps[0].label == "83 small events (GB)"
+    assert heaps[0].points == pytest.approx(sum(bar.points for bar in bars))
+
+
+def test_the_remainder_splits_into_one_heap_per_club():
+    """`46 small events (LAC)` under the Chargers' mark and `35 small events
+    (HOU)` under Houston's, each the exact sum of its own members."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [ledger_row(0.5, play_id=float(i), charged_team="GB") for i in range(1, 4)]
+    rows += [ledger_row(-0.4, play_id=float(i), charged_team="DET") for i in range(4, 6)]
+    bars = luck_bars(rows, points_per_epa=PPE)
+    grouped = {bar.team: bar for bar in group_rows(bars)}
+    assert set(grouped) == {"GB", "DET"}
+    assert grouped["GB"].label == "3 small events (GB)"
+    assert grouped["DET"].label == "2 small events (DET)"
+    assert grouped["GB"].points == pytest.approx(-3 * 0.5 * PPE)
+    assert grouped["DET"].points == pytest.approx(2 * 0.4 * PPE)
+    assert not any(bar.team is None for bar in group_rows(bars))
+
+
+def test_the_two_heaps_still_reconcile_with_what_went_into_them():
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-0.4, float(i), team="GB") for i in range(1, 5)]
+    rows += [ledger_row(0.3, play_id=float(i), charged_team="DET") for i in range(5, 9)]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    assert sum(bar.points for bar in group_rows(bars)) == pytest.approx(
+        sum(bar.points for bar in bars), abs=1e-9
+    )
+
+
+def test_a_row_that_would_draw_nothing_joins_its_clubs_heap():
+    """`DRAW_FLOOR`: a row worth a hundredth of a point takes a full row and
+    draws no bar at all. Document 63 found two of them on `2022_05_SF_CAR` and
+    one apiece on `2022_10_JAX_KC` and `2017_04_TEN_HOU`. A row that draws
+    nothing tells the reader nothing, so it is absorbed regardless of the
+    lone-event rule — the sum is kept and the count goes up."""
+    from nfl_simulator.plots import DRAW_FLOOR, group_rows
+
+    assert DRAW_FLOOR == 0.05
+    # One event too small to draw, and two of its club's own to join.
+    rows = [ledger_row(0.01 / PPE, play_id=1.0, charged_team="GB")]
+    rows += [ledger_row(0.4, play_id=float(i), charged_team="GB") for i in (2, 3)]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0))
+    assert grouped.label == "3 small events (GB)"
+    assert grouped.n_events == 3
+
+
+def test_a_fold_worth_less_than_the_draw_floor_is_absorbed_too():
+    """`2022_05_SF_CAR`: two fold rows worth +0.03 and −0.02 each took a row and
+    drew nothing. A fold is a row like any other and meets the same floor."""
+    from nfl_simulator.plots import group_rows
+
+    # Two drops that cancel to a third of a tenth, and a fumble to absorb them.
+    rows = [drop_row(0.5, 1.0, team="GB"), drop_row(-0.5 + 0.03 / PPE, 2.0, team="GB")]
+    rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0))
+    assert [bar.label for bar in grouped] == ["3 small events (GB)"]
+    assert all(abs(bar.points) >= 0.05 for bar in grouped)
+
+
+def test_a_lone_small_event_a_reader_can_see_is_still_left_as_itself():
+    """The lone-event rule survives the draw floor: `1 smaller GB drops` is a
+    worse row than the drop it hides, as long as the drop draws something."""
+    from nfl_simulator.plots import group_rows
+
+    bars = luck_bars([drop_row(-3.0, 1.0), drop_row(-0.4, 2.0)], points_per_epa=PPE, floor=0.0)
+    assert [bar.label for bar in group_rows(bars)][-1] == bars[-1].label
 
 
 def test_grouping_never_loses_a_point_of_luck():
@@ -4123,8 +4230,11 @@ def test_the_cap_row_is_lowercase_like_every_other_component_name():
 
 
 def test_the_folded_cap_row_reads_in_the_same_case():
+    """Worth a quarter-point each since round 10: a fold of two caps worth two
+    hundredths between them is under `DRAW_FLOOR` and joins its club's heap
+    instead, so the wording under test needs a fold a reader can see."""
     bars = [
-        luck_bars([cap_row(luck_epa=-0.02, event_class=f"Q1 drive {i}")], points_per_epa=PPE)[0]
+        luck_bars([cap_row(luck_epa=-0.3, event_class=f"Q1 drive {i}")], points_per_epa=PPE)[0]
         for i in range(1, 3)
     ]
     (grouped,) = group_rows(bars)
