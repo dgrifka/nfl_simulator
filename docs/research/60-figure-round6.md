@@ -139,6 +139,9 @@ A median Full ledger holds about **fifty** events; `2022_13_WAS_NYG` holds 77 an
   exact sum. And no row draws an empty bar — anything under `DRAW_FLOOR =
   0.05` pt, a single event or a fold, is absorbed into its club's row
   regardless of the lone-event rule below.
+  **Amended again 2026-08-29 (round 11, §11a).** The floor is a share of the
+  axis, `DRAW_FLOOR_SHARE = 0.005`, and it no longer overrides the lone-event
+  rule: a club whose remainder is one event keeps that event's own words.
 - every folded row carries the **exact sum** of what went into it, so the
   waterfall still reconciles its two ends to 1e-9;
 - a lone small event is left as itself — `1 smaller receiver drops (GB)` is a
@@ -669,6 +672,31 @@ cleared the threshold and stood beside a second row of the same words.
 event or fold, worth less than that is absorbed into its club's heap regardless
 of the lone-event rule. A row that draws nothing tells the reader nothing while
 still costing them a row to read.
+
+**Amendment, 2026-08-29 — round 11 replaces that floor with a relative one.**
+`DRAW_FLOOR` is removed and `DRAW_FLOOR_SHARE = 0.005` takes its place: a row
+has to be worth half a percent of the waterfall's axis span to be worth drawing.
+The span is `max(0, actual, deserved) − min(0, actual, deserved)`, taken from the
+verdict by `waterfall_span` and fixed before any fold, so the floor cannot depend
+on what the floor did. That is 0.015 pt on a three-point game and 0.25 pt on a
+fifty-point one, which is what §11b's own closing paragraph asked for: whether a
+bar can be seen is a share of the axis, not an absolute number of points.
+
+Two clauses come with it, and they are what stops the floor eating rows it
+should not:
+
+1. **A heap of one is the event.** If a club's heap would hold exactly one
+   event, that event is kept under its own label whatever it is worth. The old
+   rule's "regardless of the lone-event rule" is withdrawn — it produced `1
+   small event (SEA)` at +0.018 pt, which is the same invisible bar with the
+   event's words taken off it, and eight of §11b's twelve re-derived rows were
+   exactly that.
+2. **A club heap of two or more that still cancels to under the floor is kept as
+   it is and counted.** There is nowhere left to fold it, so it stays, and round
+   11 reports the residue rather than hiding it — see document 63 §7.
+
+Ordering is unchanged, and reconciliation is unchanged: the fold moves rows,
+never points, on any span.
 
 ### 11b. What the corpus said, including where the round fell short
 

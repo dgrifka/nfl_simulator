@@ -45,11 +45,12 @@ from matplotlib.patches import FancyArrowPatch  # noqa: E402
 from nfl_simulator import paths  # noqa: E402
 from nfl_simulator.plots import (  # noqa: E402
     ARROW_FLOOR,
-    DRAW_FLOOR,
+    DRAW_FLOOR_SHARE,
     group_rows,
     luck_bars,
     plot_luck_ledger,
     verdict_from_row,
+    waterfall_span,
 )
 from nfl_simulator.render import (  # noqa: E402
     DTW_FIGURE,
@@ -229,7 +230,9 @@ def measure(task: tuple[str, str, str]) -> dict:
         receiver_names(game_id),
     )
     bars = luck_bars(rows, points_per_epa=sources.slope)
-    grouped = group_rows(bars)
+    span = waterfall_span(verdict)
+    floor = span * DRAW_FLOOR_SHARE
+    grouped = group_rows(bars, span=span)
     colours = pair_colors(verdict.home_team, verdict.away_team)
     logos = {team: team_logo(team) for team in (verdict.home_team, verdict.away_team)}
 
@@ -257,7 +260,7 @@ def measure(task: tuple[str, str, str]) -> dict:
         "events_under_a_point": sum(1 for bar in bars if abs(bar.points) < 1.0),
         # --- round 10's five, one per part -----------------------------
         "stamp_overlap_px": _stamp_overlap_px(dtw_png, edition) if dtw_png else None,
-        "rows_under_draw_floor": sum(1 for bar in grouped if abs(bar.points) < DRAW_FLOOR),
+        "rows_under_draw_floor": sum(1 for bar in grouped if abs(bar.points) < floor),
         "rows_named_events_under": sum(1 for bar in grouped if "events under" in bar.label),
         "anonymous_rows": sum(1 for bar in grouped if bar.team is None),
         # --- and what the canvas decided -------------------------------
@@ -427,7 +430,7 @@ def main() -> None:
                 "files_written": written,
                 "replay_tolerance": REPLAY_TOLERANCE,
                 "arrow_floor": ARROW_FLOOR,
-                "draw_floor": DRAW_FLOOR,
+                "draw_floor_share": DRAW_FLOOR_SHARE,
                 "files_on_disk": on_disk,
                 "checks": {
                     name: {"got": got, "want": want} for name, (got, want) in checks.items()

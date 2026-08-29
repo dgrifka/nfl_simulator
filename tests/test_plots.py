@@ -3005,33 +3005,161 @@ def test_the_two_heaps_still_reconcile_with_what_went_into_them():
 
 
 def test_a_row_that_would_draw_nothing_joins_its_clubs_heap():
-    """`DRAW_FLOOR`: a row worth a hundredth of a point takes a full row and
-    draws no bar at all. Document 63 found two of them on `2022_05_SF_CAR` and
-    one apiece on `2022_10_JAX_KC` and `2017_04_TEN_HOU`. A row that draws
-    nothing tells the reader nothing, so it is absorbed regardless of the
-    lone-event rule — the sum is kept and the count goes up."""
-    from nfl_simulator.plots import DRAW_FLOOR, group_rows
+    """A row worth a hundredth of a point takes a full row and draws no bar at
+    all. Document 63 found two of them on `2022_05_SF_CAR` and one apiece on
+    `2022_10_JAX_KC` and `2017_04_TEN_HOU`. A row that draws nothing tells the
+    reader nothing, so it is absorbed — the sum is kept and the count goes up."""
+    from nfl_simulator.plots import group_rows
 
-    assert DRAW_FLOOR == 0.05
     # One event too small to draw, and two of its club's own to join.
     rows = [ledger_row(0.01 / PPE, play_id=1.0, charged_team="GB")]
     rows += [ledger_row(0.4, play_id=float(i), charged_team="GB") for i in (2, 3)]
-    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0))
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=10.0)
     assert grouped.label == "3 small events (GB)"
     assert grouped.n_events == 3
 
 
 def test_a_fold_worth_less_than_the_draw_floor_is_absorbed_too():
     """`2022_05_SF_CAR`: two fold rows worth +0.03 and −0.02 each took a row and
-    drew nothing. A fold is a row like any other and meets the same floor."""
+    drew nothing. A fold is a row like any other and meets the same floor — here
+    a ten-point axis, whose floor is 0.05 pt."""
     from nfl_simulator.plots import group_rows
 
     # Two drops that cancel to a third of a tenth, and a fumble to absorb them.
     rows = [drop_row(0.5, 1.0, team="GB"), drop_row(-0.5 + 0.03 / PPE, 2.0, team="GB")]
     rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
-    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0))
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=10.0)
     assert [bar.label for bar in grouped] == ["3 small events (GB)"]
     assert all(abs(bar.points) >= 0.05 for bar in grouped)
+
+
+# ---- round 11: the floor is a share of the axis, and a heap of one is the event
+
+
+def test_the_draw_floor_is_a_share_of_the_axis_rather_than_a_fixed_point():
+    """Round 11. An absolute 0.05 pt meant one thing on a three-point game and
+    another on a fifty-point blowout: a bar a reader can see on the first axis
+    and no bar at all on the second. The floor is now half a percent of the span
+    the axis is built on, so "visible" means the same thing on both."""
+    import nfl_simulator.plots as plots
+
+    assert plots.DRAW_FLOOR_SHARE == 0.005
+    assert not hasattr(plots, "DRAW_FLOOR")
+
+
+def test_the_span_is_the_three_numbers_the_waterfall_axis_is_built_on():
+    """Zero, the actual margin and the deserved one — fixed before any fold, so
+    the floor cannot depend on what the floor did. A game won by 12 whose
+    deserved margin is 8.8 spans 12 pt, not 3.2: the axis starts at zero because
+    that is where the two clubs' sides meet."""
+    from nfl_simulator.plots import waterfall_span
+
+    assert waterfall_span(verdict(actual_margin=12.0, deserved_margin=8.8)) == pytest.approx(12.0)
+    # A flip: the actual margin one way and the deserved margin the other, so
+    # the axis has to reach both sides of zero.
+    assert waterfall_span(verdict(actual_margin=8.0, deserved_margin=-8.28)) == pytest.approx(16.28)
+
+
+def test_a_fold_that_would_draw_nothing_on_a_fifty_point_axis_is_absorbed():
+    """Span 50 pt puts the floor at 0.25 pt, and a fold worth 0.2 pt is under
+    it — two pixels on an axis that wide."""
+    from nfl_simulator.plots import group_rows
+
+    # Two drops that cancel to a fifth of a point, and a fumble to absorb them.
+    rows = [drop_row(1.0, 1.0, team="GB"), drop_row(-1.0 + 0.2 / PPE, 2.0, team="GB")]
+    rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=50.0)
+    assert [bar.label for bar in grouped] == ["3 small events (GB)"]
+    assert grouped[0].n_events == 3
+
+
+def test_the_same_fold_keeps_its_own_row_on_a_ten_point_axis():
+    """Span 10 pt puts the floor at 0.05 pt. The same 0.2-pt fold is four times
+    the floor there, and that is a bar a reader can see. This is the whole point
+    of the change: one absolute floor cannot be right for both games."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(1.0, 1.0, team="GB"), drop_row(-1.0 + 0.2 / PPE, 2.0, team="GB")]
+    rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=10.0)
+    assert "2 smaller GB drops" in [bar.label for bar in grouped]
+
+
+def test_a_heap_of_one_is_the_event_whatever_it_is_worth():
+    """Rule 2 of round 11. `1 small event (SEA)` renames a row without shrinking
+    it — the reader loses the event's words and keeps the same empty bar — and
+    eight of the twelve sub-floor rows document 63 sampled were exactly that."""
+    from nfl_simulator.plots import group_rows
+
+    # Seattle's lone sliver is a fifth of a point on a fifty-point axis, well
+    # under that axis's 0.25-pt floor, and there is no second Seattle row for it
+    # to join.
+    rows = [ledger_row(2.0, play_id=1.0, charged_team="KC")]
+    rows += [ledger_row(-0.2 / PPE, play_id=2.0, charged_team="SEA")]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    labels = [bar.label for bar in group_rows(bars, span=50.0)]
+    assert "1 small event (SEA)" not in labels
+    assert labels[-1] == bars[-1].label
+
+
+def test_the_lone_event_rule_wins_over_the_floor_on_jax_cle_s_seven_hundredths():
+    """`2017_11_JAX_CLE` Strict carries a −0.07 pt row two pixels wide. Rule 2
+    wins over the floor: a club's lone small event keeps its own words whatever
+    it is worth, because the alternative is the same invisible bar with the
+    words taken off it. Asserted here on a fifteen-point axis, whose 0.075-pt
+    floor is above the row — the game's own span of 12 pt would clear it anyway."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [ledger_row(4.0, play_id=1.0, charged_team="JAX")]
+    rows += [ledger_row(0.07 / PPE, play_id=2.0, charged_team="CLE")]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    labels = [bar.label for bar in group_rows(bars, span=15.0)]
+    assert labels[-1] == bars[-1].label
+    assert not any("small event" in label for label in labels)
+
+
+def test_a_club_heap_of_two_that_cancels_under_the_floor_is_kept_and_counted():
+    """Rule 3 of round 11: there is nowhere to fold a heap into, so a heap that
+    cancels to under the floor stays where it is and is counted. That residue is
+    the number round 11 reports, not something hidden."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [ledger_row(3.0, play_id=1.0, charged_team="KC")]
+    rows += [ledger_row(0.5, play_id=2.0, charged_team="SEA")]
+    rows += [ledger_row(-0.5 + 0.02 / PPE, play_id=3.0, charged_team="SEA")]
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=50.0)
+    heap = next(bar for bar in grouped if bar.team == "SEA")
+    assert heap.label == "2 small events (SEA)"
+    assert heap.n_events == 2
+    assert abs(heap.points) < 0.005 * 50.0
+
+
+def test_grouping_still_reconciles_whatever_the_axis_span_is():
+    """The fold moves rows, never points. On any span the grouped rows sum to
+    what the ungrouped ones did, which is what lets the waterfall's two ends
+    meet — and the span is the one thing round 11 added to the fold."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [drop_row(-3.0, 1.0), drop_row(-0.4, 2.0), drop_row(0.2, 3.0, team="GB")]
+    rows += [ledger_row(0.3, play_id=4.0), ledger_row(-0.9, play_id=5.0)]
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    for span in (0.0, 3.0, 12.0, 50.0):
+        assert sum(bar.points for bar in group_rows(bars, span=span)) == pytest.approx(
+            sum(bar.points for bar in bars), abs=1e-9
+        )
+
+
+def test_the_waterfall_takes_its_floor_from_its_own_axis():
+    """The figure is what has an axis, so the figure is what supplies the span.
+    A 48-point blowout puts the floor at 0.24 pt, and the 0.2-pt fold that keeps
+    its row on a ten-point game is absorbed here."""
+    rows = [drop_row(1.0, 1.0, team="GB"), drop_row(-1.0 + 0.2 / PPE, 2.0, team="GB")]
+    rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
+    game = reconciling(rows, branded(actual_margin=48.0))
+    _fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    labels = [label.get_text() for label in ax.get_yticklabels()]
+    assert "3 small events (GB)" in labels
+    assert "2 smaller GB drops" not in labels
 
 
 def test_a_lone_small_event_a_reader_can_see_is_still_left_as_itself():
@@ -4231,7 +4359,7 @@ def test_the_cap_row_is_lowercase_like_every_other_component_name():
 
 def test_the_folded_cap_row_reads_in_the_same_case():
     """Worth a quarter-point each since round 10: a fold of two caps worth two
-    hundredths between them is under `DRAW_FLOOR` and joins its club's heap
+    hundredths between them is under the draw floor and joins its club's heap
     instead, so the wording under test needs a fold a reader can see."""
     bars = [
         luck_bars([cap_row(luck_epa=-0.3, event_class=f"Q1 drive {i}")], points_per_epa=PPE)[0]
