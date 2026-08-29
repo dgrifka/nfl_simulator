@@ -45,7 +45,7 @@ from nfl_simulator.plots import (
 )
 from nfl_simulator.simulator import EDITIONS
 from nfl_simulator.style import finalize
-from nfl_simulator.teams import pair_colors, team_logo, team_name
+from nfl_simulator.teams import era_code, pair_colors, team_logo, team_name
 
 GAMES_ARTIFACT = "dtw_games_v13.parquet"
 LEDGER_ARTIFACT = "dtw_ledger_v13.parquet"
@@ -201,7 +201,13 @@ def prepare_rows(
     intervals = intervals or {}
     rows = with_actual(frame).to_dicts()
     for row in rows:
-        charged = row.get("charged_team")
+        # Round 12: the ledger carries the modern code exactly as the summary
+        # does, so a 2017 Oakland row arrives charged to `LV`. The verdict's two
+        # sides are already the season's codes, and a row that did not join them
+        # would name a club the rest of the figure never mentions — and would
+        # match neither side, so `opponent` would come out wrong on every row.
+        charged = era_code(row.get("charged_team"), verdict.season)
+        row["charged_team"] = charged
         row["opponent"] = verdict.away_team if charged == verdict.home_team else verdict.home_team
         play_id = row.get("play_id")
         row["kick_distance"] = distances.get(play_id)
@@ -740,10 +746,14 @@ def render_game(
         receiver_names(game_id),
         expected_intervals(result),
     )
-    colours = pair_colors(verdict.home_team, verdict.away_team)
+    # The verdict's two codes are already the season's (see `plots.verdict_from_row`),
+    # and the season is passed again here so the three lookups are era-correct
+    # whoever built the verdict — `era_code` of an era code is itself.
+    season = verdict.season
+    colours = pair_colors(verdict.home_team, verdict.away_team, season)
     sides = (verdict.home_team, verdict.away_team)
-    logos = {team: team_logo(team) for team in sides}
-    names = {team: team_name(team) for team in sides}
+    logos = {team: team_logo(team, season) for team in sides}
+    names = {team: team_name(team, season) for team in sides}
     toss = sources.toss(verdict) if verdict.went_to_overtime else None
 
     written = []

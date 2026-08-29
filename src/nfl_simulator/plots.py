@@ -47,6 +47,11 @@ from nfl_simulator.style import (
     separated,
 )
 
+# The one thing this module takes from `teams`, and it is a rule rather than
+# data: which abbreviation a club played a given season under. Colours, marks
+# and full names are still handed in by the caller — see :func:`team_or_abbr`.
+from nfl_simulator.teams import era_code
+
 # Document 10 Gate V-3's convention: a game whose verdict never changes across
 # the bootstrap. Its interval is a point, and reporting one is misleading.
 DEGENERATE_EPS = 0.001
@@ -334,14 +339,23 @@ def verdict_from_row(
     is Strict and `full_summary.parquet` is Full — and ``counterpart`` is the
     other edition's verdict, for the one line that quotes it. Neither can move
     a number: the row is still the only source of every figure on the image.
+
+    **Round 12: the two club codes are the season's.** The summary artifacts
+    carry the modern abbreviation on every game, so `2017_16_OAK_PHI` arrives
+    with ``away_team == "LV"`` and, until this line, said so on its headline,
+    its corner label, every row, its legend and its key. The verdict is where
+    every surface reads a club code from, so it is the single place the season
+    is applied — see :func:`teams.era_code`. This changes no number; the game
+    id it is taken from is the row's own.
     """
     schedule = schedule or {}
+    season = int(str(row["game_id"])[:4])
     return GameVerdict(
         edition=edition,
         counterpart=counterpart,
         game_id=row["game_id"],
-        home_team=row["home_team"],
-        away_team=row["away_team"],
+        home_team=era_code(row["home_team"], season),
+        away_team=era_code(row["away_team"], season),
         actual_margin=float(row["actual_margin"]),
         deserved_margin=float(row["deserved_margin"]),
         dtw_home=float(row["dtw_home"]),
