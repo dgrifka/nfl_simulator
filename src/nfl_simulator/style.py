@@ -65,6 +65,14 @@ BRAND_HANDLE = "@[TBD]"
 DATA_CREDIT = "Data: nflverse"
 WATERMARK = f"{DATA_CREDIT} | {BRAND_HANDLE}"
 
+# The mark itself, packaged rather than referenced. It sits inside
+# ``src/nfl_simulator`` so hatchling puts it in the wheel: a logo read from a
+# path outside the package is a logo that exists on the machine that made the
+# figures and nowhere else. RGBA with a transparent field, 400 px on its long
+# side and quantised to 128 colours, which is the whole of this flat badge and
+# a quarter of the bytes a truecolour save costs.
+BRAND_LOGO = Path(__file__).parent / "assets" / "logo.png"
+
 # Ruling R-4's two editions (document 58 §2), by the public name each wears.
 # The audit arms `"strict+dp"` and `"strict+rd"` are deliberately absent: they
 # are callable in the simulator and were never named, so an image cannot claim

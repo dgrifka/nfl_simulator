@@ -9,6 +9,8 @@ stops being stamped looks exactly like a figure nobody has looked at yet.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -184,3 +186,43 @@ def test_the_strip_is_reserved_when_a_figure_reaches_into_the_stamp_s_corner(bla
     left, top, right, bottom = stamp_box(grown.size, WATERMARK)
     under = np.asarray(grown.convert("RGB"), dtype=float).mean(axis=2)[top:bottom, left:right]
     assert (under >= FOREIGN_INK).all(), "the footer is still under the stamp"
+
+
+# --------------------------------------------------------------------------
+# the brand logo — the packaged asset
+# --------------------------------------------------------------------------
+
+# 60 KB is the budget a repo can carry in every wheel without anybody noticing,
+# and 400 px is more than twice the width the mark is ever drawn at (the stamp
+# asks for a logo about 1.6 text lines tall — tens of pixels, not hundreds).
+LOGO_BYTE_BUDGET = 60 * 1024
+LOGO_MAX_WIDTH = 400
+
+
+def test_the_brand_logo_ships_inside_the_package():
+    """It lives under `src/nfl_simulator/assets/`, so the wheel carries it.
+
+    A logo read from a path outside the package is a logo that exists on the
+    machine that made the figures and nowhere else.
+    """
+    from nfl_simulator import style
+    from nfl_simulator.style import BRAND_LOGO
+
+    assert BRAND_LOGO.exists()
+    assert BRAND_LOGO.parent.parent == Path(style.__file__).parent
+
+
+def test_the_brand_logo_is_rgba_with_a_transparent_background():
+    """The badge is pasted onto a cream figure, so its corners must be see-through."""
+    from nfl_simulator.style import BRAND_LOGO
+
+    logo = Image.open(BRAND_LOGO)
+    assert logo.mode == "RGBA"
+    assert logo.getpixel((0, 0))[3] == 0
+
+
+def test_the_brand_logo_stays_inside_its_size_budget():
+    from nfl_simulator.style import BRAND_LOGO
+
+    assert BRAND_LOGO.stat().st_size <= LOGO_BYTE_BUDGET
+    assert Image.open(BRAND_LOGO).width <= LOGO_MAX_WIDTH
