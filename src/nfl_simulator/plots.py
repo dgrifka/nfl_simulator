@@ -71,16 +71,32 @@ SCOREBOARD_HOLDS = "scoreboard holds"
 # would let a reader take the figure for the whole story.
 OVERTIME_FOOTER = "Went to overtime; the coin toss is reported, not neutralized."
 
+# What `_heap_label`'s row is, said once, under the chart. `46 small events
+# (LAC)` names a club and a count and leaves the reader to guess at the noun;
+# document 63 found the un-teamed version of that row third-largest on a game
+# whose reader had no way to learn what was in it.
+SMALL_EVENTS_FOOTER = (
+    "Small events: rows too small to draw at this scale, folded into one bar per team."
+)
 
-def footer_lines(verdict) -> list[str]:
+
+def footer_lines(verdict, *, overtime: bool = True) -> list[str]:
     """The muted asides every per-game figure carries, in one order everywhere.
 
     Both are statements about what the figure is *not*: the overtime toss is in
     this game and not in this ledger, and the other edition is an adjudication
     of this game that this image is not showing. Built here rather than in each
     figure so the four never drift into three different orders.
+
+    ``overtime=False`` drops the toss line for one caller. **The waterfall is
+    the only one that passes it** (the maintainer, 2026-08-30, document 60 §15): its
+    footer gained :data:`SMALL_EVENTS_FOOTER` this round, and a waterfall is
+    the one figure of the four that shows the ledger's rows themselves — a
+    reader looking at every priced event can see the toss is not among them.
+    The three share images keep the line, because document 16's rule is about
+    an image travelling on its own with no rows and no interval to read.
     """
-    lines = [OVERTIME_FOOTER] if verdict.went_to_overtime else []
+    lines = [OVERTIME_FOOTER] if overtime and verdict.went_to_overtime else []
     note = verdict.edition_note()
     return lines + [note] if note else lines
 
@@ -1574,7 +1590,11 @@ VARIANT_COMPONENTS = ("dropped_pick", "receiver_drop")
 # ``actual`` records: an escaped throw, a caught ball.
 VARIANT_NOUNS = {
     ("dropped_pick", True): "dropped pick",
-    ("dropped_pick", False): "interception",
+    # "interception" alone claims a population this component does not price:
+    # every row in it is a throw FTN charted as *pick-able*, and a ledger that
+    # said "interception" would read as though it re-prices every interception
+    # in the game. Document 05 §3 explicitly refuses to.
+    ("dropped_pick", False): "interception (pick-able throw)",
     ("receiver_drop", True): "catch",
     ("receiver_drop", False): "drop",
 }
@@ -2909,20 +2929,27 @@ def plot_luck_ledger(
 
         footer = [
             "The bars are a sum, not a sequence: their order does not change where the "
-            "waterfall lands."
+            "waterfall lands.",
+            # Round 10 gave the remainder a club and a count — `46 small events
+            # (LAC)` — which says whose afternoon it was but still not what is
+            # inside it. Here rather than beside the bar because it is true of
+            # both heaps and of every game that has one.
+            SMALL_EVENTS_FOOTER,
         ]
-        # Document 16 measured the overtime toss and refused it, so a game that
-        # went to overtime has to say the ledger is one event short on purpose.
-        # Silence would let a reader take the waterfall for the whole story. The
-        # edition line follows it, because it is the same kind of aside: what
-        # this ledger is *not*.
-        footer.extend(footer_lines(verdict))
+        # The edition line is the same kind of aside: what this ledger is *not*.
+        # The toss line is dropped here and only here — see `footer_lines`.
+        footer.extend(footer_lines(verdict, overtime=False))
         ax.annotate(
             "\n".join(footer),
             xy=(0, 0),
             xycoords="axes fraction",
             xytext=(0, WATERFALL_FOOTER_OFFSET),
             textcoords="offset points",
+            # Left, on the axes' left edge, which is where the rows, their
+            # labels and the how-to-read caption all start. Spelled out rather
+            # than left to `Annotation`'s default so the alignment is a decision
+            # on the record and not a default nobody chose.
+            ha="left",
             va="top",
             fontsize=8,
             color=PALETTE["text_muted"],

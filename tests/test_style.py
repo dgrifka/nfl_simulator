@@ -32,12 +32,14 @@ from nfl_simulator.style import (
     title_axes,
 )
 
-# The bottom-right corner the watermark is stamped into, as fractions of the
-# saved image. `apply_watermark` places the block at 2% in from the right and
-# ~1.2% up from the bottom, so a box this size contains all of it and nothing
-# else. It was the *top* right until round 10 — document 63 measured the title
-# running under it on 84-89% of distribution figures.
-CORNER_W, CORNER_H = 0.20, 0.06
+# The top-right corner the watermark is stamped into, as fractions of the saved
+# image. `apply_watermark` places the block at 2% in from the right and ~1.2%
+# down from the top, so a box this size contains all of it and nothing else.
+# Round 10 moved the stamp to the *bottom* right because document 63 measured
+# the title running under it on 84-89% of distribution figures; write-up round 3
+# moves it back — the MLB simulator's corner — and buys the room with
+# `reserve_stamp_strip` rather than by conceding the corner.
+CORNER_W, CORNER_H = 0.20, 0.12
 
 # Cream is (252, 250, 246); the watermark ink is mid-grey. Anything whose mean
 # channel is below this is text rather than background.
@@ -47,7 +49,7 @@ DARK = 200
 def corner(path) -> np.ndarray:
     pixels = np.asarray(Image.open(path).convert("RGB"), dtype=float)
     height, width = pixels.shape[:2]
-    return pixels[int(height * (1 - CORNER_H)) :, int(width * (1 - CORNER_W)) :]
+    return pixels[: int(height * CORNER_H), int(width * (1 - CORNER_W)) :]
 
 
 @pytest.fixture
@@ -76,7 +78,7 @@ def test_a_finalized_png_is_saved_on_the_cream_surface(blank, tmp_path):
     assert top_left == (252, 250, 246)
 
 
-def test_finalize_stamps_the_watermark_into_the_bottom_right_corner(blank, tmp_path):
+def test_finalize_stamps_the_watermark_into_the_top_right_corner(blank, tmp_path):
     bare, stamped = tmp_path / "bare.png", tmp_path / "stamped.png"
     blank.savefig(bare, dpi=200, facecolor=PALETTE["bg"])
 
@@ -139,13 +141,15 @@ def ink_mask(path, threshold: int = FOREIGN_INK) -> np.ndarray:
     return pixels < threshold
 
 
-def test_the_stamp_is_painted_into_the_bottom_right_corner(blank, tmp_path):
-    """Round 10: the corner no artist is laid out in.
+def test_the_stamp_is_painted_into_the_top_right_corner(blank, tmp_path):
+    """Write-up round 3: back to the MLB simulator's corner.
 
-    Document 63 measured the title running under the top-right stamp on 2,325
-    of 2,759 Strict distribution figures. The stamp is painted on the saved
-    pixels after layout, so the title cannot see it and move; the corner it
-    lives in is the only thing that can change.
+    Round 10 conceded the top-right because document 63 measured the title
+    running under the stamp there on 2,325 of 2,759 Strict distribution
+    figures. the maintainer reversed that on 2026-08-30: the corner is the one the
+    sibling product uses, and the collision is bought off with
+    `reserve_stamp_strip` — which now grows the canvas at the *top* — rather
+    than by moving the stamp somewhere no reader looks first.
     """
     from nfl_simulator.style import stamp_box
 
@@ -155,29 +159,83 @@ def test_the_stamp_is_painted_into_the_bottom_right_corner(blank, tmp_path):
     width, height = image.size
     left, top, right, bottom = stamp_box(image.size, WATERMARK)
 
-    assert top > height * 0.5, "the stamp is in the bottom half of the image"
+    assert bottom < height * 0.5, "the stamp is in the top half of the image"
     assert left > width * 0.5, "and in the right half of it"
-    assert bottom <= height and right <= width, "the whole block is on the canvas"
+    assert top >= 0 and right <= width, "the whole block is on the canvas"
     # And it is actually there: the block's box is the only dark thing on a
     # blank figure, and it is not empty.
     painted = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2)
     assert painted[top:bottom, left:right].min() < 200
 
 
-def test_the_strip_is_reserved_when_a_figure_reaches_into_the_stamp_s_corner(blank, tmp_path):
-    """A footer in the bottom-right corner buys the stamp a strip of its own.
+def test_the_mark_is_anchored_to_the_top_right_corner_itself(blank, tmp_path):
+    """The badge's own box, not the block's: 2% in from the right, 2% down.
 
-    `bbox_inches="tight"` crops to what the figure drew, so how close anything
-    comes to the bottom edge is a per-game fact. Rather than ask a figure to
-    leave room for a stamp it cannot see, the room is made on the saved pixels.
+    The credit line hangs *below* the mark, so the pixel nearest the corner is
+    the badge. Both tolerances are the same 2% because the margin the geometry
+    is written against is 2% of the width and ~1.2% of the height.
     """
     from nfl_simulator.style import stamp_box
 
-    blank.text(0.99, 0.01, "a footer in the corner", ha="right", va="bottom", color="#1A1A1A")
+    path = tmp_path / "anchored.png"
+    finalize(blank, path)
+    width, height = Image.open(path).size
+    _left, _top, right, _bottom = stamp_box((width, height), WATERMARK)
+    saturated = spread(path) > SATURATED
+    rows = np.nonzero(saturated.any(axis=1))[0]
+    columns = np.nonzero(saturated.any(axis=0))[0]
+
+    assert rows.size and columns.size, "the badge was not drawn at all"
+    assert rows.min() <= height * 0.02, "the badge's top edge is not at the top"
+    # Measured against the credit's right edge rather than the canvas's: the
+    # badge is right-aligned *with the credit*, and both sit 2% in from the
+    # canvas. `columns.max()` is the badge's last inked column, so it lands one
+    # short of the edge itself.
+    assert right >= width * 0.98, "the credit's right edge is not 2% in"
+    assert columns.max() >= right - 2, "the badge is not flush with the credit's right edge"
+
+
+def test_the_mark_is_two_and_a_half_credit_lines_tall(blank, tmp_path):
+    """the maintainer 2026-08-30: 1.6 lines was too small to read as a mark at all.
+
+    The band is loose in the same way round 10's was: what is measured on the
+    pixels is the credit's *ink*, which is shorter than the line box the ratio
+    is taken against, so the measured ratio runs above the nominal 2.5.
+    """
+    from nfl_simulator.style import STAMP_LOGO_RATIO, stamp_box
+
+    assert STAMP_LOGO_RATIO == 2.5
+
+    path = tmp_path / "scale.png"
+    finalize(blank, path)
+    image = Image.open(path)
+    left, top, right, bottom = stamp_box(image.size, WATERMARK)
+
+    dark = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2) < 200
+    text_rows = np.nonzero(dark[top:bottom, left:right].any(axis=1))[0]
+    badge_rows = np.nonzero((spread(path) > SATURATED).any(axis=1))[0]
+    text_h = text_rows.max() - text_rows.min() + 1
+    badge_h = badge_rows.max() - badge_rows.min() + 1
+
+    assert 2.2 <= badge_h / text_h <= 4.0
+
+
+def test_the_strip_is_reserved_when_a_figure_reaches_into_the_stamp_s_corner(blank, tmp_path):
+    """A header in the top-right corner buys the stamp a strip of its own.
+
+    `bbox_inches="tight"` crops to what the figure drew, so how close anything
+    comes to the top edge is a per-game fact. Rather than ask a figure to leave
+    room for a stamp it cannot see, the room is made on the saved pixels — and
+    since round 3 of the write-up it is made *above* the figure rather than
+    below it, because that is the side the stamp is anchored to.
+    """
+    from nfl_simulator.style import stamp_box
+
+    blank.text(0.99, 0.99, "a header in the corner", ha="right", va="top", color="#1A1A1A")
     bare = tmp_path / "bare.png"
     # The card's path — `bbox_inches=None`, because its square shape is the
     # point of it — which is also the one that crops nothing away and so leaves
-    # a footer wherever the figure put it.
+    # a header wherever the figure put it.
     blank.savefig(bare, dpi=200, bbox_inches=None, facecolor=PALETTE["bg"], edgecolor="none")
     stamped = finalize(blank, tmp_path / "reserved.png", bbox_inches=None, close=False)
 
@@ -185,7 +243,31 @@ def test_the_strip_is_reserved_when_a_figure_reaches_into_the_stamp_s_corner(bla
     assert grown.height > Image.open(bare).height, "the strip was borrowed, not made"
     left, top, right, bottom = stamp_box(grown.size, WATERMARK)
     under = np.asarray(grown.convert("RGB"), dtype=float).mean(axis=2)[top:bottom, left:right]
-    assert (under >= FOREIGN_INK).all(), "the footer is still under the stamp"
+    assert (under >= FOREIGN_INK).all(), "the header is still under the stamp"
+
+
+def test_a_wide_title_does_not_run_under_the_stamp(blank, tmp_path):
+    """The collision document 63 measured, on the widest title the suite draws.
+
+    Checked over the *whole* block — the mark's reserved rows as well as the
+    credit's — with the mark suppressed, so the only ink that box may contain
+    is the credit's own mid-grey at 140. Anything darker is a title that ran
+    under the stamp, which is the thing round 10 moved the corner to avoid.
+    """
+    from nfl_simulator.style import BRAND_LOGO, stamp_box
+
+    draw_title_block(
+        title_axes(blank, height_frac=0.2),
+        "Los Angeles Chargers at Houston Texans — wild-card round, 2024",
+        ["Deserved-to-win share across 160,000 re-simulations of the Full edition"],
+    )
+    path = tmp_path / "wide_title.png"
+    finalize(blank, path, logo_path=False)
+
+    image = Image.open(path)
+    left, top, right, bottom = stamp_box(image.size, WATERMARK, logo_path=BRAND_LOGO)
+    block = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2)[top:bottom, left:right]
+    assert (block >= FOREIGN_INK).all(), "the title is under the stamp"
 
 
 # --------------------------------------------------------------------------
@@ -265,24 +347,38 @@ def test_passing_logo_path_false_suppresses_the_mark(blank, tmp_path):
     assert corner(path).mean(axis=2).min() < DARK
 
 
-def test_the_mark_sits_to_the_left_of_the_credit_line(blank, tmp_path):
+def test_the_mark_sits_above_the_credit_line(blank, tmp_path):
+    """The MLB simulator's stack, right-aligned rather than centred.
+
+    Beside the credit was round 10's arrangement, and it only worked because
+    the block was anchored to the bottom edge, where a mark 1.6 lines tall
+    could overhang the text rows into empty pixels. Anchored to the *top* edge
+    the mark has to go above the line it belongs to, or the corner it is
+    supposed to occupy is occupied by the word "Data".
+    """
     from nfl_simulator.style import stamp_box
 
-    path = tmp_path / "left_of_text.png"
+    path = tmp_path / "above_text.png"
     finalize(blank, path)
     image = Image.open(path)
-    left, _top, _right, _bottom = stamp_box(image.size, WATERMARK)
-    columns = np.nonzero((spread(path) > SATURATED).any(axis=0))[0]
+    _left, top, _right, _bottom = stamp_box(image.size, WATERMARK)
+    rows = np.nonzero((spread(path) > SATURATED).any(axis=1))[0]
 
-    assert columns.size, "the badge was not drawn at all"
-    assert columns.max() < left, "the badge runs into the credit line's columns"
+    assert rows.size, "the badge was not drawn at all"
+    assert rows.max() < top, "the badge runs into the credit line's rows"
 
 
 def test_the_mark_does_not_move_the_credit_line(blank, tmp_path):
     """Constraint 3: adding the logo changes nothing about where the text lands.
 
-    Compared over every column from the credit's own left edge rightward, which
-    is all of the text and none of the badge.
+    Compared over every *row* from the credit's own top edge down, which is all
+    of the text and none of the badge. It was a column comparison until the
+    stack replaced the row — the badge shares the credit's columns now and has
+    its own rows, which is the mirror image of the arrangement round 10 shipped.
+
+    What makes this hold is that `stamp_box` reserves the mark's rows whether or
+    not a mark is drawn: the credit hangs at a fixed offset from the top edge,
+    and `logo_path` decides only whether anything is painted above it.
     """
     from nfl_simulator.style import stamp_box
 
@@ -292,51 +388,29 @@ def test_the_mark_does_not_move_the_credit_line(blank, tmp_path):
     a = np.asarray(Image.open(with_logo).convert("RGB"))
     b = np.asarray(Image.open(without).convert("RGB"))
     assert a.shape == b.shape
-    left = stamp_box(Image.open(with_logo).size, WATERMARK)[0]
-    assert np.array_equal(a[:, left:], b[:, left:])
+    top = stamp_box(Image.open(with_logo).size, WATERMARK)[1]
+    assert np.array_equal(a[top:], b[top:])
 
 
-def test_the_mark_is_scaled_to_the_credit_line_it_stands_beside(blank, tmp_path):
-    """Its height tracks the text's, so a card and a distribution wear one stamp.
-
-    The constraint is 1.6 text lines tall; the band here is loose because what
-    is measured on the pixels is the text's *ink*, which is shorter than the
-    line box the ratio is taken against.
-    """
-    from nfl_simulator.style import stamp_box
-
-    path = tmp_path / "scaled.png"
-    finalize(blank, path)
-    image = Image.open(path)
-    left, _top, right, _bottom = stamp_box(image.size, WATERMARK)
-
-    dark = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2) < 200
-    text_rows = np.nonzero(dark[:, left:right].any(axis=1))[0]
-    badge_rows = np.nonzero((spread(path) > SATURATED).any(axis=1))[0]
-    text_h = text_rows.max() - text_rows.min() + 1
-    badge_h = badge_rows.max() - badge_rows.min() + 1
-
-    assert 1.3 <= badge_h / text_h <= 2.6
-
-
-def test_the_reserved_strip_covers_the_columns_the_mark_is_pasted_into(tmp_path):
+def test_the_reserved_strip_covers_the_rows_the_mark_is_pasted_into(tmp_path):
     """The mark gets the same clean surface under it that the credit does.
 
     `reserve_stamp_strip` grows the canvas when the figure's ink reaches the
-    stamp's box. The box grew leftward when the badge joined it, so ink that
-    only reaches the badge — not the text — has to buy the strip too.
+    stamp's box. The box grows *upward* for the badge now that the block is
+    anchored to the top edge, so ink that only reaches the badge's rows — not
+    the text's — has to buy the strip too.
     """
     from nfl_simulator.style import BRAND_LOGO, reserve_stamp_strip, stamp_box
 
     size = (1200, 800)
     image = Image.new("RGB", size, (252, 250, 246))
-    text_left = stamp_box(size, WATERMARK)[0]
-    badge_left = stamp_box(size, WATERMARK, logo_path=BRAND_LOGO)[0]
-    assert badge_left < text_left, "the box did not grow leftward for the badge"
+    text_top = stamp_box(size, WATERMARK)[1]
+    badge_top = stamp_box(size, WATERMARK, logo_path=BRAND_LOGO)[1]
+    assert badge_top < text_top, "the box did not grow upward for the badge"
 
-    # Ink in the badge's columns only, on the bottom row.
+    # Ink in the badge's rows only, hard against the right edge.
     ImageDraw.Draw(image).rectangle(
-        [badge_left, size[1] - 4, text_left - 1, size[1] - 1], fill=(26, 26, 26)
+        [size[0] - 60, badge_top, size[0] - 1, text_top - 1], fill=(26, 26, 26)
     )
     path = tmp_path / "under_the_badge.png"
     image.save(path)
@@ -346,19 +420,19 @@ def test_the_reserved_strip_covers_the_columns_the_mark_is_pasted_into(tmp_path)
 
 
 def test_the_mark_and_the_credit_line_do_not_touch(blank, tmp_path):
-    """A badge butted against the "D" of "Data" reads as one smudged glyph.
+    """A badge sitting on the "D" of "Data" reads as one smudged glyph.
 
     The air between them is measured against the mark's own height rather than
-    fixed, because both sides of the gap scale with the image.
+    fixed, because both sides of the gap scale with the image. Vertical since
+    the stack replaced the row.
     """
     from nfl_simulator.style import stamp_box
 
     path = tmp_path / "gap.png"
     finalize(blank, path)
-    text_left = stamp_box(Image.open(path).size, WATERMARK)[0]
+    text_top = stamp_box(Image.open(path).size, WATERMARK)[1]
     saturated = spread(path) > SATURATED
-    badge_columns = np.nonzero(saturated.any(axis=0))[0]
     badge_rows = np.nonzero(saturated.any(axis=1))[0]
     badge_h = badge_rows.max() - badge_rows.min() + 1
 
-    assert text_left - badge_columns.max() - 1 >= badge_h / 5
+    assert text_top - badge_rows.max() - 1 >= badge_h / 8

@@ -986,15 +986,29 @@ def test_the_pill_clears_the_heading_and_the_subtitle_it_shares_a_row_with(bucke
 
 
 def test_the_pill_stays_clear_of_the_corner_the_watermark_is_stamped_into(tmp_path):
-    """The credit is stamped on the saved pixels, so the pill has to leave it room."""
+    """The credit is stamped on the saved pixels, so the pill has to leave it room.
+
+    Saved with the mark suppressed: since write-up round 3 the stamp is back in
+    the top-right and its badge is the one coloured thing allowed in that
+    corner, so a test that asks "is anything coloured here?" would be answered
+    by the stamp itself. With `logo_path=False` the only ink the box may carry
+    is the credit's mid-grey, and a pill is neither grey nor faint.
+
+    Measured on `stamp_box` rather than on a fraction of the image. The box
+    hangs a fixed number of pixels from the top edge while the corner of a
+    `bbox_inches="tight"` save is whatever height the figure cropped to, so a
+    fraction that fitted the bottom-right corner is a different region here.
+    """
+    from nfl_simulator.style import WATERMARK, stamp_box
+
     game = branded(draws=np.linspace(-20, 6, 160_000))
     fig, ax = plot_bootstrap_distribution(game)
-    path = finalize(fig, tmp_path / "corner.png")
+    path = finalize(fig, tmp_path / "corner.png", logo_path=False)
     pixels = np.asarray(Image.open(path).convert("RGB"), dtype=float)
-    height, width = pixels.shape[:2]
-    corner = pixels[: int(height * 0.055), int(width * 0.86) :]
+    left, top, right, bottom = stamp_box(pixels.shape[1::-1], WATERMARK)
+    corner = pixels[:bottom, left:right]
     # The pill is a saturated fill; the credit is mid-grey on cream. Nothing in
-    # the corner may be as dark or as coloured as a pill.
+    # the stamp's box — or above it — may be as coloured as a pill.
     spread = corner.max(axis=2) - corner.min(axis=2)
     assert spread.max() < 40, "something coloured is in the watermark's corner"
 
@@ -1180,14 +1194,75 @@ def test_the_waterfall_names_its_ends_in_derek_s_wording():
     assert labels[-1].startswith("Expected")
 
 
-def test_an_overtime_game_says_the_toss_is_reported_not_neutralized():
+def test_footer_lines_can_be_asked_to_leave_the_overtime_toss_out():
+    """the maintainer 2026-08-30: the waterfall drops the toss line. Only the waterfall.
+
+    The three share images keep it — document 16's rule is about an image
+    travelling on its own with no rows and no interval beside it — so the
+    exclusion is a flag one caller passes rather than a line deleted from the
+    helper. `test_every_share_figure_says_the_toss_is_reported_not_neutralized`
+    in `test_render.py` is the other half of this.
+    """
+    from nfl_simulator.plots import footer_lines
+
+    game = branded(went_to_overtime=True)
+    assert any("Went to overtime" in line for line in footer_lines(game))
+    assert not any("Went to overtime" in line for line in footer_lines(game, overtime=False))
+
+
+def test_an_overtime_waterfall_carries_no_overtime_footer():
     fig, ax = waterfall(branded(went_to_overtime=True))
-    assert "Went to overtime; the coin toss is reported, not neutralized." in figure_text(fig)
+    assert "Went to overtime" not in figure_text(fig)
 
 
 def test_a_regulation_game_carries_no_overtime_footer():
     fig, ax = waterfall(branded(went_to_overtime=False))
     assert "Went to overtime" not in figure_text(fig)
+
+
+def test_the_footer_explains_the_phrase_the_heap_row_actually_uses():
+    """The footer is a gloss, and a gloss of a phrase nothing says is noise.
+
+    `_heap_label` and `SMALL_EVENTS_FOOTER` are now two halves of one sentence
+    written in two places, which is exactly the coupling that rots quietly: a
+    round that renames the row to `46 minor events (LAC)` leaves a footer
+    explaining a phrase no reader can find on the chart.
+    """
+    from nfl_simulator.plots import SMALL_EVENTS_FOOTER, _heap_label
+
+    row = _heap_label("LAC", 46, 1.0)
+    assert row == "46 small events (LAC)"
+    assert SMALL_EVENTS_FOOTER.startswith("Small events:")
+    assert "small events" in row
+
+
+def test_the_waterfall_footer_explains_what_a_small_events_row_is():
+    """`46 small events (LAC)` is a row nobody can read without being told.
+
+    Round 10 split the remainder by club and gave it a count, which said whose
+    afternoon it was but still not what had been folded into it. The sentence
+    goes in the footer rather than beside the bar because it is true of both
+    heaps and of every game that has one.
+    """
+    fig, ax = waterfall()
+    assert (
+        "Small events: rows too small to draw at this scale, folded into one bar per team."
+        in figure_text(fig)
+    )
+
+
+def test_the_waterfall_footer_is_left_aligned_on_the_axes_left_edge():
+    """A centred footer under a waterfall floats away from the column it explains.
+
+    The rows, their labels and the how-to-read caption all start at the axes'
+    left edge; the footer is the only block that did not, so it read as a
+    caption for the page rather than for the chart.
+    """
+    fig, ax = waterfall()
+    footer = next(t for t in ax.texts if t.get_text().startswith("The bars are a sum"))
+
+    assert footer.get_ha() == "left"
+    assert footer.xy[0] == 0
 
 
 # --------------------------------------------------------------------------
@@ -3636,9 +3711,21 @@ def test_a_dropped_pick_names_the_defence_that_dropped_it():
     assert plain_label(pick_row()) == "HOU dropped pick · thrown by Herbert (58% catch)"
 
 
-def test_a_throw_that_was_picked_is_called_an_interception():
-    assert event_phrase(pick_row(actual=0.0)) == "interception · thrown by Herbert"
-    assert plain_label(pick_row(actual=0.0)) == "HOU interception · thrown by Herbert (58% catch)"
+def test_a_throw_that_was_picked_says_it_was_a_pick_able_one():
+    """the maintainer 2026-08-30: "interception" alone claimed a population this row is not.
+
+    Every row in this component is a throw FTN charted as *pick-able* — the
+    defender had it in their hands. A row that says only "interception" reads
+    as though the ledger prices every interception in the game, which it does
+    not and which document 05 §3 explicitly refuses to do. The parenthesis is
+    the population; the percentage after it is still the probability.
+    """
+    assert (
+        event_phrase(pick_row(actual=0.0)) == "interception (pick-able throw) · thrown by Herbert"
+    )
+    assert plain_label(pick_row(actual=0.0)) == (
+        "HOU interception (pick-able throw) · thrown by Herbert (58% catch)"
+    )
 
 
 def test_a_receiver_drop_is_its_own_team_s_sentence():
@@ -4451,11 +4538,16 @@ def test_the_ledger_card_still_lifts_the_cap_row_s_first_letter():
 FOREIGN_INK = 120
 
 
-def _stamped(fig, tmp_path, name):
-    """A figure through the shipped exit, and the box the stamp took."""
+def _stamped(fig, tmp_path, name, *, mark: bool = True):
+    """A figure through the shipped exit, and the box the stamp took.
+
+    ``mark=False`` suppresses the badge so the only ink inside the box is the
+    credit's mid-grey — which is what lets a caller ask whether anybody *else*
+    drew there without the answer being "yes, the brand mark did".
+    """
     from nfl_simulator.style import edition_stamp, stamp_box
 
-    path = finalize(fig, tmp_path / name, edition="strict")
+    path = finalize(fig, tmp_path / name, edition="strict", logo_path=None if mark else False)
     image = Image.open(path).convert("RGB")
     return image, stamp_box(image.size, edition_stamp("strict"))
 
@@ -4482,32 +4574,47 @@ def test_nothing_is_drawn_where_the_credit_stamp_is_painted(figure, tmp_path):
 
 
 @pytest.mark.parametrize("figure", ["dtw", "waterfall"])
-def test_the_stamp_sits_below_everything_that_shares_its_columns(figure, tmp_path):
-    """The strip is reserved, not borrowed: the footer keeps its own room."""
+def test_the_stamp_sits_above_everything_that_shares_its_columns(figure, tmp_path):
+    """The strip is reserved, not borrowed: the title keeps out of its own room.
+
+    Above rather than below since write-up round 3, when the stamp went back to
+    the top-right and `reserve_stamp_strip` started growing the canvas at the
+    top instead of the bottom. Measured with the mark suppressed, so the only
+    ink the box may hold is the credit's own.
+    """
     game = branded(draws=np.linspace(-20, 6, 160_000))
     fig = (
         plot_bootstrap_distribution(game, coverage=False)[0]
         if figure == "dtw"
         else waterfall(game)[0]
     )
-    image, (left, top, _right, _bottom) = _stamped(fig, tmp_path, f"{figure}.png")
+    image, (left, _top, _right, bottom) = _stamped(fig, tmp_path, f"{figure}.png", mark=False)
     pixels = np.asarray(image, dtype=float).mean(axis=2)
     column = pixels[:, left:]
     ink_rows = np.nonzero((column < FOREIGN_INK).any(axis=1))[0]
     assert ink_rows.size, "the figure drew nothing in the stamp's columns at all"
-    assert ink_rows.max() < top, "an artist reaches into the stamp's strip"
+    assert ink_rows.min() > bottom, "an artist reaches into the stamp's strip"
 
 
-def test_the_title_and_the_stamp_are_at_opposite_ends_of_the_image(tmp_path):
-    """The two the corpus found on top of each other, measured apart."""
+def test_the_title_starts_below_the_stamp_that_shares_its_edge(tmp_path):
+    """The two the corpus found on top of each other, measured apart.
+
+    They share the top edge now — the stamp is right, the title left — so
+    "opposite ends of the image" is no longer the invariant. What replaces it
+    is the one `reserve_stamp_strip` actually guarantees: the title's first
+    inked row is below the stamp's last, so a reader's eye clears the credit
+    before it reaches the heading.
+    """
     game = branded(draws=np.linspace(-20, 6, 160_000))
     fig, ax = plot_bootstrap_distribution(game, coverage=False)
     heading = next(t for t in ax.texts if t.get_text().startswith("Deserve-to-Win"))
     assert heading.get_text(), "the title this test is about"
-    image, (_left, top, _right, _bottom) = _stamped(fig, tmp_path, "title.png")
+    image, (left, _top, _right, bottom) = _stamped(fig, tmp_path, "title.png", mark=False)
     pixels = np.asarray(image, dtype=float).mean(axis=2)
-    title_rows = np.nonzero((pixels[: int(top * 0.5)] < FOREIGN_INK).any(axis=1))[0]
-    assert title_rows.min() < top, "the title is above the stamp, not in it"
+    # The title's own columns, which start well left of the stamp's.
+    title_rows = np.nonzero((pixels[:, : left // 2] < FOREIGN_INK).any(axis=1))[0]
+    assert title_rows.size, "the title drew nothing"
+    assert title_rows.min() > bottom, "the title starts above the stamp's last row"
 
 
 # --------------------------------------------------------------------------
