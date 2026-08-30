@@ -18,7 +18,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from nfl_simulator.style import (
     BRAND_HANDLE,
@@ -226,3 +226,139 @@ def test_the_brand_logo_stays_inside_its_size_budget():
 
     assert BRAND_LOGO.stat().st_size <= LOGO_BYTE_BUDGET
     assert Image.open(BRAND_LOGO).width <= LOGO_MAX_WIDTH
+
+
+# --------------------------------------------------------------------------
+# the brand logo — the stamp
+# --------------------------------------------------------------------------
+
+# The cream is (252, 250, 246) and the credit's ink is a neutral (140, 140, 140):
+# both have a channel spread under 10. The badge is navy, blue and green, and
+# even at the 85% the stamp pastes it with it keeps a spread of tens. So
+# "saturated" separates the mark from everything else the corner can contain.
+SATURATED = 30
+
+
+def spread(path) -> np.ndarray:
+    """Per-pixel channel spread — 0 for grey and cream, large for the badge."""
+    pixels = np.asarray(Image.open(path).convert("RGB"), dtype=float)
+    return pixels.max(axis=2) - pixels.min(axis=2)
+
+
+def test_the_brand_logo_is_stamped_on_every_figure_by_default(blank, tmp_path):
+    """`finalize` needs no argument to carry the mark — that is the point of it.
+
+    A logo that has to be passed is a logo that is on the figures whoever
+    remembered it rendered, and missing from the rest.
+    """
+    path = tmp_path / "default.png"
+    finalize(blank, path)
+    assert spread(path).max() > SATURATED
+
+
+def test_passing_logo_path_false_suppresses_the_mark(blank, tmp_path):
+    """The sentinel exists so a figure can opt out without opting out of the credit."""
+    path = tmp_path / "suppressed.png"
+    finalize(blank, path, logo_path=False)
+    assert spread(path).max() <= SATURATED
+    # The credit line is still there.
+    assert corner(path).mean(axis=2).min() < DARK
+
+
+def test_the_mark_sits_to_the_left_of_the_credit_line(blank, tmp_path):
+    from nfl_simulator.style import stamp_box
+
+    path = tmp_path / "left_of_text.png"
+    finalize(blank, path)
+    image = Image.open(path)
+    left, _top, _right, _bottom = stamp_box(image.size, WATERMARK)
+    columns = np.nonzero((spread(path) > SATURATED).any(axis=0))[0]
+
+    assert columns.size, "the badge was not drawn at all"
+    assert columns.max() < left, "the badge runs into the credit line's columns"
+
+
+def test_the_mark_does_not_move_the_credit_line(blank, tmp_path):
+    """Constraint 3: adding the logo changes nothing about where the text lands.
+
+    Compared over every column from the credit's own left edge rightward, which
+    is all of the text and none of the badge.
+    """
+    from nfl_simulator.style import stamp_box
+
+    with_logo = finalize(blank, tmp_path / "with.png", close=False)
+    without = finalize(blank, tmp_path / "without.png", logo_path=False)
+
+    a = np.asarray(Image.open(with_logo).convert("RGB"))
+    b = np.asarray(Image.open(without).convert("RGB"))
+    assert a.shape == b.shape
+    left = stamp_box(Image.open(with_logo).size, WATERMARK)[0]
+    assert np.array_equal(a[:, left:], b[:, left:])
+
+
+def test_the_mark_is_scaled_to_the_credit_line_it_stands_beside(blank, tmp_path):
+    """Its height tracks the text's, so a card and a distribution wear one stamp.
+
+    The constraint is 1.6 text lines tall; the band here is loose because what
+    is measured on the pixels is the text's *ink*, which is shorter than the
+    line box the ratio is taken against.
+    """
+    from nfl_simulator.style import stamp_box
+
+    path = tmp_path / "scaled.png"
+    finalize(blank, path)
+    image = Image.open(path)
+    left, _top, right, _bottom = stamp_box(image.size, WATERMARK)
+
+    dark = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2) < 200
+    text_rows = np.nonzero(dark[:, left:right].any(axis=1))[0]
+    badge_rows = np.nonzero((spread(path) > SATURATED).any(axis=1))[0]
+    text_h = text_rows.max() - text_rows.min() + 1
+    badge_h = badge_rows.max() - badge_rows.min() + 1
+
+    assert 1.3 <= badge_h / text_h <= 2.6
+
+
+def test_the_reserved_strip_covers_the_columns_the_mark_is_pasted_into(tmp_path):
+    """The mark gets the same clean surface under it that the credit does.
+
+    `reserve_stamp_strip` grows the canvas when the figure's ink reaches the
+    stamp's box. The box grew leftward when the badge joined it, so ink that
+    only reaches the badge — not the text — has to buy the strip too.
+    """
+    from nfl_simulator.style import BRAND_LOGO, reserve_stamp_strip, stamp_box
+
+    size = (1200, 800)
+    image = Image.new("RGB", size, (252, 250, 246))
+    text_left = stamp_box(size, WATERMARK)[0]
+    badge_left = stamp_box(size, WATERMARK, logo_path=BRAND_LOGO)[0]
+    assert badge_left < text_left, "the box did not grow leftward for the badge"
+
+    # Ink in the badge's columns only, on the bottom row.
+    ImageDraw.Draw(image).rectangle(
+        [badge_left, size[1] - 4, text_left - 1, size[1] - 1], fill=(26, 26, 26)
+    )
+    path = tmp_path / "under_the_badge.png"
+    image.save(path)
+    reserve_stamp_strip(path, WATERMARK, logo_path=BRAND_LOGO)
+
+    assert Image.open(path).height > size[1]
+
+
+def test_the_mark_and_the_credit_line_do_not_touch(blank, tmp_path):
+    """A badge butted against the "D" of "Data" reads as one smudged glyph.
+
+    The air between them is measured against the mark's own height rather than
+    fixed, because both sides of the gap scale with the image.
+    """
+    from nfl_simulator.style import stamp_box
+
+    path = tmp_path / "gap.png"
+    finalize(blank, path)
+    text_left = stamp_box(Image.open(path).size, WATERMARK)[0]
+    saturated = spread(path) > SATURATED
+    badge_columns = np.nonzero(saturated.any(axis=0))[0]
+    badge_rows = np.nonzero(saturated.any(axis=1))[0]
+    badge_h = badge_rows.max() - badge_rows.min() + 1
+
+    assert text_left - badge_columns.max() - 1 >= badge_h / 5
