@@ -321,3 +321,119 @@ one axis, and §8a plus §8b are the rows that moved between them.
 - **No defect found in the parquet itself.** The 1,139-game count and the
   degenerate and band counts all reproduce, and `research/76`'s own gate against
   document 62 §4 is what stands behind the adjudication these numbers describe.
+
+## 11. Round 3's new figures, and the numbers they publish
+
+Five figures drawn by `research/80_writeup_figures.py` on 2026-08-30. Every
+number below is `check`ed in that script against either an earlier document or
+this section, so a redraw that drifted would fail the run rather than ship.
+
+### 11a. Figure 17 — the fumble classes, drawn
+
+`17_fumble_retention_bars.png` is §7a as a chart, and publishes no number of its
+own. The six measured classes, their rates and their counts are `check`ed
+against §7a's table; the pooled rate (56.48%) is drawn as a rule, and the two
+sub-floor classes are **not** drawn, because a bar for each would be the pooled
+rate under two labels a reader would take for measurements. Total 6,505 fumbles.
+
+### 11b. Figure 18 — the kicker, and why it is not 5.35 pp
+
+`18_kicker_prior_posterior.png`. The subject is chosen by a **rule**: the
+largest posterior mean effect among `KICKER_SEASON` (2025) kicker-seasons with
+at least `KICKER_FLOOR` (20) attempts, read from
+`research/outputs/fg_kicker_effects.parquet`. It resolves to:
+
+| | |
+|---|---|
+| Kicker-season | `2025_00-0034173` — **E. Pineiro**, San Francisco, 2025 |
+| Attempts | **32**, of which **31** made (96.88%) |
+| Posterior mean effect | **+0.4499** on the logit scale |
+| League make rate at 45 yd | **79.88%** |
+| Pineiro's make rate at 45 yd | **83.14%**, a gain of **+3.26 pp** |
+| `sigma_kicker` (shipped refit) | **0.3855** |
+| A one-SD kicker's gain at 45 yd | **+5.48 pp** |
+
+**The last row is not document 05b §9's 5.35 pp, and the difference is not an
+error in either place.** §9 reports the **Phase 2** posterior, whose
+`sigma_kicker` is 0.360 and whose league rate at 45 yards is 79.5%. The model
+the simulator actually replays with is the **v1.3 refit** — `trace_fg_refit.nc`,
+loaded by `render._simulation_context()` — whose `sigma_kicker` is 0.385 (doc
+05b §11's fitted-model table, refit column) and whose league rate at 45 yards is
+79.88%. Pushing 0.385 through that curve gives 5.48 pp, 89% interval
+[4.45, 6.52], against §9's 5.35 pp and [4.17, 6.45].
+
+The figure draws the shipped model and prints the shipped model's number.
+Drawing one model and captioning it with a retired model's arithmetic would be
+a figure that disagrees with itself, and no reader could tell which half was
+wrong. **The article must quote 5.48 pp when it is describing what the simulator
+does**, and 5.35 pp only if it is describing Phase 2's gate — which it has no
+reason to.
+
+*This is a reporting reconciliation, not a defect in document 05b.* §9's number
+was correct for the model §9 was about. It is added to the defect register below
+only because it is a live mis-quotation risk.
+
+### 11c. Figure 19 — Denver's 2024 defense-season
+
+`19_denver_prior_posterior.png`, on `worthy_throw_frame`'s `2024|DEN`:
+
+| | |
+|---|---|
+| Interception-worthy throws faced | **17** |
+| Caught | **13** — an observed **76.5%** |
+| The league surface, scored on those same 17 throws | **49.8%** |
+| The model's posterior mean for Denver | **55.2%** |
+
+The posterior mean reproduces the value figure 15 already draws a dot at. The
+league figure and the two counts are published here for the first time. The
+model moves **(55.2 − 49.8) / (76.5 − 49.8) = 20.2%** of the way from the league
+to what happened, which is the figure's caption and the whole of its point:
+seventeen throws is not enough evidence to move it further.
+
+### 11d. Figure 20 — two near-coins, two statistics
+
+`20_persistent_share.png` transcribes two published numbers and **they are not
+the same statistic**:
+
+| Component | Number | What it is | Source |
+|---|---:|---|---|
+| Dropped pick | **1.4%** | share of per-throw variance the defense's persistent skill explains | document 48, via document 52 §2 |
+| Fumble recovery | **1.1%** | shrinkage weight `w` — how much of the information about its true rate a team-season's own record carries | document 05 §3 |
+
+Both answer "how much of this is the team rather than the bounce?" and both
+land near one percent, which is why the handoff paired them. Neither is the
+other's number. The figure's axis labels name each statistic and its footer
+says in full that they are different measurements; **the article must not
+describe them as one quantity measured twice.**
+
+The receiver drop's **0.088%** (document 57 §1b) is the same statistic as the
+1.4% and would make a truer three-bar comparison. It is not drawn — the handoff
+specified two bars — and is listed in the round's results file as an avenue.
+
+### 11e. Figure 21 — the bootstrap, built up
+
+`21_bootstrap_buildup.png`, on `2025_13_DEN_WAS` Full.
+`SimulationResult.margin_draws` is `margins.ravel()` of the shipped
+`(200, 800)` bootstrap, so reshaping it recovers the two layers exactly and no
+panel is a re-simulation. Washington's deserved-win share by panel:
+
+| Panel | Draws | WAS share |
+|---|---|---:|
+| 1 × 800 | one posterior draw, 800 coin flips | **0.385** |
+| 10 × 800 | ten posterior draws | **0.412** |
+| 200 × 800 | all 160,000 — the shipped histogram | **0.4058** |
+
+The third reproduces §8c's 0.4058 by construction — it is the same array — and
+the first two are published here. They are the figure's argument: one posterior
+draw is off by two points of share, ten is within a point, and the shipped 200
+is the number the product reports.
+
+### 11f. Added to the defect register
+
+- **2026-08-30, the kicker spread has two published values and only one is
+  shipped.** Document 05b §9's **5.35 pp** is Phase 2 (`sigma_kicker` 0.360);
+  the simulator prices with the refit at **0.385**, which is **5.48 pp** at 45
+  yards. §11b reconciles them. **Accepted, not corrected** — §9 is correct about
+  the model §9 describes, and document 05b is not this round's document. The
+  risk is quotation, so the rule is written here: any public number about kicker
+  spread comes from §11b unless the sentence is explicitly about Phase 2's gate.

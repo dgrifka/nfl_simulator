@@ -971,3 +971,124 @@ reaches back up into rows a title can occupy. `reserve_stamp_strip` now takes
 the mark's columns into account, so ink reaching only the badge buys the strip
 too. 929 tests pass; nine game-editions from document 63 §7d re-rendered and
 three opened.
+
+## 15. The stamp goes back to the top-right, and the waterfall's footer (2026-08-30)
+
+Four decisions the maintainer made on 2026-08-30, after reading round 2's figures. None
+of them is re-litigated here; this section records what was decided, what it
+cost, and the one place the instruction and the code disagreed.
+
+### 15a. The corner, reversed
+
+**Decision.** The credit stamp goes back to the **top-right** — the corner the
+sibling MLB simulator uses (`Simulator/visualizations.py`, `_apply_watermark`
+at `position='top-right'`) — and the brand mark grows from **1.6 credit lines
+to 2.5**. At 1.6 the badge read as a bullet in front of the credit rather than
+as a mark, which is the whole reason it is on the image.
+
+**What §11 measured, and why it no longer decides the corner.** Document 63
+counted the title running under the top-right stamp on 2,325 of 2,759 Strict
+distribution figures and 1,016 of 1,139 Full ones. That finding stands. What
+round 10 concluded from it — that the top-right is a bad corner — does not:
+the collision was never a fact about the corner, it was a fact about ordering.
+The stamp is painted on the saved pixels after layout, so a title laid out
+before the stamp exists cannot see it and move.
+
+`reserve_stamp_strip` already knew how to answer that at the bottom edge, by
+growing the canvas when the figure's ink reached the stamp's box. It is now
+mirrored: it finds the **highest** inked row in the stamp's columns and, if
+that row is inside the box plus its clearance, pastes the image lower on a
+taller cream canvas. The room is made instead of the corner conceded.
+`test_a_wide_title_does_not_run_under_the_stamp` is the check, measured over
+the whole block — the mark's reserved rows as well as the credit's.
+
+**The mark stacks above the credit, right-aligned with it.** §14 put it to the
+left, and that only worked because the block was anchored to the bottom edge,
+where a mark 1.6 lines tall could overhang the text's rows into empty pixels.
+Anchored to the top edge a mark 2.5 lines tall has nowhere to overhang: at a
+1.2% inset it would run off the canvas. So the arrangement becomes the MLB
+simulator's stack, right-aligned rather than centred on the block so the pixel
+nearest the corner is the mark itself.
+
+**The credit still does not move for the mark.** `stamp_box` computes the mark's
+height from the credit's own line height — a fact about the text, not about any
+file — and hangs the credit a fixed mark-plus-gap below the top inset **whether
+or not a mark is drawn**. `logo_path` decides only whether anything is painted
+in the reserved rows above, and grows the returned box upward to cover them for
+the strip reservation and the corpus read. §14's guarantee therefore survives
+the move intact; only its test's geometry changes, from a column comparison to
+a row one, because the badge shares the credit's columns now and has its own
+rows.
+
+### 15b. The waterfall's footer
+
+Three changes, all to `plot_luck_ledger`'s footer block:
+
+1. **It states `ha="left"` rather than inheriting it.** The round-3 handoff
+   described this footer as centred. It was not: `Annotation` defaults to
+   `ha="left"` and the block is anchored at `xy=(0, 0)` in axes fractions, so
+   it already started at the axes' left edge. Nothing moved. The alignment is
+   now spelled out so it is a decision on the record instead of a default
+   nobody chose, and `test_the_waterfall_footer_is_left_aligned_on_the_axes_left_edge`
+   holds it there.
+
+2. **It gains a sentence about the small-events row.** Round 10 gave the
+   remainder a club and a count — `46 small events (LAC)` — which says whose
+   afternoon it was and still not what is inside it. `SMALL_EVENTS_FOOTER`
+   says it once, in the footer rather than beside the bar, because it is true
+   of both heaps and of every game that has one.
+   `test_the_footer_explains_the_phrase_the_heap_row_actually_uses` pins the
+   footer's wording to `_heap_label`'s, so a later rename cannot leave a gloss
+   explaining a phrase no reader can find on the chart.
+
+3. **It drops the overtime toss line.**
+
+### 15c. Where the instruction and the code disagreed — the toss line
+
+**The handoff's goal:** "the waterfall footer is left-aligned, has no overtime
+line, explains small events". **The handoff's mechanism:** test that
+`footer_lines` returns no overtime line on an overtime verdict.
+
+Those are not the same change. `footer_lines` feeds **four** figures, not the
+waterfall alone — `plot_bootstrap_distribution`, `plot_luck_ledger`,
+`plot_luck_ledger_card` and `plot_game_card` — and the comment above
+`OVERTIME_FOOTER` records the rule it exists to keep: document 16 measured the
+overtime toss and refused it, so every figure that draws a ledger has to say
+the ledger is one event short on purpose. Emptying `footer_lines` would strip
+that caveat from the three **share images**, which is a disclosure change to
+figures that travel on their own, not a layout change to the write-up's
+waterfall.
+
+**Enacted narrowly, and the widening is the maintainer's to order.** `footer_lines` takes
+`overtime: bool = True`; the waterfall passes `overtime=False` and is the only
+caller that does. The goal's sentence is met exactly. `test_render.py`'s
+`test_every_share_figure_says_the_toss_is_reported_not_neutralized` still passes
+unchanged on all three share figures, which is the other half of the record.
+
+The reasoning for the narrow reading, stated so it can be overruled cheaply: a
+waterfall shows the ledger's rows themselves, so a reader looking at every
+priced event can see the toss is not among them; a share card shows a number
+and no rows. If the maintainer wants the line gone from the share images too, it is one
+argument's default flipped.
+
+### 15d. The pick row's noun
+
+`("dropped_pick", False)` reads **`interception (pick-able throw)`**. Every row
+in the component is a throw FTN charted as interception-worthy; a row saying
+only "interception" reads as though the ledger re-prices every interception in
+the game, which document 05 §3 explicitly refuses to do. The parenthesis is the
+population and the percentage after it is still the probability, so a shipped
+row now reads `DEN interception (pick-able throw) · thrown by Mariota (52%
+catch)`. No label-width test failed; the row was read on
+`2025_13_DEN_WAS` full at 2,041 px and fits its column.
+
+### 15e. Verification
+
+935 tests pass (929 at `4491f2f`, plus six), ruff clean. Nine game-editions
+re-rendered from document 63's list — `2018_05_GB_DET`, `2021_14_LV_KC`,
+`2016_14_NYJ_SF` and `2017_11_JAX_CLE` Strict; `2025_17_DET_MIN`,
+`2025_13_DEN_WAS`, `2022_13_WAS_NYG`, `2024_19_LAC_HOU` and `2023_01_PHI_NE`
+Full — and three opened: the DEN–WAS waterfall (stamp clear of the title, new
+footer, new noun), the LAC–HOU distribution (the canvas grown at the top, which
+is `reserve_stamp_strip` doing the job §15a describes) and the PHI–NE card
+(square on disk, stamp clear).
