@@ -1254,15 +1254,15 @@ def test_the_waterfall_footer_explains_what_a_small_events_row_is():
 def test_the_waterfall_footer_is_left_aligned_on_the_axes_left_edge():
     """A centred footer under a waterfall floats away from the column it explains.
 
-    The rows, their labels and the how-to-read caption all start at the axes'
-    left edge; the footer is the only block that did not, so it read as a
-    caption for the page rather than for the chart.
+    the maintainer 2026-08-30: anchored at the figure's left edge — the row labels
+    live left of the axes, so the footer gets the full width, not the plot's.
     """
     fig, ax = waterfall()
     footer = next(t for t in ax.texts if t.get_text().startswith("The bars are a sum"))
 
     assert footer.get_ha() == "left"
     assert footer.xy[0] == 0
+    assert footer.xycoords[0] == "figure fraction"
 
 
 # --------------------------------------------------------------------------

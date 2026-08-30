@@ -80,6 +80,7 @@ DENVER_KEY = "2024|DEN"
 # `persistent_share`. The variance share is document 48 through document 52 §2;
 # the shrinkage weight is document 05 §3's `w` for fumble recovery.
 DROPPED_PICK_SHARE = 0.014
+RECEIVER_DROP_SHARE = 0.00088  # doc 57 §1b — same statistic as the dropped pick's 1.4%
 FUMBLE_SHRINKAGE_W = 0.011
 
 # --------------------------------------------------------------------------
@@ -175,6 +176,7 @@ DOC_CHECKS = {
     # cannot reach the figure. Document 48 via 52 §2, and document 05 §3.
     "dropped_pick_share_pct": (1.4, 0.001),
     "fumble_shrinkage_pct": (1.1, 0.001),
+    "receiver_drop_share_pct": (0.088, 0.001),
 }
 
 
@@ -2262,6 +2264,12 @@ def persistent_share() -> dict:
             "source": "document 48 · 52 §2",
         },
         {
+            "label": "Receiver drops",
+            "detail": "share of per-target variance the\ncorps' persistent skill explains",
+            "value": RECEIVER_DROP_SHARE,
+            "source": "document 57 §1b",
+        },
+        {
             "label": "Fumble recovery",
             "detail": "shrinkage weight — how much of its own\nrecord a team-season keeps",
             "value": FUMBLE_SHRINKAGE_W,
@@ -2270,6 +2278,7 @@ def persistent_share() -> dict:
     ]
     check("dropped_pick_share_pct", round(DROPPED_PICK_SHARE * 100, 1))
     check("fumble_shrinkage_pct", round(FUMBLE_SHRINKAGE_W * 100, 1))
+    check("receiver_drop_share_pct", round(RECEIVER_DROP_SHARE * 100, 3))
 
     # 4.8 rather than the 3.6 a two-row chart looks like it needs. `new_figure`
     # gives the title block a fixed 13% of the figure's height, so shrinking the
@@ -2277,10 +2286,10 @@ def persistent_share() -> dict:
     # bars are made to fill the space instead.
     fig, ax = new_figure(
         8.2,
-        4.8,
+        5.6,
         title="Almost none of it is skill",
         subtitle=[
-            "Two of the events the simulator re-prices, and how much of each one the "
+            "Three of the events the simulator re-prices, and how much of each one the "
             "team itself explains.",
             "Two different measurements of the same idea — the labels say which is which.",
         ],
@@ -2304,7 +2313,7 @@ def persistent_share() -> dict:
         ax.text(
             skill + 2.4,
             position,
-            f"{skill:.1f}%  the team",
+            f"{skill:.2g}%  the team",
             va="center",
             fontsize=10,
             fontweight="bold",
@@ -2313,7 +2322,7 @@ def persistent_share() -> dict:
         ax.text(
             99,
             position,
-            f"{100 - skill:.1f}%  everything else",
+            f"{100 - skill:.4g}%  everything else",
             va="center",
             ha="right",
             fontsize=9.5,
@@ -2334,10 +2343,9 @@ def persistent_share() -> dict:
         ax.spines[side].set_visible(False)
 
     ax.annotate(
-        "These are not the same statistic. A variance share and a shrinkage weight "
-        "answer the same question — how much of this is the team? —\nwith different "
-        "arithmetic, and the figure puts them side by side because both answers are "
-        "about one percent, not because they are one number.",
+        "The drop rows are one statistic (a variance share) and the fumble row another "
+        "(a shrinkage weight); both answer\nhow much of this is the team, and every "
+        "answer is about one percent or less.",
         xy=(0, 0),
         xycoords="axes fraction",
         xytext=(0, -30),
@@ -2612,8 +2620,8 @@ CAPTIONS = {
         "interceptable throws, and the model moves from the league's 49.8% to 55.2%."
     ),
     "20_persistent_share.png": (
-        "How much of a dropped pick and of a fumble recovery is the team rather than the "
-        "bounce — about one percent of each, on two different measurements the figure names."
+        "How much of a dropped pick, a receiver drop and a fumble recovery is the team rather "
+        "than the bounce — one percent or less of each, on measurements the figure names."
     ),
     "21_bootstrap_buildup.png": (
         "Where 160,000 comes from: one posterior draw's 800 replays, then ten draws, then "

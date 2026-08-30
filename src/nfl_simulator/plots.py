@@ -2942,13 +2942,12 @@ def plot_luck_ledger(
         ax.annotate(
             "\n".join(footer),
             xy=(0, 0),
-            xycoords="axes fraction",
-            xytext=(0, WATERFALL_FOOTER_OFFSET),
+            # the maintainer 2026-08-30: the figure's left edge, not the axes' — the
+            # row labels live left of the axes, so anchoring there gives the
+            # footer the full width instead of the plot's column.
+            xycoords=("figure fraction", "axes fraction"),
+            xytext=(12, WATERFALL_FOOTER_OFFSET),
             textcoords="offset points",
-            # Left, on the axes' left edge, which is where the rows, their
-            # labels and the how-to-read caption all start. Spelled out rather
-            # than left to `Annotation`'s default so the alignment is a decision
-            # on the record and not a default nobody chose.
             ha="left",
             va="top",
             fontsize=8,

@@ -195,29 +195,28 @@ def test_the_mark_is_anchored_to_the_top_right_corner_itself(blank, tmp_path):
     assert columns.max() >= right - 2, "the badge is not flush with the credit's right edge"
 
 
-def test_the_mark_is_two_and_a_half_credit_lines_tall(blank, tmp_path):
-    """the maintainer 2026-08-30: 1.6 lines was too small to read as a mark at all.
-
-    The band is loose in the same way round 10's was: what is measured on the
-    pixels is the credit's *ink*, which is shorter than the line box the ratio
-    is taken against, so the measured ratio runs above the nominal 2.5.
+def test_the_mark_is_a_share_of_the_image_width(blank, tmp_path):
+    """the maintainer 2026-08-30 (second pass): 2.5 credit lines still read as a
+    thumbnail, because the credit line itself is small. The mark now scales
+    with the image — `STAMP_LOGO_WIDTH_SHARE` of its width — with the credit
+    lines as a floor so a tiny image never loses the mark entirely.
     """
-    from nfl_simulator.style import STAMP_LOGO_RATIO, stamp_box
+    from nfl_simulator.style import STAMP_LOGO_WIDTH_SHARE, _mark_height
 
-    assert STAMP_LOGO_RATIO == 2.5
+    assert STAMP_LOGO_WIDTH_SHARE == 0.045
+    # Unit: on a wide image the width share wins; on a narrow one the floor.
+    assert _mark_height(10, 2000) == 90
+    assert _mark_height(10, 100) == 25
 
     path = tmp_path / "scale.png"
     finalize(blank, path)
     image = Image.open(path)
-    left, top, right, bottom = stamp_box(image.size, WATERMARK)
+    width = image.size[0]
 
-    dark = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2) < 200
-    text_rows = np.nonzero(dark[top:bottom, left:right].any(axis=1))[0]
     badge_rows = np.nonzero((spread(path) > SATURATED).any(axis=1))[0]
-    text_h = text_rows.max() - text_rows.min() + 1
     badge_h = badge_rows.max() - badge_rows.min() + 1
-
-    assert 2.2 <= badge_h / text_h <= 4.0
+    # The measured ink can run a little under the box (transparent badge edge).
+    assert badge_h >= 0.038 * width
 
 
 def test_the_strip_is_reserved_when_a_figure_reaches_into_the_stamp_s_corner(blank, tmp_path):

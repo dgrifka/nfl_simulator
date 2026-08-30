@@ -480,6 +480,11 @@ STAMP_FONT_SCALE = 0.0095
 STAMP_LOGO_RATIO = 2.5
 STAMP_GAP_RATIO = 0.25
 
+# the maintainer 2026-08-30, second pass: 2.5 credit lines still read as a thumbnail,
+# because the credit line itself is small. The mark scales with the image —
+# this share of its width — and the credit-line ratio above becomes the floor.
+STAMP_LOGO_WIDTH_SHARE = 0.045
+
 # Anything darker than this, on the cream, is an artist rather than the surface.
 # Used only to decide whether the stamp's corner is occupied.
 _SURFACE_INK = 240
@@ -503,18 +508,25 @@ def _stamp_gap(logo_height: int) -> int:
     return max(2, round(logo_height * STAMP_GAP_RATIO))
 
 
-def _mark_height(text_height: int) -> int:
-    """The mark's pixel height beside a credit line ``text_height`` tall.
+def _mark_height(text_height: int, image_width: int) -> int:
+    """The mark's pixel height above a credit line ``text_height`` tall.
+
+    ``STAMP_LOGO_WIDTH_SHARE`` of the image's width, floored at
+    ``STAMP_LOGO_RATIO`` credit lines so a small image never loses the mark.
 
     Split out of :func:`_logo_geometry` because the *height* is a fact about the
     credit line and the *width* is a fact about the file: :func:`stamp_box`
     reserves the mark's rows on every figure, including the ones that will never
     open a logo, and it must not have to name a file to do it.
     """
-    return max(1, round(text_height * STAMP_LOGO_RATIO))
+    return max(
+        1,
+        round(text_height * STAMP_LOGO_RATIO),
+        round(image_width * STAMP_LOGO_WIDTH_SHARE),
+    )
 
 
-def _logo_geometry(logo_path: str | Path, text_height: int) -> tuple[int, int]:
+def _logo_geometry(logo_path: str | Path, text_height: int, image_width: int) -> tuple[int, int]:
     """The pixels the mark is drawn at beside a credit line ``text_height`` tall.
 
     Only the header of the PNG is read — the aspect ratio is all this needs, and
@@ -522,7 +534,7 @@ def _logo_geometry(logo_path: str | Path, text_height: int) -> tuple[int, int]:
     """
     from PIL import Image
 
-    height = _mark_height(text_height)
+    height = _mark_height(text_height, image_width)
     with Image.open(logo_path) as probe:
         width = max(1, round(height * probe.width / probe.height))
     return width, height
@@ -566,7 +578,7 @@ def stamp_box(
     bbox = draw.textbbox((0, 0), text, font=font)
     text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
-    mark_h = _mark_height(text_h)
+    mark_h = _mark_height(text_h, width)
     block_top = int(height * STAMP_INSET)
     text_top = block_top + mark_h + _stamp_gap(mark_h)
     right = width - int(width * STAMP_MARGIN)
@@ -622,7 +634,12 @@ def reserve_stamp_strip(
     # two spare pixels absorb that rounding.
     shift = bottom + clearance - highest
     shift = int(np.ceil(shift / (1.0 - STAMP_INSET))) + 2
-    canvas = Image.new("RGB", (width, height + shift), tuple(_rgb255(PALETTE["bg"])))
+    # A square image stays square: the two card figures are square by design
+    # (their preview crop depends on it), so the same shift is added to the
+    # width. The stamp is re-anchored to the new right edge when it is painted,
+    # which also moves it clear of a centred title horizontally.
+    new_width = width + shift if width == height else width
+    canvas = Image.new("RGB", (new_width, height + shift), tuple(_rgb255(PALETTE["bg"])))
     canvas.paste(image, (0, shift))
     canvas.save(filepath)
 
@@ -681,7 +698,7 @@ def apply_watermark(
 
         if logo_path is not None:
             bbox = draw.textbbox((0, 0), text, font=font)
-            logo_w, logo_h = _logo_geometry(logo_path, bbox[3] - bbox[1])
+            logo_w, logo_h = _logo_geometry(logo_path, bbox[3] - bbox[1], width)
             logo = Image.open(logo_path).convert("RGBA")
             pixels = np.array(logo)
             near_white = (pixels[:, :, 0] > 240) & (pixels[:, :, 1] > 240) & (pixels[:, :, 2] > 240)
