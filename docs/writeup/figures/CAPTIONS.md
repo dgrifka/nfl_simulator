@@ -15,7 +15,7 @@
 - **`17_fumble_retention_bars.png`** — How often the fumbling team keeps the ball, by class of play, on the fitted baseline the simulator prices with. A botched snap on a run is kept 76.9% of the time and a fumble on a run 46.1% — a coin, but not the same coin.
 - **`18_kicker_prior_posterior.png`** — One kicker-season priced: E. Pineiro's 31-of-32 in 2025 against the prior any kicker starts from, both as make probability from 45 yards.
 - **`19_denver_prior_posterior.png`** — The same picture for a defense's hands: Denver's 2024 defense caught 13 of 17 interceptable throws, and the model moves from the league's 49.8% to 55.2%.
-- **`20_persistent_share.png`** — How much of a dropped pick and of a fumble recovery is the team rather than the bounce — about one percent of each, on two different measurements the figure names.
+- **`20_persistent_share.png`** — How much of a dropped pick, a receiver drop and a fumble recovery is the team rather than the bounce — one percent or less of each, on measurements the figure names.
 - **`21_bootstrap_buildup.png`** — Where 160,000 comes from: one posterior draw's 800 replays, then ten draws, then all 200 — the histogram the product ships.
 - **`formula_01_rule.png`** — The neutralization rule, term by term.
 - **`formula_02_points.png`** — EPA to points of margin, and the deserve-to-win share.
