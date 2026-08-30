@@ -1802,8 +1802,8 @@ def copy_game_figures() -> list[str]:
 # rename happens on the finished figure rather than in `plots.py`: the product's
 # own wording is not this article's to change, and one word is a caller's
 # business.
-DESERVED_LABEL = "Deserved:"
-ARTICLE_LABEL = "Expected margin:"
+DESERVED_LABEL = "Expected:"
+ARTICLE_LABEL = "Expected:"
 
 
 def article_dtw_figure() -> str:

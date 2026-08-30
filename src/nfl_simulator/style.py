@@ -61,7 +61,7 @@ HOME_ALPHA = 0.78
 AWAY_ALPHA = 0.55
 
 # Brand. `WATERMARK` is the one string stamped on every PNG.
-BRAND_HANDLE = "@[TBD]"
+BRAND_HANDLE = "@nfl_simulator"
 DATA_CREDIT = "Data: nflverse"
 WATERMARK = f"{DATA_CREDIT} | {BRAND_HANDLE}"
 

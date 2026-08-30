@@ -534,7 +534,7 @@ def test_the_waterfall_names_both_ends_with_their_margins():
     )
     labels = [label.get_text() for label in ax.get_yticklabels()]
     assert any("Actual" in label for label in labels)
-    assert any("Deserved" in label for label in labels)
+    assert any("Expected" in label for label in labels)
 
 
 def test_the_waterfall_legends_both_directions_so_colour_is_never_alone():
@@ -1036,7 +1036,7 @@ def test_the_callouts_name_the_team_each_margin_favours():
     fig, ax = plot_bootstrap_distribution(branded())
     text = figure_text(fig)
     assert "Actual: DET by 8" in text
-    assert "Deserved: GB by 8.3" in text
+    assert "Expected: GB by 8.3" in text
 
 
 def test_the_bars_wear_the_team_colours_they_are_handed():
@@ -1177,7 +1177,7 @@ def test_the_waterfall_names_its_ends_in_derek_s_wording():
     fig, ax = waterfall()
     labels = [t.get_text() for t in ax.get_yticklabels()]
     assert labels[0].startswith("Actual")
-    assert labels[-1].startswith("Deserved")
+    assert labels[-1].startswith("Expected")
 
 
 def test_an_overtime_game_says_the_toss_is_reported_not_neutralized():
@@ -1576,14 +1576,14 @@ def test_a_degenerate_game_still_tints_and_names_both_halves():
 
 def test_the_rule_labels_name_a_team_instead_of_carrying_a_sign():
     _fig, ax = plot_bootstrap_distribution(branded())
-    assert {t.get_text() for t in _callouts(ax)} == {"Actual: DET by 8", "Deserved: GB by 8.3"}
+    assert {t.get_text() for t in _callouts(ax)} == {"Actual: DET by 8", "Expected: GB by 8.3"}
 
 
 def test_a_dead_level_deserved_margin_reads_as_even_on_the_distribution():
     _fig, ax = plot_bootstrap_distribution(
         branded(deserved_margin=0.0, draws=np.linspace(-9.0, 9.0, 512))
     )
-    assert "Deserved: even" in {t.get_text() for t in _callouts(ax)}
+    assert "Expected: even" in {t.get_text() for t in _callouts(ax)}
 
 
 @pytest.mark.parametrize(
@@ -2678,13 +2678,13 @@ def test_the_ends_name_the_team_they_favour_instead_of_a_sign():
     fig, ax = waterfall()
     labels = [t.get_text() for t in ax.get_yticklabels()]
     assert labels[0] == "Actual: DET by 8"
-    assert labels[-1] == "Deserved: GB by 8.3"
+    assert labels[-1] == "Expected: GB by 8.3"
 
 
 def test_a_dead_level_deserved_margin_reads_as_even():
     game = branded(deserved_margin=0.0)
     fig, ax = waterfall(game)
-    assert [t.get_text() for t in ax.get_yticklabels()][-1] == "Deserved: even"
+    assert [t.get_text() for t in ax.get_yticklabels()][-1] == "Expected: even"
 
 
 # --- the value labels -----------------------------------------------------
@@ -3508,7 +3508,7 @@ def spread_kick_rows() -> list[dict]:
 
 
 def test_the_two_anchor_rows_are_bold_and_the_events_they_frame_are_not():
-    """`Actual:` and `Deserved:` are the question the waterfall answers; every
+    """`Actual:` and `Expected:` are the question the waterfall answers; every
     row between them is one step of the answer, and the weight says which."""
     rows = spread_kick_rows()
     _fig, ax = waterfall(reconciling(rows), rows)
@@ -4041,7 +4041,7 @@ def _caveat(ax):
 
 def test_each_rule_label_sits_centred_over_its_own_rule():
     """Round 7 hung each label to the right of its rule, which is what put
-    `Actual:` under `Deserved:` on a lopsided game. Centred, a label says which
+    `Actual:` under `Expected:` on a lopsided game. Centred, a label says which
     line it names without a reader tracing back along it."""
     fig, ax = plot_bootstrap_distribution(branded())
     fig.canvas.draw()
@@ -4074,7 +4074,7 @@ def test_a_near_tie_stacks_the_two_rule_labels_on_two_rows():
     game = branded(deserved_margin=0.2, actual_margin=1.0, draws=np.linspace(-6.0, 8.0, 512))
     fig, ax = plot_bootstrap_distribution(game)
     fig.canvas.draw()
-    deserved = next(t for t in _callouts(ax) if t.get_text().startswith("Deserved"))
+    deserved = next(t for t in _callouts(ax) if t.get_text().startswith("Expected"))
     actual = next(t for t in _callouts(ax) if t.get_text().startswith("Actual"))
     assert not deserved.get_window_extent().overlaps(actual.get_window_extent())
     assert deserved.get_window_extent().y0 > actual.get_window_extent().y0
@@ -4267,14 +4267,14 @@ def _rows_of(**margins):
     game = branded(draws=np.linspace(-6.0, 24.0, 512), **margins)
     fig, ax = plot_bootstrap_distribution(game)
     fig.canvas.draw()
-    deserved = next(t for t in _callouts(ax) if t.get_text().startswith("Deserved"))
+    deserved = next(t for t in _callouts(ax) if t.get_text().startswith("Expected"))
     actual = next(t for t in _callouts(ax) if t.get_text().startswith("Actual"))
     return deserved.get_window_extent(), actual.get_window_extent()
 
 
 @pytest.mark.parametrize("margins", [WIDE_GAP, NEAR_TIE], ids=["wide gap", "near tie"])
 def test_the_two_rule_labels_are_on_two_rows_whatever_the_gap(margins):
-    """`Deserved:` on the upper row and `Actual:` on the lower, always."""
+    """`Expected:` on the upper row and `Actual:` on the lower, always."""
     deserved, actual = _rows_of(**margins)
     assert deserved.y0 > actual.y0, "the deserved label holds the upper row"
     assert not deserved.overlaps(actual)
@@ -4733,7 +4733,7 @@ def _anchor_bars(ax) -> list:
 
 
 def test_a_deserved_anchor_of_zero_shows_a_tick_and_no_bar():
-    """Document 63 §7d N2. `Deserved: even` left the anchor row as a label and a
+    """Document 63 §7d N2. `Expected: even` left the anchor row as a label and a
     club mark floating with nothing between them, on 19 of the 97 game-editions
     read. A zero-width bar is nothing to draw, so the row gets a short tick of
     the anchor colour at x = 0 instead — enough for the eye to find the row."""
@@ -4811,7 +4811,7 @@ def test_an_anchor_the_figure_calls_even_gets_the_tick_even_when_it_is_not_exact
     rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
     game = replace(verdict(actual_margin=2.043), deserved_margin=0.043)
     assert ANCHOR_EVEN_EPS == 0.05
-    assert anchor_label("Deserved", game.deserved_margin, game) == "Deserved: even"
+    assert anchor_label("Expected", game.deserved_margin, game) == "Expected: even"
     fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
     assert len(_ticks(ax)) == 1
     assert len(_anchor_bars(ax)) == 1, "only the actual end still has a bar"
@@ -4821,7 +4821,7 @@ def test_an_anchor_just_over_the_even_threshold_keeps_its_bar():
     """The control at the other side of the same constant."""
     rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
     game = replace(verdict(actual_margin=2.06), deserved_margin=0.06)
-    assert anchor_label("Deserved", game.deserved_margin, game) == "Deserved: MIN by 0.1"
+    assert anchor_label("Expected", game.deserved_margin, game) == "Expected: MIN by 0.1"
     fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
     assert not _ticks(ax)
     assert len(_anchor_bars(ax)) == 2
@@ -4835,5 +4835,5 @@ def test_the_label_and_the_tick_never_disagree():
     for margin in (0.0, 0.01, ANCHOR_EVEN_EPS * 0.99, ANCHOR_EVEN_EPS, 0.2, 3.0):
         game = replace(verdict(actual_margin=2.0 + margin), deserved_margin=margin)
         fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
-        says_even = anchor_label("Deserved", margin, game).endswith("even")
+        says_even = anchor_label("Expected", margin, game).endswith("even")
         assert bool(_ticks(ax)) == says_even, f"{margin} disagrees"

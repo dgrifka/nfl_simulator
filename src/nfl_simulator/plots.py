@@ -1169,7 +1169,7 @@ def plot_bootstrap_distribution(
         deserved_label = _rule(
             ax,
             verdict.deserved_margin,
-            anchor_label("Deserved", verdict.deserved_margin, verdict),
+            anchor_label("Expected", verdict.deserved_margin, verdict),
             color=PALETTE["text_muted"],
             dashes=(5, 3),
             weight=1.6,
@@ -2521,7 +2521,7 @@ def anchor_colour(home_colour: str, away_colour: str) -> str:
 
 
 def anchor_label(kind: str, margin: float, verdict: GameVerdict) -> str:
-    """`"Actual: DET by 8"`, `"Deserved: GB by 8.3"`, `"Deserved: even"`.
+    """`"Actual: DET by 8"`, `"Expected: GB by 8.3"`, `"Expected: even"`.
 
     Round 4: `Actual +8` asks a reader to hold the axis's subtraction in their
     head and work out whose +8 it is. Naming the team does the arithmetic for
@@ -2823,7 +2823,7 @@ def plot_luck_ledger(
             labels = ax.set_yticklabels(
                 [anchor_label("Actual", verdict.actual_margin, verdict)]
                 + [bar.label for bar in bars]
-                + [anchor_label("Deserved", verdict.deserved_margin, verdict)],
+                + [anchor_label("Expected", verdict.deserved_margin, verdict)],
                 fontsize=9,
             )
             # Weight, not size. The two totals are the question the figure

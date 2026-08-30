@@ -64,9 +64,9 @@ def test_the_surface_is_the_warm_cream_the_house_style_uses():
 
 
 def test_the_brand_constants_are_importable_and_the_handle_is_the_placeholder():
-    assert BRAND_HANDLE == "@[TBD]"
+    assert BRAND_HANDLE == "@nfl_simulator"
     assert DATA_CREDIT == "Data: nflverse"
-    assert WATERMARK == "Data: nflverse | @[TBD]"
+    assert WATERMARK == "Data: nflverse | @nfl_simulator"
 
 
 def test_a_finalized_png_is_saved_on_the_cream_surface(blank, tmp_path):
