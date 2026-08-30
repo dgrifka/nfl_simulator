@@ -60,7 +60,9 @@ __all__ = [
     "CLASH_LIGHTEN",
     "FALLBACK_COLORS",
     "FALLBACKS",
+    "RELOCATIONS",
     "colour_distance",
+    "era_code",
     "load_team_table",
     "pair_colors",
     "readable_colours",
@@ -69,6 +71,43 @@ __all__ = [
     "team_logo",
     "team_name",
 ]
+
+# The three relocations inside and just before the 2016-2025 window, as
+# ``(modern abbreviation, last season under the old one, old abbreviation)``.
+# The Rams' row is here for completeness — 2015 is a season before the corpus
+# starts — because a table that carries two of three moves is a table a reader
+# has to check rather than read.
+#
+# **The table is read forwards, from the season.** Document 63 §7d N6's rule and
+# this round's constraint 6: a 2021 Las Vegas game stays Las Vegas. Nothing here
+# maps an old code onto a new one, so the era code of a code that is already an
+# era code is itself.
+RELOCATIONS = (
+    ("LV", 2019, "OAK"),
+    ("LAC", 2016, "SD"),
+    ("LA", 2015, "STL"),
+)
+
+
+def era_code(team_abbr: str, season: int | None = None) -> str:
+    """The abbreviation this club played the season under.
+
+    The summary artifacts carry the **modern** code on every game — a 2017
+    Oakland game arrives as ``LV`` — while the game id carries the era one. Left
+    alone, every surface of `2017_16_OAK_PHI`'s four figures said `LV`: the
+    headline, the corner label, every row, the legend and the key.
+
+    A caller with no season gets the abbreviation back untouched. Guessing a
+    season would be worse than declining to: the only thing that can decide
+    which club a code means is the year it was played in.
+    """
+    if season is None:
+        return team_abbr
+    for modern, last_season, old in RELOCATIONS:
+        if team_abbr == modern and int(season) <= last_season:
+            return old
+    return team_abbr
+
 
 # The order the clash rule tries things in, and the name each attempt is
 # reported under. A real club colour before a synthetic tint: a reader who knows
@@ -166,14 +205,19 @@ def readable_colours(primary: str, secondary: str) -> tuple[str, str]:
     return _darkened_until_it_reads(darker), lighter
 
 
-def team_colors(team_abbr: str) -> tuple[str, str]:
+def team_colors(team_abbr: str, season: int | None = None) -> tuple[str, str]:
     """``(primary, secondary)`` for a team, or the grey fallback for an unknown one.
 
     Ordered by :func:`readable_colours`, so every caller downstream — the ledger
     card's boxes, the waterfall's bars, a legend, the clash ladder itself —
     inherits the contrast floor without asking for it.
+
+    ``season`` picks the era row via :func:`era_code`. nflverse gives OAK and LV
+    the same two hues today, so this changes no colour in the 2016-2025 window;
+    it is threaded anyway so a club whose palette *did* move would be drawn in
+    the one it wore, rather than in whatever its successor wears now.
     """
-    row = _row(team_abbr)
+    row = _row(era_code(team_abbr, season))
     if row is None:
         return FALLBACK_COLORS
     primary = row.get("team_color") or FALLBACK_COLORS[0]
@@ -181,13 +225,20 @@ def team_colors(team_abbr: str) -> tuple[str, str]:
     return readable_colours(primary, secondary)
 
 
-def team_name(team_abbr: str) -> str:
-    """The club's full name, falling back to the abbreviation itself."""
-    row = _row(team_abbr)
-    return (row or {}).get("team_name") or team_abbr
+def team_name(team_abbr: str, season: int | None = None) -> str:
+    """The club's full name in that season, falling back to the abbreviation.
+
+    ``team_name("LV", 2017)`` is ``"Oakland Raiders"``; ``team_name("LV", 2021)``
+    is ``"Las Vegas Raiders"``. The nflverse team table carries both rows — the
+    32 current clubs plus the four relocation aliases — so the era name is a
+    lookup, never an invention.
+    """
+    code = era_code(team_abbr, season)
+    row = _row(code)
+    return (row or {}).get("team_name") or code
 
 
-def resolve_pair(home_team: str, away_team: str) -> tuple[str, str, str]:
+def resolve_pair(home_team: str, away_team: str, season: int | None = None) -> tuple[str, str, str]:
     """The two colours to draw a game in, and the name of the rule that chose them.
 
     **The RGB rule is blind and this is what it was blind to.** It kept the Jets'
@@ -240,8 +291,8 @@ def resolve_pair(home_team: str, away_team: str) -> tuple[str, str, str]:
     first, so New Orleans arrives here in black rather than in ``#D3BC8D`` at
     1.78:1, and no matchup starts from a colour the surface swallows.
     """
-    home, home_second = team_colors(home_team)
-    away, away_second = team_colors(away_team)
+    home, home_second = team_colors(home_team, season)
+    away, away_second = team_colors(away_team, season)
 
     candidates = (
         (home, away, None),
@@ -265,9 +316,9 @@ def resolve_pair(home_team: str, away_team: str) -> tuple[str, str, str]:
     return home, darken(away, CLASH_DARKEN), "unresolved"
 
 
-def pair_colors(home_team: str, away_team: str) -> tuple[str, str]:
+def pair_colors(home_team: str, away_team: str, season: int | None = None) -> tuple[str, str]:
     """The two colours to draw a game in. See :func:`resolve_pair` for the rule."""
-    home, away, _rule = resolve_pair(home_team, away_team)
+    home, away, _rule = resolve_pair(home_team, away_team, season)
     return home, away
 
 
@@ -302,20 +353,32 @@ def _crop_to_mark(pixels: np.ndarray) -> np.ndarray:
     return pixels[rows[0] : rows[-1] + 1, columns[0] : columns[-1] + 1]
 
 
-def team_logo(team_abbr: str, *, cache_dir: Path | None = None) -> np.ndarray | None:
+def team_logo(
+    team_abbr: str, season: int | None = None, *, cache_dir: Path | None = None
+) -> np.ndarray | None:
     """The club's mark as an RGBA array, downloaded once and cached thereafter.
 
     Returns ``None`` for a team the table does not carry, or when the download
     fails: a figure without a logo is a figure, and stopping a render because a
     CDN was slow would be the worse outcome. The caller draws the rest.
+
+    ``season`` resolves the era code first, and the cache is keyed on **that** —
+    ``data/logos/OAK.png``, not ``LV.png`` — so the two clubs can never share a
+    cache entry. Round 12 measured what nflverse actually serves: the
+    ``team_logo_espn`` column gives OAK, SD and STL the *same* URL as their
+    successors, so the drawn mark is unchanged in the 2016-2025 window. The
+    era-specific art is in ``team_wordmark``, which this module does not use —
+    a wordmark for three clubs and a shield for the other twenty-nine would be
+    two kinds of mark on one figure, which is the defect N6 also names.
     """
     from PIL import Image
 
+    code = era_code(team_abbr, season)
     cache_dir = paths.LOGO_DIR if cache_dir is None else Path(cache_dir)
-    cached = cache_dir / f"{team_abbr}.png"
+    cached = cache_dir / f"{code}.png"
 
     if not cached.exists():
-        row = _row(team_abbr)
+        row = _row(code)
         url = (row or {}).get("team_logo_espn")
         if not url:
             return None
@@ -333,5 +396,5 @@ def team_logo(team_abbr: str, *, cache_dir: Path | None = None) -> np.ndarray | 
         with Image.open(cached) as image:
             return _crop_to_mark(_knock_out_near_white(image))
     except Exception as error:  # pragma: no cover - a corrupt cache entry
-        print(f"Warning: could not read the cached {team_abbr} logo: {error}")
+        print(f"Warning: could not read the cached {code} logo: {error}")
         return None

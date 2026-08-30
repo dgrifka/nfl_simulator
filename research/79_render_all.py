@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -44,9 +45,10 @@ from matplotlib.patches import FancyArrowPatch  # noqa: E402
 
 from nfl_simulator import paths  # noqa: E402
 from nfl_simulator.plots import (  # noqa: E402
-    ARROW_FLOOR,
+    ANCHOR_EVEN_EPS,
+    ARROW_FLOOR_SHARE,
     DRAW_FLOOR_SHARE,
-    group_rows,
+    fold_to_frame,
     luck_bars,
     plot_luck_ledger,
     verdict_from_row,
@@ -66,7 +68,21 @@ from nfl_simulator.render import (  # noqa: E402
     replay,
 )
 from nfl_simulator.style import edition_stamp, stamp_box  # noqa: E402
-from nfl_simulator.teams import pair_colors, team_logo  # noqa: E402
+from nfl_simulator.teams import RELOCATIONS, era_code, pair_colors, team_logo  # noqa: E402
+
+# The modern abbreviations that can be wrong on a figure. **Which of them are
+# wrong depends on the season and on nothing else**: `LAC` is the right code for
+# a 2017 Chargers game and the wrong one for a 2016 game, and `LA` is right from
+# 2016 on. So the set is rebuilt per game rather than taken whole — the first
+# version of this check took it whole and flagged seven correct 2017-2019
+# `LAC` / `LA` figures as N6 failures.
+MODERN_CODES = {modern for modern, _last, _old in RELOCATIONS}
+
+
+def _wrong_codes(season: int) -> set[str]:
+    """The modern abbreviations a figure for this season must not print."""
+    return {code for code in MODERN_CODES if era_code(code, season) != code}
+
 
 RESULTS = "79_render_all.json"
 
@@ -80,6 +96,12 @@ CHECKPOINT = "79_render_all.jsonl"
 # The gate driver 58 applies per game, quoted rather than loosened: a figure is
 # only allowed to be drawn from a redraw that lands on the published row.
 REPLAY_TOLERANCE = 1e-9
+
+# Round 12 Part E's pre-registered tolerance on the draw floor: the floor over
+# the axis `set_xlim` ended at must sit within 0.5% +/- 0.05%, which is +/-10%
+# relative. At the fold's fixed point it is exact, so anything outside this band
+# is a game whose frame did not settle.
+FLOOR_BAND = 0.0005
 
 # Anything darker than this inside the stamp's box is somebody else's ink. The
 # stamp is painted at 140 grey on a 249 cream and the title is #1A1A1A at 26, so
@@ -132,6 +154,14 @@ def _dtw_layout(verdict, colours, logos) -> dict:
     corners_left = sum(1 for t in ax.texts if t.get_text() in wanted)
     spans = [t for t in ax.texts if isinstance(getattr(t, "arrow_patch", None), FancyArrowPatch)]
 
+    # Round 12 Part C. The span's length as a share of the axis it is drawn on:
+    # the rule says a span shorter than `ARROW_FLOOR_SHARE` of the width is not
+    # drawn at all, so a drawn span under it is the defect, pre-registered at 0.
+    low, high = ax.get_xlim()
+    axis_width = float(high - low)
+    gap = abs(float(verdict.actual_margin) - float(verdict.deserved_margin))
+    span_share = gap / axis_width if axis_width else None
+    texts = [t.get_text() for t in ax.texts]
     plt.close(fig)
     return {
         "rules_stacked": stacked,
@@ -139,10 +169,16 @@ def _dtw_layout(verdict, colours, logos) -> dict:
         "rule_rows": int(rule_rows),
         "corner_cleared": bool(corners_left < len(wanted)),
         "arrow_drawn": bool(spans),
+        "dtw_axis_width": axis_width,
+        "arrow_span_share": span_share,
+        "arrow_span_under_share": bool(
+            spans and span_share is not None and span_share < ARROW_FLOOR_SHARE
+        ),
+        "dtw_texts": texts,
     }
 
 
-def _waterfall_layout(verdict, rows, slope, colours, logos) -> dict:
+def _waterfall_layout(verdict, rows, slope, colours, logos, floor) -> dict:
     """Draw the waterfall once more and measure what round 10 Part D fixed.
 
     The same reason :func:`_dtw_layout` exists: whether the dashed zero rule
@@ -177,8 +213,56 @@ def _waterfall_layout(verdict, rows, slope, colours, logos) -> dict:
         span = sentence.get_window_extent(renderer)
         overlaps += sum(1 for c in corners if span.overlaps(c.get_window_extent(renderer)))
 
+    # --- round 12 -------------------------------------------------------
+    # Part B: the floor against the axis `set_xlim` actually ended at.
+    low, high = ax.get_xlim()
+    axis_width = float(high - low)
+    floor_share = float(floor) / axis_width if axis_width else None
+
+    # Part D: an anchor the figure calls `even` draws a tick instead of a bar,
+    # so the count of `even` anchors and the count of ticks have to agree.
+    # `ANCHOR_EVEN_EPS`, not `== 0.0`: 16 of the corpus's 29 `even` anchors are
+    # a hundredth or two off zero, and those are the rows the defect is about.
+    zero_anchors = sum(
+        1
+        for m in (verdict.actual_margin, verdict.deserved_margin)
+        if abs(float(m)) < ANCHOR_EVEN_EPS
+    )
+    ticks = sum(1 for line in ax.lines if line.get_gid() == "anchor-tick")
+
+    # Part A: one mark per club per figure. Every mark on the waterfall — the
+    # two corners, the two anchor ends and the row column — is fetched from one
+    # `logos` map, and this counts the distinct arrays that actually landed.
+    drawn_marks = set()
+    for artist in ax.artists:
+        box = getattr(artist, "offsetbox", None)
+        data = box.get_data() if hasattr(box, "get_data") else None
+        if data is not None:
+            drawn_marks.add(np.asarray(data).tobytes())
+    known = {np.asarray(mark).tobytes() for mark in logos.values() if mark is not None}
+    texts = [t.get_text() for t in ax.texts]
+    texts += [t.get_text() for t in ax.get_yticklabels()]
+    legend = ax.get_legend()
+    if legend is not None:
+        texts += [t.get_text() for t in legend.get_texts()]
+
     plt.close(fig)
-    return {"corner_strikes": strikes, "sentence_overlaps": overlaps}
+    return {
+        "corner_strikes": strikes,
+        "sentence_overlaps": overlaps,
+        "waterfall_axis_width": axis_width,
+        "draw_floor_share_of_axis": floor_share,
+        "zero_anchors": zero_anchors,
+        "anchor_ticks": ticks,
+        "zero_anchors_without_a_tick": max(0, zero_anchors - ticks),
+        "distinct_marks_drawn": len(drawn_marks),
+        "marks_in_the_logo_map": len(known),
+        "marks_not_in_the_logo_map": len(drawn_marks - known),
+        # A club drawn with two different arrays would push the count of
+        # distinct marks past the number of clubs the map carries.
+        "two_marks_for_one_club": bool(len(drawn_marks) > len(known)),
+        "waterfall_texts": texts,
+    }
 
 
 def _stamp_overlap_px(path: Path, edition: str) -> int:
@@ -231,15 +315,26 @@ def measure(task: tuple[str, str, str]) -> dict:
     )
     bars = luck_bars(rows, points_per_epa=sources.slope)
     span = waterfall_span(verdict)
-    floor = span * DRAW_FLOOR_SHARE
-    grouped = group_rows(bars, span=span)
-    colours = pair_colors(verdict.home_team, verdict.away_team)
-    logos = {team: team_logo(team) for team in (verdict.home_team, verdict.away_team)}
+    season = verdict.season
+    colours = pair_colors(verdict.home_team, verdict.away_team, season)
+    logos = {team: team_logo(team, season) for team in (verdict.home_team, verdict.away_team)}
+    # Round 12: the floor is a share of the drawn frame, and the frame is what
+    # the fold settles on — so the fold has to be run exactly as the figure runs
+    # it, `logos` included, or the number measured is not the number drawn.
+    grouped, frame = fold_to_frame(verdict, bars, logos=bool(logos))
+    floor = frame * DRAW_FLOOR_SHARE
 
     layout = _dtw_layout(verdict, colours, logos)
-    layout |= _waterfall_layout(verdict, rows, sources.slope, colours, logos)
+    layout |= _waterfall_layout(verdict, rows, sources.slope, colours, logos, floor)
     written = render_game(game_id, Path(out_dir), edition=edition)
     plt.close("all")
+
+    # Round 12 Part A. Only a club that had not yet moved can print a modern
+    # code, so the scan runs on those game-editions and is skipped on the rest.
+    # `_era_scan` draws the two figures the other two share their vocabulary
+    # with — the card and the ledger card name the same clubs from the same
+    # verdict and the same prepared rows.
+    era = _era_scan(verdict, layout.pop("dtw_texts"), layout.pop("waterfall_texts"), rows)
 
     dtw_png = next((path for path in written if path.name.endswith("_dtw.png")), None)
     labels = [bar.label for bar in grouped]
@@ -274,7 +369,41 @@ def measure(task: tuple[str, str, str]) -> dict:
         "longest_label_text": longest,
         "is_degenerate": bool(verdict.is_degenerate),
         "bucket": verdict.bucket,
+        # --- round 12's four --------------------------------------------
+        "waterfall_frame": frame,
+        **era,
     }
+
+
+def _era_scan(verdict, dtw_texts, waterfall_texts, rows) -> dict:
+    """Does any surface of a pre-relocation game print the club's modern code?
+
+    Document 63 §7d N6. A club that has not yet moved is the only one that can
+    fail, and only the codes :func:`_wrong_codes` names are wrong for its season
+    — `LAC` is the right code for a 2017 Chargers game and the wrong one for a
+    2016 game. On every other game-edition ``era_checked`` is false and the two
+    counts mean "nothing to find" rather than "checked and clean".
+
+    The two figures scanned carry every surface N6 named — headline, corner
+    labels, row labels, the legend and the `wins by` key — and the club
+    vocabulary of the other two comes from the same verdict and the same
+    prepared rows, which are checked directly.
+    """
+    season = verdict.season
+    sides = (verdict.home_team, verdict.away_team)
+    wrong = _wrong_codes(season)
+    # A club that had not yet moved is on the figure under its era code, so that
+    # is what says whether this game is one the check has anything to say about.
+    involved = any(era_code(code, season) in sides for code in wrong)
+    if not involved:
+        return {"era_checked": False, "era_texts": 0, "era_codes_in_data": 0}
+    word = re.compile(r"\b(" + "|".join(sorted(wrong)) + r")\b")
+    texts = [text for text in dtw_texts + waterfall_texts if word.search(text)]
+    in_data = sum(1 for code in sides if code in wrong)
+    in_data += sum(
+        1 for row in rows for key in ("charged_team", "opponent") if row.get(key) in wrong
+    )
+    return {"era_checked": True, "era_texts": len(texts), "era_codes_in_data": in_data}
 
 
 def _under_floor(grouped, floor: float) -> dict:
@@ -343,6 +472,22 @@ def _summarise(records: list[dict], edition: str) -> dict:
         "n_rows_named_one_small_event": int(frame["rows_named_one_small_event"].sum()),
         "draw_floor_median": float(frame["draw_floor"].median()),
         "draw_floor_max": float(frame["draw_floor"].max()),
+        # --- round 12's pre-registered checks, per edition ---------------
+        "n_era_checked": int(frame["era_checked"].sum()),
+        "n_era_texts": int(frame["era_texts"].sum()),
+        "n_era_codes_in_data": int(frame["era_codes_in_data"].sum()),
+        "n_two_marks_for_one_club": int(frame["two_marks_for_one_club"].sum()),
+        "n_marks_not_in_the_logo_map": int(frame["marks_not_in_the_logo_map"].sum()),
+        "n_floor_outside_the_band": int(
+            ((frame["draw_floor_share_of_axis"] - DRAW_FLOOR_SHARE).abs() > FLOOR_BAND).sum()
+        ),
+        "n_arrow_spans_under_the_share": int(frame["arrow_span_under_share"].sum()),
+        "n_zero_anchors": int(frame["zero_anchors"].sum()),
+        "n_anchor_ticks": int(frame["anchor_ticks"].sum()),
+        "n_zero_anchors_without_a_tick": int(frame["zero_anchors_without_a_tick"].sum()),
+        "floor_share_of_axis_median": float(frame["draw_floor_share_of_axis"].median()),
+        "floor_share_of_axis_max": float(frame["draw_floor_share_of_axis"].max()),
+        "waterfall_frame_median": float(frame["waterfall_frame"].median()),
         "n_rows_named_events_under": int(frame["rows_named_events_under"].sum()),
         "n_anonymous_rows": int(frame["anonymous_rows"].sum()),
     }
@@ -503,21 +648,54 @@ def main() -> None:
             sum(s["n_two_rule_rows"] for s in summary.values()),
             total,
         ),
+        # --- round 12 ----------------------------------------------------
+        "pre_relocation_modern_code_on_a_surface": (
+            sum(s["n_era_texts"] for s in summary.values()),
+            0,
+        ),
+        "pre_relocation_modern_code_in_the_data": (
+            sum(s["n_era_codes_in_data"] for s in summary.values()),
+            0,
+        ),
+        "figures_with_two_marks_for_one_club": (
+            sum(s["n_two_marks_for_one_club"] for s in summary.values()),
+            0,
+        ),
+        "marks_not_in_the_logo_map": (
+            sum(s["n_marks_not_in_the_logo_map"] for s in summary.values()),
+            0,
+        ),
+        "floor_over_axis_outside_the_band": (
+            sum(s["n_floor_outside_the_band"] for s in summary.values()),
+            0,
+        ),
+        "arrow_spans_under_three_percent": (
+            sum(s["n_arrow_spans_under_the_share"] for s in summary.values()),
+            0,
+        ),
+        "zero_anchors_without_a_tick": (
+            sum(s["n_zero_anchors_without_a_tick"] for s in summary.values()),
+            0,
+        ),
     }
-    print(f"\n{'=' * 76}\nROUND 11 — PRE-REGISTERED CHECKS\n{'=' * 76}")
+    print(f"\n{'=' * 76}\nROUND 12 — PRE-REGISTERED CHECKS\n{'=' * 76}")
     for name, (got, want) in checks.items():
         verdict_word = "ok" if got == want else "MISS"
         print(f"  {name:<28} {got!s:>12}  expected {want!s:<12} {verdict_word}", flush=True)
 
     # Reported, not pre-registered to a number: the residue rules 2 and 3 allow,
     # and the widest waterfall the corpus draws.
-    print(f"\n{'=' * 76}\nROUND 11 — REPORTED\n{'=' * 76}")
+    print(f"\n{'=' * 76}\nROUND 12 — REPORTED\n{'=' * 76}")
     for name in (
         "n_rows_under_draw_floor",
         "n_rows_under_floor_lone_event",
         "n_rows_under_floor_cancelled_heap",
         "n_rows_under_floor_other",
         "n_games_with_a_row_under_the_floor",
+        "n_era_checked",
+        "n_zero_anchors",
+        "n_anchor_ticks",
+        "n_arrow_drawn",
     ):
         by_edition = "  ".join(f"{e} {summary[e][name]}" for e in ("strict", "full"))
         print(f"  {name:<38} {sum(summary[e][name] for e in summary):>6}   ({by_edition})")
@@ -530,7 +708,9 @@ def main() -> None:
         print(
             f"  draw floor, {edition:<7} median "
             f"{summary[edition]['draw_floor_median']:.3f} pt   "
-            f"max {summary[edition]['draw_floor_max']:.3f} pt"
+            f"max {summary[edition]['draw_floor_max']:.3f} pt   "
+            f"share of axis median {100 * summary[edition]['floor_share_of_axis_median']:.4f}%  "
+            f"max {100 * summary[edition]['floor_share_of_axis_max']:.4f}%"
         )
 
     print(f"\n{'=' * 76}\nDISTRIBUTIONS\n{'=' * 76}")
@@ -552,7 +732,7 @@ def main() -> None:
                 "elapsed_seconds": elapsed,
                 "files_written": written,
                 "replay_tolerance": REPLAY_TOLERANCE,
-                "arrow_floor": ARROW_FLOOR,
+                "arrow_floor_share": ARROW_FLOOR_SHARE,
                 "draw_floor_share": DRAW_FLOOR_SHARE,
                 "files_on_disk": on_disk,
                 "checks": {

@@ -33,11 +33,14 @@ from nfl_simulator.teams import (
     CLASH_DISTANCE,
     FALLBACK_COLORS,
     FALLBACKS,
+    RELOCATIONS,
     colour_distance,
+    era_code,
     pair_colors,
     resolve_pair,
     team_colors,
     team_logo,
+    team_name,
 )
 
 # Copied from nflreadpy.load_teams(). OAK is one of the four relocation aliases
@@ -50,6 +53,9 @@ ROWS = [
     ("ATL", "Atlanta Falcons", "Falcons", "#A71930", "#000000", "atl"),
     ("TB", "Tampa Bay Buccaneers", "Buccaneers", "#A71930", "#322F2B", "tb"),
     ("OAK", "Oakland Raiders", "Raiders", "#000000", "#A5ACAF", "lv"),
+    ("LV", "Las Vegas Raiders", "Raiders", "#000000", "#A5ACAF", "lv"),
+    ("SD", "San Diego Chargers", "Chargers", "#007BC7", "#ffc20e", "lac"),
+    ("LAC", "Los Angeles Chargers", "Chargers", "#007BC7", "#ffc20e", "lac"),
     ("NYJ", "New York Jets", "Jets", "#003F2D", "#000000", "nyj"),
     ("NO", "New Orleans Saints", "Saints", "#D3BC8D", "#101820", "no"),
 ]
@@ -329,3 +335,91 @@ def test_a_pair_that_can_only_be_separated_in_lightness_is_darkened_not_lightene
     assert separated(home, away)
     assert contrast_ratio(home, PALETTE["bg"]) >= 3.0
     assert contrast_ratio(away, PALETTE["bg"]) >= 3.0
+
+
+# --------------------------------------------------------------------------
+# round 12 Part A: the club a game was played by
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("abbr", "season", "expected"),
+    [
+        # The Raiders left Oakland after 2019.
+        ("LV", 2016, "OAK"),
+        ("LV", 2019, "OAK"),
+        ("LV", 2020, "LV"),
+        ("LV", 2025, "LV"),
+        # The Chargers left San Diego after 2016.
+        ("LAC", 2016, "SD"),
+        ("LAC", 2017, "LAC"),
+        # The Rams left St. Louis after 2015, which is before this corpus starts.
+        ("LA", 2015, "STL"),
+        ("LA", 2016, "LA"),
+        # A club that never moved, and an era code handed back to itself.
+        ("GB", 2016, "GB"),
+        ("OAK", 2017, "OAK"),
+        ("SD", 2016, "SD"),
+    ],
+)
+def test_the_era_code_is_the_abbreviation_the_season_was_played_under(abbr, season, expected):
+    """Document 63 §7d N6. The play-by-play carries the era code and the summary
+    artifacts carry the modern one, so a 2017 Oakland game arrives as `LV` and
+    every surface of its figure says so. The season decides, never the code."""
+    assert era_code(abbr, season) == expected
+
+
+def test_a_season_nobody_supplied_leaves_the_abbreviation_alone():
+    """A caller without a season is not guessing one. Handing back the modern
+    code is the only answer that cannot be wrong about a year."""
+    assert era_code("LV") == "LV"
+    assert era_code("LV", None) == "LV"
+
+
+def test_the_relocation_table_is_keyed_on_the_modern_code_and_a_last_season():
+    """Constraint 6: era names come from the season. The table is read forwards
+    — `(modern code, last season under the old one) -> old code` — so no lookup
+    can turn a 2021 Las Vegas game into an Oakland one."""
+    assert RELOCATIONS == (("LV", 2019, "OAK"), ("LAC", 2016, "SD"), ("LA", 2015, "STL"))
+
+
+def test_a_2017_raiders_game_is_named_for_oakland(table):
+    """`2017_16_OAK_PHI` was captioned `Las Vegas Raiders` on every surface."""
+    assert team_name("LV", 2017) == "Oakland Raiders"
+
+
+def test_a_2021_raiders_game_is_still_named_for_las_vegas(table):
+    """The fix must not rewrite the seasons the club really was in Las Vegas."""
+    assert team_name("LV", 2021) == "Las Vegas Raiders"
+
+
+def test_a_name_asked_for_without_a_season_is_the_modern_one(table):
+    assert team_name("LV") == "Las Vegas Raiders"
+    assert team_name("OAK") == "Oakland Raiders"
+
+
+def test_a_2016_chargers_game_is_named_for_san_diego(table):
+    assert team_name("LAC", 2016) == "San Diego Chargers"
+    assert team_name("LAC", 2017) == "Los Angeles Chargers"
+
+
+def test_a_pre_relocation_club_wears_the_colours_its_era_row_carries(table):
+    """Not a number, so not gated — but it must read off the era row rather
+    than the modern one, or a club whose palette changed would be drawn wrong."""
+    assert team_colors("LV", season=2017) == team_colors("OAK")
+    assert resolve_pair("PHI", "LV", season=2017)[:2] == resolve_pair("PHI", "OAK")[:2]
+
+
+def test_the_era_mark_is_the_one_the_table_carries_for_the_era_code(table, tmp_path):
+    """`team_logo` caches per abbreviation, so a season-aware lookup has to cache
+    under the era code — otherwise a 2017 Oakland render would read Las Vegas's
+    cache entry and the two clubs could never differ."""
+    synthetic_logo(tmp_path / "OAK.png")
+    assert team_logo("LV", season=2017, cache_dir=tmp_path) is not None
+    assert not (tmp_path / "LV.png").exists(), "a 2017 game must not touch the modern cache entry"
+
+
+def test_a_modern_season_still_reads_the_modern_mark(table, tmp_path):
+    synthetic_logo(tmp_path / "LV.png")
+    assert team_logo("LV", season=2021, cache_dir=tmp_path) is not None
+    assert not (tmp_path / "OAK.png").exists()

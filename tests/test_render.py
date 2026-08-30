@@ -742,3 +742,158 @@ def test_the_article_figure_keeps_the_callout_the_share_image_drops():
     assert DTW_ARTICLE_FIGURE["callout"] is True
     assert DTW_ARTICLE_FIGURE["bin_width"] == DTW_FIGURE["bin_width"]
     assert DTW_ARTICLE_FIGURE["arrow"] == DTW_FIGURE["arrow"]
+
+
+# --------------------------------------------------------------------------
+# round 12 Part A: the club a game was played by
+# --------------------------------------------------------------------------
+
+# `2017_16_OAK_PHI` as the artifacts carry it: the game id keeps the era code
+# and the summary row carries the modern one. Document 63 §7d N6.
+OAKLAND_ROW = {
+    "game_id": "2017_16_OAK_PHI",
+    "home_team": "PHI",
+    "away_team": "LV",
+    "actual_margin": 9.0,
+    "deserved_margin": 4.4,
+    "dtw_home": 0.79,
+    "dtw_low": 0.70,
+    "dtw_high": 0.87,
+}
+
+
+def oakland_verdict() -> GameVerdict:
+    from nfl_simulator.plots import verdict_from_row
+
+    return verdict_from_row(
+        OAKLAND_ROW, np.linspace(-6.0, 15.0, 512), {"home_score": 19, "away_score": 10}
+    )
+
+
+def oakland_ledger() -> pl.DataFrame:
+    """Two rows charged to the Raiders as the artifact charges them — `LV`."""
+    return pl.DataFrame(
+        {
+            "play_id": [101.0, 202.0],
+            "component": ["fumble", "fumble"],
+            "event_class": ["run/live", "run/live"],
+            "charged_team": ["LV", "PHI"],
+            "expected": [0.5, 0.5],
+            "swing": [-2.8, 2.2],
+            "luck_epa": [-1.4, 1.1],
+        }
+    )
+
+
+def test_a_pre_relocation_game_carries_its_era_code_on_the_verdict():
+    """The summary row says `LV` for a 2017 game. The verdict is the one place
+    every surface reads its club codes from, so it is the one place the season
+    has to be applied."""
+    assert oakland_verdict().away_team == "OAK"
+    assert oakland_verdict().home_team == "PHI"
+
+
+def test_a_post_relocation_game_keeps_the_modern_code():
+    from nfl_simulator.plots import verdict_from_row
+
+    row = OAKLAND_ROW | {"game_id": "2023_15_LAC_LV", "home_team": "LV", "away_team": "LAC"}
+    verdict = verdict_from_row(row, np.linspace(-6.0, 15.0, 512))
+    assert (verdict.home_team, verdict.away_team) == ("LV", "LAC")
+
+
+def test_a_ledger_row_is_charged_to_the_club_of_its_season():
+    """The ledger carries the modern code too. If only the verdict were mapped,
+    a row charged to `LV` would no longer match either side of a 2017 game and
+    `opponent` would come out wrong for every one of them."""
+    rows = prepare_rows(oakland_ledger(), oakland_verdict())
+    assert [row["charged_team"] for row in rows] == ["OAK", "PHI"]
+    assert [row["opponent"] for row in rows] == ["PHI", "OAK"]
+
+
+def test_no_surface_of_a_2017_oakland_figure_says_las_vegas():
+    """N6: headline, corner label, every row, the legend and the key all said
+    `LV`. Every text artist on all four figures is checked, not a sample."""
+    import re
+
+    verdict = oakland_verdict()
+    rows = prepare_rows(oakland_ledger(), verdict)
+    reconciling = replace(
+        verdict, deserved_margin=verdict.actual_margin - sum(r["luck_epa"] for r in rows) * PPE
+    )
+    colours = ("#004C54", "#000000")
+    built = {
+        "dtw": plot_bootstrap_distribution(reconciling, colors=colours, coverage=False)[0],
+        "luck_ledger": plot_luck_ledger_card(reconciling, rows, points_per_epa=PPE, colors=colours)[
+            0
+        ],
+        "card": plot_game_card(reconciling, colors=colours)[0],
+        "waterfall": plot_luck_ledger(reconciling, rows, points_per_epa=PPE, colors=colours)[0],
+    }
+    modern = re.compile(r"\bLV\b")
+    for name, fig in built.items():
+        fig.canvas.draw()
+        said = [
+            text.get_text()
+            for ax in fig.axes
+            for text in ax.texts + ax.get_xticklabels() + ax.get_yticklabels()
+            if modern.search(text.get_text())
+        ]
+        said += [t.get_text() for t in fig.texts if modern.search(t.get_text())]
+        legend_said = [
+            entry.get_text()
+            for ax in fig.axes
+            if ax.get_legend() is not None
+            for entry in ax.get_legend().get_texts()
+            if modern.search(entry.get_text())
+        ]
+        assert said + legend_said == [], f"{name} still says LV"
+        assert any("OAK" in text.get_text() for ax in fig.axes for text in ax.texts), (
+            f"{name} names neither club"
+        )
+
+
+def test_the_corner_and_the_anchor_rows_carry_one_mark_per_club():
+    """N6's second half. `2023_15_LAC_LV` was read as carrying a vintage
+    wordmark on the anchors and a modern shield in the corner. One `logos` map
+    feeds both, and this is the regression test that keeps it that way."""
+    from matplotlib.offsetbox import AnnotationBbox
+
+    from nfl_simulator.plots import verdict_from_row
+
+    row = OAKLAND_ROW | {"game_id": "2023_15_LAC_LV", "home_team": "LV", "away_team": "LAC"}
+    verdict = verdict_from_row(row, np.linspace(-6.0, 15.0, 512))
+    ledger = pl.DataFrame(
+        {
+            "play_id": [101.0, 202.0],
+            "component": ["fumble", "fumble"],
+            "event_class": ["run/live", "run/live"],
+            "charged_team": ["LV", "LAC"],
+            "expected": [0.5, 0.5],
+            "swing": [-2.8, 2.2],
+            "luck_epa": [-1.4, 1.1],
+        }
+    )
+    rows = prepare_rows(ledger, verdict)
+    reconciling = replace(
+        verdict, deserved_margin=verdict.actual_margin - sum(r["luck_epa"] for r in rows) * PPE
+    )
+    raiders = np.zeros((4, 4, 4), dtype=np.uint8)
+    raiders[:, :, 3] = 255
+    chargers = np.full((4, 4, 4), 200, dtype=np.uint8)
+    logos = {"LV": raiders, "LAC": chargers}
+    fig, ax = plot_luck_ledger(
+        reconciling, rows, points_per_epa=PPE, colors=("#000000", "#007BC7"), logos=logos
+    )
+    fig.canvas.draw()
+    drawn = [
+        artist.offsetbox.get_data()
+        for artist in ax.artists
+        if isinstance(artist, AnnotationBbox) and hasattr(artist.offsetbox, "get_data")
+    ]
+    for club in (raiders, chargers):
+        matches = [array for array in drawn if array.shape == club.shape and (array == club).all()]
+        assert matches, "every club on the figure draws its own mark somewhere"
+    assert all(
+        any((array == club).all() for club in (raiders, chargers) if array.shape == club.shape)
+        for array in drawn
+    ), "no third mark reached the figure"

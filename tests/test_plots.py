@@ -28,7 +28,8 @@ from matplotlib.patches import FancyArrowPatch  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from nfl_simulator.plots import (  # noqa: E402
-    ARROW_FLOOR,
+    ANCHOR_HEIGHT,
+    ARROW_FLOOR_SHARE,
     BAND_HIGH,
     BAND_LOW,
     CLEAR_FLIP,
@@ -44,6 +45,7 @@ from nfl_simulator.plots import (  # noqa: E402
     GameVerdict,
     OvertimeToss,
     _draw_luck_arrow,
+    anchor_label,
     attach_overtime_sidebar,
     band_sweep,
     bucket_label,
@@ -3014,7 +3016,7 @@ def test_a_row_that_would_draw_nothing_joins_its_clubs_heap():
     # One event too small to draw, and two of its club's own to join.
     rows = [ledger_row(0.01 / PPE, play_id=1.0, charged_team="GB")]
     rows += [ledger_row(0.4, play_id=float(i), charged_team="GB") for i in (2, 3)]
-    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=10.0)
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=10.0)
     assert grouped.label == "3 small events (GB)"
     assert grouped.n_events == 3
 
@@ -3028,7 +3030,7 @@ def test_a_fold_worth_less_than_the_draw_floor_is_absorbed_too():
     # Two drops that cancel to a third of a tenth, and a fumble to absorb them.
     rows = [drop_row(0.5, 1.0, team="GB"), drop_row(-0.5 + 0.03 / PPE, 2.0, team="GB")]
     rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
-    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=10.0)
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=10.0)
     assert [bar.label for bar in grouped] == ["3 small events (GB)"]
     assert all(abs(bar.points) >= 0.05 for bar in grouped)
 
@@ -3068,7 +3070,7 @@ def test_a_fold_that_would_draw_nothing_on_a_fifty_point_axis_is_absorbed():
     # Two drops that cancel to a fifth of a point, and a fumble to absorb them.
     rows = [drop_row(1.0, 1.0, team="GB"), drop_row(-1.0 + 0.2 / PPE, 2.0, team="GB")]
     rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
-    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=50.0)
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=50.0)
     assert [bar.label for bar in grouped] == ["3 small events (GB)"]
     assert grouped[0].n_events == 3
 
@@ -3081,7 +3083,7 @@ def test_the_same_fold_keeps_its_own_row_on_a_ten_point_axis():
 
     rows = [drop_row(1.0, 1.0, team="GB"), drop_row(-1.0 + 0.2 / PPE, 2.0, team="GB")]
     rows += [ledger_row(0.6, play_id=3.0, charged_team="GB")]
-    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=10.0)
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=10.0)
     assert "2 smaller GB drops" in [bar.label for bar in grouped]
 
 
@@ -3097,7 +3099,7 @@ def test_a_heap_of_one_is_the_event_whatever_it_is_worth():
     rows = [ledger_row(2.0, play_id=1.0, charged_team="KC")]
     rows += [ledger_row(-0.2 / PPE, play_id=2.0, charged_team="SEA")]
     bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
-    labels = [bar.label for bar in group_rows(bars, span=50.0)]
+    labels = [bar.label for bar in group_rows(bars, frame=50.0)]
     assert "1 small event (SEA)" not in labels
     assert labels[-1] == bars[-1].label
 
@@ -3113,7 +3115,7 @@ def test_the_lone_event_rule_wins_over_the_floor_on_jax_cle_s_seven_hundredths()
     rows = [ledger_row(4.0, play_id=1.0, charged_team="JAX")]
     rows += [ledger_row(0.07 / PPE, play_id=2.0, charged_team="CLE")]
     bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
-    labels = [bar.label for bar in group_rows(bars, span=15.0)]
+    labels = [bar.label for bar in group_rows(bars, frame=15.0)]
     assert labels[-1] == bars[-1].label
     assert not any("small event" in label for label in labels)
 
@@ -3127,7 +3129,7 @@ def test_a_club_heap_of_two_that_cancels_under_the_floor_is_kept_and_counted():
     rows = [ledger_row(3.0, play_id=1.0, charged_team="KC")]
     rows += [ledger_row(0.5, play_id=2.0, charged_team="SEA")]
     rows += [ledger_row(-0.5 + 0.02 / PPE, play_id=3.0, charged_team="SEA")]
-    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), span=50.0)
+    grouped = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=50.0)
     heap = next(bar for bar in grouped if bar.team == "SEA")
     assert heap.label == "2 small events (SEA)"
     assert heap.n_events == 2
@@ -3144,7 +3146,7 @@ def test_grouping_still_reconciles_whatever_the_axis_span_is():
     rows += [ledger_row(0.3, play_id=4.0), ledger_row(-0.9, play_id=5.0)]
     bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
     for span in (0.0, 3.0, 12.0, 50.0):
-        assert sum(bar.points for bar in group_rows(bars, span=span)) == pytest.approx(
+        assert sum(bar.points for bar in group_rows(bars, frame=span)) == pytest.approx(
             sum(bar.points for bar in bars), abs=1e-9
         )
 
@@ -4326,12 +4328,17 @@ def test_the_floored_sentence_sits_where_a_drawn_arrow_s_sentence_sits():
     assert offsets[0] == pytest.approx(offsets[1], abs=1.0)
 
 
-def test_a_gap_of_exactly_a_point_still_draws_its_span():
-    """The floor is exclusive: 1.0 is drawn, so the rule has one edge, not a
-    band of games that may or may not have an arrow."""
-    _fig, ax = plot_bootstrap_distribution(_tiny_gap_game(deserved_margin=2.0), arrow=True)
-    assert len(_spans(ax)) == 1
-    assert _arrow_sentence(ax).get_text() == "luck moved the margin 1.0 points toward DET"
+def test_a_gap_of_exactly_the_share_still_draws_its_span():
+    """The floor is inclusive at its own edge, so the rule has one edge rather
+    than a band of games that may or may not have an arrow. Measured against the
+    helper on an axis already pinned, because moving a verdict's deserved margin
+    moves the rule that helps set the limits the share is taken from."""
+    fig, ax = plot_bootstrap_distribution(_tiny_gap_game(), arrow=True)
+    width = float(np.diff(ax.get_xlim())[0])
+    over = _tiny_gap_game(deserved_margin=3.0 - width * ARROW_FLOOR_SHARE * 1.01)
+    under = _tiny_gap_game(deserved_margin=3.0 - width * ARROW_FLOOR_SHARE * 0.99)
+    assert _draw_luck_arrow(ax, over)[0] is not None
+    assert _draw_luck_arrow(ax, under)[0] is None
 
 
 def test_the_arrow_helper_returns_no_span_under_the_floor():
@@ -4341,7 +4348,61 @@ def test_the_arrow_helper_returns_no_span_under_the_floor():
     span, label = _draw_luck_arrow(ax, _tiny_gap_game())
     assert span is None
     assert label.get_text().startswith("luck moved the margin")
-    assert ARROW_FLOOR == 1.0
+
+
+# ---- round 12 Part C: the arrow floor is a share of the axis too ----------
+
+
+def test_the_arrow_floor_is_a_share_of_the_axis_rather_than_a_fixed_point():
+    """Document 63 §7d N1. `ARROW_FLOOR = 1.0` pt was absolute, so a 1.1-pt gap
+    on a 55-pt axis drew as a bare arrowhead with no shaft — the same defect
+    round 11 fixed for the draw floor, one figure over."""
+    import nfl_simulator.plots as plots
+
+    assert plots.ARROW_FLOOR_SHARE == 0.03
+    assert not hasattr(plots, "ARROW_FLOOR")
+
+
+def test_a_gap_that_is_a_point_on_a_wide_axis_draws_no_span():
+    """The `2022_03_CIN_NYJ` Full case: 1.1 pt cleared the old absolute floor
+    and drew about eighteen pixels of shaft on a fifty-five-point axis."""
+    wide = branded(actual_margin=1.1, deserved_margin=0.0, draws=np.linspace(-27.0, 28.0, 512))
+    fig, ax = plot_bootstrap_distribution(wide, arrow=True)
+    width = float(np.diff(ax.get_xlim())[0])
+    assert width > 50.0, "the fixture's premise: a wide axis"
+    assert 1.1 > 1.0, "and a gap the absolute floor would have drawn"
+    assert not _spans(ax)
+
+
+def test_the_same_gap_on_a_narrow_axis_keeps_its_span():
+    """The rule's whole point: one absolute floor cannot be right for both. On a
+    twelve-point axis 1.1 pt is nearly a tenth of the width and is a distance a
+    reader can measure by eye."""
+    narrow = branded(actual_margin=1.1, deserved_margin=0.0, draws=np.linspace(-5.0, 6.0, 512))
+    fig, ax = plot_bootstrap_distribution(narrow, arrow=True)
+    assert float(np.diff(ax.get_xlim())[0]) < 20.0, "the fixture's premise: a narrow axis"
+    assert len(_spans(ax)) == 1
+
+
+def test_the_sentence_is_drawn_whatever_the_span_does():
+    """The number is never lost: the floor takes the patch, not the words."""
+    for game in (
+        branded(actual_margin=1.1, deserved_margin=0.0, draws=np.linspace(-27.0, 28.0, 512)),
+        branded(actual_margin=1.1, deserved_margin=0.0, draws=np.linspace(-5.0, 6.0, 512)),
+    ):
+        _fig, ax = plot_bootstrap_distribution(game, arrow=True)
+        assert _arrow_sentence(ax).get_text().startswith("luck moved the margin 1.1 points")
+
+
+def test_the_two_games_the_round_pins_the_rule_on_keep_their_verdicts():
+    """`2025_13_DEN_WAS` Full — 0.35 pt on about 50 — still has no span, and
+    `2024_19_LAC_HOU` — 19.1 pt on about 55 — still has one."""
+    den_was = branded(actual_margin=1.35, deserved_margin=1.0, draws=np.linspace(-24.0, 26.0, 512))
+    lac_hou = branded(actual_margin=20.0, deserved_margin=0.9, draws=np.linspace(-15.0, 40.0, 512))
+    _fig, ax = plot_bootstrap_distribution(den_was, arrow=True)
+    assert not _spans(ax)
+    _fig, ax = plot_bootstrap_distribution(lac_hou, arrow=True)
+    assert len(_spans(ax)) == 1
 
 
 # --------------------------------------------------------------------------
@@ -4532,3 +4593,247 @@ def test_the_sentence_stays_centred_on_the_rail_when_it_reaches_no_corner():
     ticks = ax.get_yticks()
     rail = [ax.transData.transform((0.0, float(y)))[1] for y in (ticks[0], ticks[-1])]
     assert (box.y0 + box.y1) / 2 == pytest.approx(sum(rail) / 2, abs=1.0)
+
+
+# --------------------------------------------------------------------------
+# round 12 Part B: the draw floor is measured on the frame the reader sees
+# --------------------------------------------------------------------------
+
+
+def _mark() -> np.ndarray:
+    """A 4x4 opaque RGBA square, enough for the layout to place a club's mark."""
+    array = np.zeros((4, 4, 4), dtype=np.uint8)
+    array[:, :, 3] = 255
+    return array
+
+
+def _ledger_reaching(verdict_, bars_epa, team="DET"):
+    """Ledger rows whose bars carry the verdict from its actual to its deserved end."""
+    rows = [ledger_row(epa, play_id=float(i), charged_team=team) for i, epa in enumerate(bars_epa)]
+    moved = sum(-epa * PPE for epa in bars_epa)
+    return rows, replace(verdict_, deserved_margin=verdict_.actual_margin + moved)
+
+
+def test_the_frame_is_the_axis_the_waterfall_actually_draws():
+    """The frame is the span plus a pad at both ends plus the arrow's rail lane,
+    which is what `set_xlim` ends at. Reading it off a helper rather than off a
+    drawn figure is what lets the floor be measured before the fold."""
+    from nfl_simulator.plots import waterfall_frame
+
+    rows, game = _ledger_reaching(verdict(actual_margin=12.0), [0.5, -0.3, 0.2])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    low, high, pad, rail = waterfall_frame(game, bars, logos=True)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE, logos={"DET": _mark()})
+    drawn_low, drawn_high = ax.get_xlim()
+    assert (low - pad, high + pad + rail) == pytest.approx((drawn_low, drawn_high))
+
+
+def test_the_frame_is_wider_than_the_span_by_the_pad_and_the_rail():
+    """Document 63 §7d N5's arithmetic: `pad` is 20% of the drawn width at each
+    end and `rail_room` another 18%, so the frame is at least 1.58x the span. A
+    floor taken on the span is never more than 0.32% of what the reader sees."""
+    from nfl_simulator.plots import waterfall_frame, waterfall_span
+
+    rows, game = _ledger_reaching(verdict(actual_margin=2.0), [0.4, -0.2])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    low, high, pad, rail = waterfall_frame(game, bars, logos=True)
+    frame = (high - low) + 2 * pad + rail
+    assert frame >= 1.58 * waterfall_span(game)
+
+
+def test_the_floor_is_half_a_percent_of_the_axis_the_figure_ends_at():
+    """The pre-registered check, as a unit test: the floor the fold used and the
+    axis the reader sees are the same number, so their ratio is exactly
+    `DRAW_FLOOR_SHARE` rather than a share of some narrower quantity."""
+    from nfl_simulator.plots import DRAW_FLOOR_SHARE, fold_to_frame
+
+    rows, game = _ledger_reaching(verdict(actual_margin=12.0), [0.9, -0.4, 0.02, -0.01, 0.3])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    _folded, frame = fold_to_frame(game, bars, logos=True)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE, logos={"DET": _mark()})
+    drawn = float(np.diff(ax.get_xlim())[0])
+    assert frame == pytest.approx(drawn)
+    assert (frame * DRAW_FLOOR_SHARE) / drawn == pytest.approx(DRAW_FLOOR_SHARE)
+
+
+def test_a_narrow_game_gets_a_floor_the_span_alone_would_not_have_given_it():
+    """`2023_02_WAS_DEN` strict is the worked case: a 2.0-pt span put the floor
+    at 0.01 pt while the frame ran about 12 pt, so a -0.04-pt row cleared the
+    floor and drew one pixel. On the frame the same game's floor is 0.05 pt and
+    that row is folded."""
+    from nfl_simulator.plots import DRAW_FLOOR_SHARE, fold_to_frame, waterfall_span
+
+    rows, game = _ledger_reaching(verdict(actual_margin=2.0, dtw_home=0.6), [0.4, -0.2, 0.045])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    _folded, frame = fold_to_frame(game, bars, logos=True)
+    span_floor = waterfall_span(game) * DRAW_FLOOR_SHARE
+    # N5's arithmetic: pad at both ends plus the rail lane make the frame at
+    # least 1.58x the span, so the floor is at least 1.58x what the span gave.
+    assert frame * DRAW_FLOOR_SHARE >= 1.58 * span_floor
+
+
+def test_the_frame_pass_repeats_until_the_frame_stops_moving():
+    """Folding does **not** preserve the running totals' extremes: two club heaps
+    that cancel replace a tail of alternating steps with one step out and one
+    back, and that excursion can be wider than anything the unfolded bars
+    reached. A single pass would then measure the floor on a narrower axis than
+    the one drawn, so the pass repeats to a fixed point."""
+    from nfl_simulator.plots import fold_to_frame, waterfall_frame
+
+    # Alternating sub-threshold events on two clubs: unfolded they oscillate in
+    # place, folded they become one +heap and one -heap that swing wide.
+    rows = [ledger_row(-0.9, play_id=float(i), charged_team="DET") for i in range(6)]
+    rows += [ledger_row(0.9, play_id=float(i + 10), charged_team="GB") for i in range(6)]
+    game = replace(verdict(actual_margin=6.0), deserved_margin=6.0)
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    folded, frame = fold_to_frame(game, bars, logos=True)
+    low, high, pad, rail = waterfall_frame(game, folded, logos=True)
+    assert frame == pytest.approx((high - low) + 2 * pad + rail), "the fixed point is reached"
+
+
+def test_a_folded_waterfall_still_reconciles_its_two_ends():
+    """Folding is not dropping, whatever the frame turns out to be."""
+    from nfl_simulator.plots import fold_to_frame
+
+    rows, game = _ledger_reaching(verdict(actual_margin=9.0), [1.1, -0.6, 0.02, -0.03, 0.4, 0.01])
+    bars = luck_bars(rows, points_per_epa=PPE, floor=0.0)
+    folded, _frame = fold_to_frame(game, bars, logos=True)
+    assert sum(bar.points for bar in folded) == pytest.approx(
+        game.deserved_margin - game.actual_margin
+    )
+
+
+def test_the_group_rows_keyword_names_the_frame_it_is_a_share_of():
+    """The base changed, so the parameter's name changes with it. A kwarg still
+    called `span` would be the one place the module said the old rule."""
+    from nfl_simulator.plots import group_rows
+
+    rows = [ledger_row(0.01 / PPE, play_id=1.0, charged_team="GB")]
+    rows += [ledger_row(0.4, play_id=float(i), charged_team="GB") for i in (2, 3)]
+    (grouped,) = group_rows(luck_bars(rows, points_per_epa=PPE, floor=0.0), frame=10.0)
+    assert grouped.label == "3 small events (GB)"
+
+
+# --------------------------------------------------------------------------
+# round 12 Part D: an anchor of zero shows a tick
+# --------------------------------------------------------------------------
+
+
+def _ticks(ax) -> list:
+    return [line for line in ax.lines if line.get_gid() == "anchor-tick"]
+
+
+def _anchor_bars(ax) -> list:
+    """The two end rows' bars, which are drawn at the anchors' own height."""
+    return [
+        patch
+        for patch in ax.patches
+        if abs(patch.get_height() - 0.62 * ANCHOR_HEIGHT) < 1e-9 and patch.get_gid() != "side-span"
+    ]
+
+
+def test_a_deserved_anchor_of_zero_shows_a_tick_and_no_bar():
+    """Document 63 §7d N2. `Deserved: even` left the anchor row as a label and a
+    club mark floating with nothing between them, on 19 of the 97 game-editions
+    read. A zero-width bar is nothing to draw, so the row gets a short tick of
+    the anchor colour at x = 0 instead — enough for the eye to find the row."""
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.0), deserved_margin=0.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    fig.canvas.draw()
+    (tick,) = _ticks(ax)
+    assert list(tick.get_xdata()) == [0.0, 0.0]
+    assert len(_anchor_bars(ax)) == 1, "only the actual end still has a bar"
+
+
+def test_the_zero_anchor_tick_is_two_points_of_the_anchor_colour():
+    """Two points wide, so it reads as a mark on the row rather than as a rule."""
+    from nfl_simulator.plots import ANCHOR_TICK_WIDTH, anchor_colour
+
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.0), deserved_margin=0.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE, colors=("#0076B6", "#203731"))
+    (tick,) = _ticks(ax)
+    assert ANCHOR_TICK_WIDTH == 2.0
+    assert tick.get_linewidth() == ANCHOR_TICK_WIDTH
+    assert tick.get_color() == anchor_colour("#0076B6", "#203731")
+
+
+def test_the_tick_stands_on_the_row_the_anchor_labels():
+    """It marks its own row, so it is the anchor bar's height and centred on it."""
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.0), deserved_margin=0.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    (tick,) = _ticks(ax)
+    low, high = sorted(tick.get_ydata())
+    assert high - low == pytest.approx(0.62 * ANCHOR_HEIGHT)
+    assert (low + high) / 2 == pytest.approx(len(luck_bars(rows, points_per_epa=PPE)) + 1)
+
+
+def test_an_actual_tie_shows_a_tick_on_the_actual_anchor():
+    """`2022_01_IND_HOU` is the other half of N2: the game itself was a tie, so
+    `Actual: even` is the row with nothing on it."""
+    rows = [ledger_row(-2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=0.0), deserved_margin=2.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert len(_ticks(ax)) == 1
+    assert len(_anchor_bars(ax)) == 1
+
+
+def test_a_game_level_at_both_ends_shows_two_ticks():
+    """A tie the adjudication also calls level has two empty anchor rows."""
+    rows = [ledger_row(1.0, play_id=1.0, charged_team="DET")]
+    rows += [ledger_row(-1.0, play_id=2.0, charged_team="GB")]
+    game = replace(verdict(actual_margin=0.0), deserved_margin=0.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert len(_ticks(ax)) == 2
+    assert not _anchor_bars(ax)
+
+
+def test_an_anchor_with_a_margin_still_draws_its_bar_and_no_tick():
+    """The control: the rule must not put a tick on the 3,880 games that have
+    two real anchors."""
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=8.0), deserved_margin=6.0)
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert not _ticks(ax)
+    assert len(_anchor_bars(ax)) == 2
+
+
+def test_an_anchor_the_figure_calls_even_gets_the_tick_even_when_it_is_not_exactly_zero():
+    """The tail read's finding on `2025_18_KC_LV`: the label says `Deserved:
+    even` at 0.043 pt and the bar was drawn anyway — 0.75% of the axis, under
+    the 0.5% floor the round just set for event rows, and a row a reader cannot
+    see under a label that says there is nothing to see. One constant decides
+    both: if the figure calls it even, it draws the tick."""
+    from nfl_simulator.plots import ANCHOR_EVEN_EPS
+
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.043), deserved_margin=0.043)
+    assert ANCHOR_EVEN_EPS == 0.05
+    assert anchor_label("Deserved", game.deserved_margin, game) == "Deserved: even"
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert len(_ticks(ax)) == 1
+    assert len(_anchor_bars(ax)) == 1, "only the actual end still has a bar"
+
+
+def test_an_anchor_just_over_the_even_threshold_keeps_its_bar():
+    """The control at the other side of the same constant."""
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    game = replace(verdict(actual_margin=2.06), deserved_margin=0.06)
+    assert anchor_label("Deserved", game.deserved_margin, game) == "Deserved: MIN by 0.1"
+    fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+    assert not _ticks(ax)
+    assert len(_anchor_bars(ax)) == 2
+
+
+def test_the_label_and_the_tick_never_disagree():
+    """Whatever the threshold is, the two rules read it from one place."""
+    from nfl_simulator.plots import ANCHOR_EVEN_EPS
+
+    rows = [ledger_row(2.0 / PPE, play_id=1.0, charged_team="DET")]
+    for margin in (0.0, 0.01, ANCHOR_EVEN_EPS * 0.99, ANCHOR_EVEN_EPS, 0.2, 3.0):
+        game = replace(verdict(actual_margin=2.0 + margin), deserved_margin=margin)
+        fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE)
+        says_even = anchor_label("Deserved", margin, game).endswith("even")
+        assert bool(_ticks(ax)) == says_even, f"{margin} disagrees"

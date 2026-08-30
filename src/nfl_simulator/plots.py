@@ -47,6 +47,11 @@ from nfl_simulator.style import (
     separated,
 )
 
+# The one thing this module takes from `teams`, and it is a rule rather than
+# data: which abbreviation a club played a given season under. Colours, marks
+# and full names are still handed in by the caller — see :func:`team_or_abbr`.
+from nfl_simulator.teams import era_code
+
 # Document 10 Gate V-3's convention: a game whose verdict never changes across
 # the bootstrap. Its interval is a point, and reporting one is misleading.
 DEGENERATE_EPS = 0.001
@@ -334,14 +339,23 @@ def verdict_from_row(
     is Strict and `full_summary.parquet` is Full — and ``counterpart`` is the
     other edition's verdict, for the one line that quotes it. Neither can move
     a number: the row is still the only source of every figure on the image.
+
+    **Round 12: the two club codes are the season's.** The summary artifacts
+    carry the modern abbreviation on every game, so `2017_16_OAK_PHI` arrives
+    with ``away_team == "LV"`` and, until this line, said so on its headline,
+    its corner label, every row, its legend and its key. The verdict is where
+    every surface reads a club code from, so it is the single place the season
+    is applied — see :func:`teams.era_code`. This changes no number; the game
+    id it is taken from is the row's own.
     """
     schedule = schedule or {}
+    season = int(str(row["game_id"])[:4])
     return GameVerdict(
         edition=edition,
         counterpart=counterpart,
         game_id=row["game_id"],
-        home_team=row["home_team"],
-        away_team=row["away_team"],
+        home_team=era_code(row["home_team"], season),
+        away_team=era_code(row["away_team"], season),
         actual_margin=float(row["actual_margin"]),
         deserved_margin=float(row["deserved_margin"]),
         dtw_home=float(row["dtw_home"]),
@@ -726,10 +740,17 @@ ARROW_OFFSET = -28.0
 ARROW_LABEL_OFFSET = -33.0
 UNDER_AXIS_BAND = 30.0
 
-# The smallest luck gap that gets a drawn span, in points of margin. Under it
-# the patch is a few pixels wide and reads as a stray glyph under the axis
-# rather than as a distance; the sentence keeps the number either way.
-ARROW_FLOOR = 1.0
+# The smallest luck gap that gets a drawn span, as a share of the distribution's
+# own axis. Under it the patch is a few pixels wide and reads as a stray glyph
+# under the axis rather than as a distance; the sentence keeps the number either
+# way.
+#
+# **Round 12: a share, not a point.** Document 63 §7d N1. `ARROW_FLOOR = 1.0` pt
+# was absolute, so `2022_03_CIN_NYJ` Full's 1.1-pt gap cleared it and drew a
+# bare arrowhead with no shaft on a 55-pt axis — the same defect round 11 fixed
+# for the draw floor, one figure over. Three percent of the drawn width is a
+# distance a reader can measure by eye on any game.
+ARROW_FLOOR_SHARE = 0.03
 
 # How much taller than its tallest bar the plot is drawn. The annotations above
 # are placed by rule rather than by inspection, so the room they need is made
@@ -843,17 +864,23 @@ def _draw_luck_arrow(ax, verdict: GameVerdict):
     Sign convention: ``actual - deserved`` is what luck added to the home team's
     margin, so a positive gap is luck that helped the home team.
 
-    Under ``ARROW_FLOOR`` the span is dropped and only the sentence is drawn —
-    on `2025_13_DEN_WAS` Full a 0.35 pt gap spanned 17.8 px, which is a stray
-    glyph under the axis rather than a measured distance. Returns
-    ``(None, label)`` there, so a caller can tell a floored figure from one
-    that never asked for an arrow at all.
+    Under :data:`ARROW_FLOOR_SHARE` of the drawn axis the span is dropped and
+    only the sentence is drawn — on `2025_13_DEN_WAS` Full a 0.35 pt gap spanned
+    17.8 px, which is a stray glyph under the axis rather than a measured
+    distance. Returns ``(None, label)`` there, so a caller can tell a floored
+    figure from one that never asked for an arrow at all.
+
+    The floor is read off ``ax.get_xlim()``, which the caller has already pinned
+    — the three rules are drawn with ``clip_on=False`` and count toward the
+    autoscale, so a limit read before they land is not the limit the reader
+    sees.
     """
     gap = verdict.actual_margin - verdict.deserved_margin
     toward = verdict.home_team if gap > 0 else verdict.away_team
     rail = _under_axis(ax, ARROW_OFFSET)
+    low, high = ax.get_xlim()
     span = None
-    if abs(gap) >= ARROW_FLOOR:
+    if abs(gap) >= (high - low) * ARROW_FLOOR_SHARE:
         span = ax.annotate(
             "",
             xy=(verdict.deserved_margin, 0.0),
@@ -1579,12 +1606,33 @@ FOLD_BY_TEAM = (*VARIANT_COMPONENTS, POSSESSION_CAP)
 # Round 11 makes it relative, because an absolute floor cannot mean one thing.
 # 0.05 pt is a bar a reader can see on a three-point game and no bar at all on a
 # fifty-point blowout, and the absolute floor left 270 rows across the corpus
-# still drawing nothing. Half a percent of the axis's span is 0.015 pt on the
-# first game and 0.25 pt on the second, so "visible" means the same thing on
-# both. The span comes from :func:`waterfall_span` — the three numbers the axis
-# is built on, fixed before any fold, so the floor cannot depend on what the
-# floor did.
+# still drawing nothing. Half a percent of the axis is 0.015 pt on the first
+# game and 0.25 pt on the second, so "visible" means the same thing on both.
+#
+# **Round 12: the base is the drawn frame, not the span.** Document 63 §7d N5.
+# The span is `max(0, actual, deserved) − min(0, actual, deserved)`, but the
+# frame the reader sees adds a pad at both ends and a lane for the arrow rail
+# and reaches every running total, so it is at least 1.58x the span and on
+# `2023_02_WAS_DEN` is 6x. A floor taken on the span was never more than 0.32%
+# of the axis, and on a narrow game far less. See :func:`waterfall_frame` and
+# :func:`fold_to_frame`; document 60 §12 carries the dated amendment.
 DRAW_FLOOR_SHARE = 0.005
+
+# The frame the waterfall draws, as shares of the width its bars occupy. Named
+# here rather than written inline in `plot_luck_ledger` because the floor is now
+# measured on this frame, so two places have to agree on it exactly.
+FRAME_PAD_SHARE = 0.20
+FRAME_PAD_SHARE_PLAIN = 0.12
+FRAME_PAD_MIN = 0.5
+FRAME_RAIL_SHARE = 0.18
+FRAME_RAIL_MIN = 0.8
+
+# How many times the frame may be re-measured before the fold is accepted as it
+# stands. The pass is a fixed point — measure the frame, fold to it, measure
+# again — and on 450 games sampled across both editions it settled in at most
+# three passes and never cycled. The cap is here so a game that did cycle would
+# stop rather than spin; Part E counts the games that reach it.
+FRAME_PASSES = 8
 
 # The ledger's fumble classes are `{play type}/{live|aborted}`, which is the
 # simulator's vocabulary rather than a reader's. "aborted" is nflverse's word
@@ -1975,11 +2023,84 @@ def waterfall_span(verdict: GameVerdict) -> float:
     return max(ends) - min(ends)
 
 
+def waterfall_frame(
+    verdict: GameVerdict, bars: Sequence[LuckBar], *, logos: bool = True
+) -> tuple[float, float, float, float]:
+    """``(low, high, pad, rail_room)`` — the frame this bar list would be drawn in.
+
+    The axis runs from ``low - pad`` to ``high + pad + rail_room``, which is
+    exactly what :func:`plot_luck_ledger` passes to ``set_xlim``. Both call this,
+    so the floor and the drawn frame cannot disagree by a rounding.
+
+    ``low`` and ``high`` reach further than :func:`waterfall_span`'s three
+    numbers: the running totals walk from the actual margin to the deserved one
+    and can swing outside both on the way. That is the whole of document 63
+    §7d's N5 — the span the floor was taken on was not the axis the reader saw.
+    """
+    spans = running_totals(bars, verdict.actual_margin)
+    xs = [0.0, float(verdict.actual_margin), float(verdict.deserved_margin)]
+    xs += [x for span in spans for x in span]
+    low, high = min(xs), max(xs)
+    # The end bars' club marks hang outside their own ends, so a game with logos
+    # needs more room at both edges than one without.
+    pad = max((FRAME_PAD_SHARE if logos else FRAME_PAD_SHARE_PLAIN) * (high - low), FRAME_PAD_MIN)
+    # The luck arrow runs down a rail outside the bars, and its label is rotated
+    # against that rail, so the frame reserves a lane for both.
+    rail_room = max(FRAME_RAIL_SHARE * (high - low), FRAME_RAIL_MIN)
+    return low, high, pad, rail_room
+
+
+def frame_width(verdict: GameVerdict, bars: Sequence[LuckBar], *, logos: bool = True) -> float:
+    """How wide that frame is, in points of margin — the axis the reader sees."""
+    low, high, pad, rail_room = waterfall_frame(verdict, bars, logos=logos)
+    return (high - low) + 2.0 * pad + rail_room
+
+
+def fold_to_frame(
+    verdict: GameVerdict,
+    bars: Sequence[LuckBar],
+    *,
+    logos: bool = True,
+    passes: int = FRAME_PASSES,
+) -> tuple[list[LuckBar], float]:
+    """Fold to a floor that is half a percent of the frame the fold is drawn in.
+
+    **Why this is a loop and not one pass.** The round was specified as two
+    passes — measure the frame from the unfolded bars, then fold to it — on the
+    premise that "the anchors and running totals are fixed by the sums, which
+    folding preserves". The sums are preserved; the *running totals* are not.
+    Folding replaces a tail of alternating sub-threshold steps with one heap per
+    club, and two heaps that cancel swing out and back through an excursion
+    wider than anything the unfolded tail reached. Measured over 450 sampled
+    game-editions, one pass left the floor measured on an axis more than 10%
+    away from the drawn one on **27 of them** — which is the pre-registered
+    check in Part E, missed by construction.
+
+    So the pass repeats until the frame stops moving. It is a fixed point, not a
+    convergence argument: when ``frame_width`` of the folded bars equals the
+    frame they were folded to, the floor the reader's axis implies and the floor
+    the fold used are the same number. On the same 450 that took one further
+    pass on 169 games, two on 2, and never more; ``passes`` caps it so a game
+    that did cycle stops with the last frame it measured rather than spinning.
+
+    Returns ``(folded bars, frame width)``.
+    """
+    frame = frame_width(verdict, bars, logos=logos)
+    folded = list(bars)
+    for _ in range(passes):
+        folded = group_rows(bars, frame=frame)
+        measured = frame_width(verdict, folded, logos=logos)
+        if measured == frame:
+            break
+        frame = measured
+    return folded, frame
+
+
 def group_rows(
     bars: Sequence[LuckBar],
     threshold: float = GROUP_THRESHOLD,
     *,
-    span: float = 0.0,
+    frame: float = 0.0,
 ) -> list[LuckBar]:
     """Fold the sub-threshold bars so a Full-edition waterfall stays a figure.
 
@@ -2000,13 +2121,16 @@ def group_rows(
     was. Split by charged team it is two rows, each with its club's mark.
 
     **And nothing draws an empty row.** A fold worth less than
-    :data:`DRAW_FLOOR_SHARE` of ``span`` is absorbed into its club's heap,
+    :data:`DRAW_FLOOR_SHARE` of ``frame`` is absorbed into its club's heap,
     because a bar with no width tells a reader nothing while still costing them
-    a row to read. ``span`` is the waterfall's own axis width — see
-    :func:`waterfall_span` — so the same fold is a visible bar on a three-point
-    game and an empty row on a fifty-point one, which is what round 11 changed:
-    an absolute floor left 270 rows across the corpus drawing nothing. A caller
-    with no axis to speak of passes no span, and then no fold meets a floor.
+    a row to read. ``frame`` is the width of the axis the figure ends at — see
+    :func:`waterfall_frame`, and :func:`fold_to_frame` for the pass that
+    supplies it — so the same fold is a visible bar on a three-point game and an
+    empty row on a fifty-point one, which is what round 11 changed: an absolute
+    floor left 270 rows across the corpus drawing nothing. Round 12 moved the
+    base from the span to the frame, because the two differ by a factor of
+    between 1.58 and 6. A caller with no axis to speak of passes no frame, and
+    then no fold meets a floor.
 
     **Round 11: a heap of one is the event.** A club whose remainder is a single
     event keeps that event under its own words whatever it is worth. `1 small
@@ -2020,7 +2144,7 @@ def group_rows(
     went into it, so the waterfall still reconciles its two ends whatever
     ``span`` is.
     """
-    floor = abs(span) * DRAW_FLOOR_SHARE
+    floor = abs(frame) * DRAW_FLOOR_SHARE
     # A row that is already a heap joins its club's heap whatever it is worth.
     # `luck_bars` folds under a tenth of a point and this folds under a point,
     # so a Full game arrives with a club's remainder in two pieces — and on
@@ -2337,6 +2461,22 @@ HOW_TO_READ = (
 )
 
 
+# How wide the tick on a zero anchor is drawn, in points. Two is a mark on a
+# row; anything thicker reads as a rule running down the plot, and the waterfall
+# already has one of those at x = 0.
+ANCHOR_TICK_WIDTH = 2.0
+
+# When an anchor is close enough to zero that the figure calls it `even`. One
+# constant for two rules — :func:`anchor_label` prints the word and
+# :func:`_draw_anchor` draws the tick — because the round-12 tail read found
+# them disagreeing: `2025_18_KC_LV`'s deserved margin is 0.043 pt, the label
+# said `Deserved: even`, and a bar 0.75% of the axis wide was drawn under it.
+# That is under the 0.5% floor the same round set for event rows: a row a reader
+# cannot see, beneath a label saying there is nothing to see. 16 of the 29
+# `even` anchors in the corpus were that shape.
+ANCHOR_EVEN_EPS = 0.05
+
+
 def anchor_colour(home_colour: str, away_colour: str) -> str:
     """Ink for the two totals, stepping to the neutral when a club sits too near it.
 
@@ -2391,7 +2531,7 @@ def anchor_label(kind: str, margin: float, verdict: GameVerdict) -> str:
     one to a tenth because it is an estimate — the same rule
     :func:`margin_sentence` already states.
     """
-    if abs(margin) < 0.05:
+    if abs(margin) < ANCHOR_EVEN_EPS:
         return f"{kind}: even"
     size = f"{abs(margin):.0f}" if kind == "Actual" else f"{abs(margin):.1f}"
     return f"{kind}: {_favoured(margin, verdict)} by {size}"
@@ -2470,6 +2610,47 @@ def _draw_side_tints(
     return corners
 
 
+def _draw_anchor(ax, y: float, margin: float, colour: str) -> None:
+    """One end row: a bar from zero out to the margin, or a tick when it is zero.
+
+    Document 63 §7d N2. `Deserved: even` — and `Actual: even` on a tie — asks for
+    a bar of zero width, which draws nothing, and the row is then a label and a
+    club mark with empty plot between them. It happened on 19 of the 97
+    game-editions the round-11 tail read opened.
+
+    **A zero anchor draws no bar by design**: there is no distance to show, and
+    inventing a minimum-width bar would state a margin the game did not have. So
+    the row keeps its label and its mark and gains a short tick of the anchor
+    colour at x = 0, the height of the bar it stands in for, so the eye can find
+    the row's position on the axis.
+
+    "Zero" is :data:`ANCHOR_EVEN_EPS` — the same threshold
+    :func:`anchor_label` prints `even` at, so the words and the mark can never
+    disagree. An exactly-zero anchor is rare (13 of 3,900); an anchor the figure
+    already calls `even` and then draws a two-pixel bar under is not (16 more).
+    """
+    if abs(margin) < ANCHOR_EVEN_EPS:
+        half = 0.31 * ANCHOR_HEIGHT
+        (tick,) = ax.plot(
+            [0.0, 0.0],
+            [y - half, y + half],
+            color=colour,
+            linewidth=ANCHOR_TICK_WIDTH,
+            solid_capstyle="butt",
+            zorder=2,
+        )
+        tick.set_gid("anchor-tick")
+        return
+    ax.barh(
+        y,
+        abs(margin),
+        left=min(0.0, margin),
+        height=0.62 * ANCHOR_HEIGHT,
+        color=colour,
+        zorder=2,
+    )
+
+
 def plot_luck_ledger(
     verdict: GameVerdict,
     rows,
@@ -2512,10 +2693,15 @@ def plot_luck_ledger(
     # Chronological order is the game's story and grouping would break it: a
     # folded row has no place on a timeline. Every other reading is the
     # adjudication's, and there the fold is what keeps fifty events a figure.
+    frame_low = frame_high = frame_pad = frame_rail = None
     if not chronological:
         # The floor a row has to clear to be worth drawing is a share of this
-        # figure's own axis, so the figure is what supplies it.
-        bars = group_rows(bars, span=waterfall_span(verdict))
+        # figure's own axis, so the figure is what supplies it — and the frame
+        # the fold was measured on is the frame the figure is then drawn in.
+        bars, _frame = fold_to_frame(verdict, bars, logos=bool(logos))
+        frame_low, frame_high, frame_pad, frame_rail = waterfall_frame(
+            verdict, bars, logos=bool(logos)
+        )
     gap = verdict.deserved_margin - verdict.actual_margin
     drift = abs(sum(bar.points for bar in bars) - gap)
     if drift > 1e-6:
@@ -2548,14 +2734,7 @@ def plot_luck_ledger(
             spans = running_totals(bars, verdict.actual_margin)
             rows_y = np.arange(len(bars) + 2, dtype=float)
 
-            ax.barh(
-                rows_y[0],
-                abs(verdict.actual_margin),
-                left=min(0.0, verdict.actual_margin),
-                height=0.62 * ANCHOR_HEIGHT,
-                color=ends_colour,
-                zorder=2,
-            )
+            _draw_anchor(ax, rows_y[0], verdict.actual_margin, ends_colour)
             for y, bar, (begin, end) in zip(rows_y[1:-1], bars, spans, strict=True):
                 ax.barh(
                     y,
@@ -2611,14 +2790,7 @@ def plot_luck_ledger(
                     ),
                     zorder=5,
                 )
-            ax.barh(
-                rows_y[-1],
-                abs(verdict.deserved_margin),
-                left=min(0.0, verdict.deserved_margin),
-                height=0.62 * ANCHOR_HEIGHT,
-                color=ends_colour,
-                zorder=2,
-            )
+            _draw_anchor(ax, rows_y[-1], verdict.deserved_margin, ends_colour)
 
             # A club's mark at each end, so the two totals are read as "this
             # team's game" without having to parse a sign. The actual end wears
@@ -2695,15 +2867,12 @@ def plot_luck_ledger(
             # The outermost bar ends at the outermost x, and its value label sits
             # beyond that — without room reserved for it the label runs out of the
             # frame and lands on the row names.
-            xs = [0.0, verdict.actual_margin, verdict.deserved_margin]
-            xs += [x for span in spans for x in span]
-            low, high = min(xs), max(xs)
-            # The end bars' club marks hang outside their own ends, so a game
-            # with logos needs more room at both edges than one without.
-            pad = max((0.20 if logos else 0.12) * (high - low), 0.5)
-            # The luck arrow runs down a rail outside the bars, and its label is
-            # rotated against that rail, so the frame reserves a lane for both.
-            rail_room = max(0.18 * (high - low), 0.8)
+            # The frame the fold was measured on, re-used rather than recomputed:
+            # a chronological figure does not fold and measures its own here.
+            if frame_low is None:
+                low, high, pad, rail_room = waterfall_frame(verdict, bars, logos=bool(logos))
+            else:
+                low, high, pad, rail_room = frame_low, frame_high, frame_pad, frame_rail
             x_rail = high + pad * 0.9
             ax.set_xlim(low - pad, high + pad + rail_room)
             # `shield=True`, as the distribution passes. Document 60 §7 justified

@@ -778,6 +778,15 @@ the new `waterfall_span` and fixed before any fold, a club heap holding exactly
 one event keeps that event's own words whatever it is worth, and a club heap of
 two or more that still cancels under the floor is kept and counted.
 
+> **Amendment, 2026-08-29 (round 12, §13b).** The base is no longer the span. It
+> is the **drawn frame** — the axis `set_xlim` ends at, which reaches every
+> running total and adds a pad at both ends plus the arrow's rail lane, and is
+> between 1.58× and 6× the span. `DRAW_FLOOR_SHARE` keeps its name and its
+> value; `group_rows`' keyword is `frame` rather than `span`; `waterfall_frame`
+> and `fold_to_frame` are the two new functions, and `waterfall_span` survives
+> only as a reported statistic. Everything else in §11a stands unchanged —
+> rules 2 and 3 in particular.
+
 Nine tests, written first and watched fail. 864 → **873**, ruff clean.
 
 ### 12b. What the corpus said
@@ -818,3 +827,130 @@ Raiders marks on one figure; **N1**, the luck arrow's floor is still absolute, s
 a 1.1-pt arrow on a 55-pt axis is a bare arrowhead; **N2**, an anchor of zero
 draws no bar at all, on 19 of the 97; **N3** and **N4**, two dark clubs or two
 shades of one hue collapsing the side tints, the legend and the key.
+
+## 13. Round 12 — the club a game was played by, and two floors on the axis
+
+`fix/figure-round-12`, from `handoff-2026-08-29-figures-r12.md`. The last figure
+round before the write-up. Four of document 63 §7d's six new classes are closed
+and two are parked; the corpus is the verification.
+
+### 13a. N6 — the club a game was played by
+
+The summary and ledger artifacts carry the **modern** abbreviation on every
+game, so `2017_16_OAK_PHI` arrived as `LV` and said so on its headline, its
+corner label, all seven row labels, its legend and its `wins by` key.
+
+`teams.era_code(abbr, season)` reads a three-row `RELOCATIONS` table
+**forwards** from the season — `LV` → `OAK` through 2019, `LAC` → `SD` through
+2016, `LA` → `STL` through 2015 — so a 2021 Las Vegas game stays Las Vegas by
+construction rather than by a special case. The season is threaded through
+`team_name`, `team_colors`, `team_logo`, `resolve_pair` and `pair_colors`, and
+applied at the two places club codes enter a figure: `plots.verdict_from_row`
+and `render.prepare_rows`. No number moves; the season comes from the game id
+the row already carries.
+
+Two things the round measured rather than assumed. nflverse's
+`team_logo_espn` column gives **OAK, SD and STL the same URL as their
+successors**, so the drawn mark is unchanged in this window — the season now
+decides the cache key (`data/logos/OAK.png`) and nothing else. And the "two
+Raiders marks on one figure" half of N6 **does not reproduce**: one `logos` map
+feeds the corner, the anchors and the row column, the round-11 render's two
+marks are the same shield at two sizes, and the invariant is now locked by a
+test and measured at **0** corpus-wide.
+
+### 13b. N5 — the draw floor is a share of the drawn frame
+
+§12a's amendment. The base moves from the span
+`max(0, actual, deserved) − min(0, actual, deserved)` to the **frame the reader
+sees**: the axis `set_xlim` ends at, which reaches every running total and adds
+a pad at both ends plus the arrow's rail lane. Measured over the corpus the
+frame is a median **1.66×** the span, never less than **1.58×**, and on the
+narrowest game **69.6×**. `DRAW_FLOOR_SHARE` keeps its name and its value;
+`group_rows`' keyword is `frame`; `waterfall_frame` and `frame_width` are new
+and `waterfall_span` survives as a reported statistic.
+
+**The fold runs to a fixed point, and that is a deviation from the settled
+two-pass rule.** The rule was specified as: measure the frame from the unfolded
+bars, then fold to it, on the premise that folding preserves the running totals.
+It does not — two club heaps that cancel step out and back through an excursion
+wider than the tail they replaced — and on 208 sampled game-editions one pass
+left the floor measured on an axis more than 10% from the drawn one on **27** of
+them, which would have missed §13d's pre-registered band by construction. So
+`fold_to_frame` repeats until the frame stops moving: one pass on 279 of 450
+sampled, two on 169, three on 2, never more. At the fixed point the floor and
+the drawn axis are one number, and the corpus measures floor / axis at
+**0.5000%** on all 3,900, median and maximum alike.
+
+### 13c. N1 and N2 — the arrow's floor, and an anchor of zero
+
+`ARROW_FLOOR = 1.0` pt is removed; `ARROW_FLOOR_SHARE = 0.03` is read against
+the axis the caller has already pinned. **3,080** game-editions clear the old
+absolute floor and **1,866** clear the new one: 1,256 lose a span that was a
+stray glyph on a wide axis, 42 gain one that is a measurable distance on a
+narrow one. The sentence is drawn either way and keeps the number.
+
+An anchor the figure calls `even` draws **no bar by design** — there is no
+distance to show, and a minimum-width bar would state a margin the game did not
+have — and gains a 2-pt tick of the anchor colour at x = 0, the height of the
+bar it stands in for. `ANCHOR_EVEN_EPS = 0.05` is read by both `anchor_label`
+and `_draw_anchor`, so the words and the mark cannot disagree. **That constant
+is Part E's finding, not Part D's rule as written**: the tick first fired on
+`margin == 0.0`, which is 13 of the corpus's 29 `even` anchors, and the other 16
+drew a two-pixel bar under a label saying there was nothing to see. The corpus
+now measures **29 `even` anchors, 29 ticks, 0 without one**.
+
+N3 (two dark clubs, identical side tints) and N4 (same-hue matchups) are parked
+in document 63 §8 with no code.
+
+### 13d. What the corpus said
+
+15,600 PNGs — 4 × 3,900, matching exactly — in **73.8 minutes on 12 workers**,
+worst replay gap **`0.00e+00`**. 873 → **919** tests, ruff clean.
+
+**Sixteen of seventeen pre-registered checks landed.** 15,600 files on disk; 0
+texts naming a club by a code wrong for its season, over the 79 game-editions
+where a club had not yet moved, and 0 such codes in the verdict or the prepared
+rows; 0 figures with two marks for one club and 0 marks from outside the logo
+map; 0 waterfalls whose floor over the drawn axis falls outside 0.5% ± 0.05%; 0
+drawn arrow spans under 3% of their axis; 0 `even` anchors without a tick; 0
+title/stamp overlaps, 0 corner strikes, 0 arrow-sentence overlaps, 0 rows
+labelled `1 small event` or `events under`, 0 anonymous rows, 3,900 of 3,900
+distribution figures on two rule rows.
+
+**One pre-registered zero missed, reported not loosened.** `rows_under_floor_other`
+is **1**, not 0: `2022_02_IND_JAX` full's `8 smaller JAX drops` at −0.214 pt.
+The frame–fold map has a **2-cycle** on that game. Fold at a 0.2138-pt floor and
+20 rows survive, whose frame measures 44.03 pt; fold at that frame's 0.2201-pt
+floor and 19 rows survive, whose frame measures 42.75 pt; and back. `fold_to_frame`
+caps at eight passes and returns the last fold with **its own** frame, which is
+why the floor-over-axis check still holds exactly — but that fold was made at a
+floor a thousandth of a point below the one the returned frame implies, and this
+row falls in the gap.
+
+There is **no assignment that satisfies both checks on this game.** Taking the
+larger frame's fold instead — 19 rows, no row under its floor — would leave the
+floor at 0.2201 pt on an axis of 42.75, which is **0.515%**, outside the ±0.05
+pp band. A one-line conservative tie-break (on non-convergence, fold at the
+largest frame seen and report `frame_width` of that fold) would clear both
+counts at the cost of folding slightly more than the drawn axis requires. It is
+**not applied**: changing a rule after seeing its check fail is the move
+constraint 5 exists to prevent, and the threshold is the maintainer's.
+
+Severity is cosmetic either way. The row sorts last, carries its label and its
+club's mark, and is 0.5% of the axis wide.
+
+**Reported, not pre-registered to a number.** Rows drawing under the floor total
+**717** (686 Strict, 31 Full) in 648 game-editions, against round 11's 392 — 244
+rule-2 lone events, 472 rule-3 cancelling heaps, and the one above. The floor
+rose and the two exemptions did not, so the count could only rise; it is the
+residue those rules buy. Draw floor median 0.087 pt, maximum 0.395 pt. Waterfall
+rows at the maximum unchanged, 15 Strict and 25 Full. 29 `even` anchors, 1,866
+arrow spans drawn.
+
+### 13e. The tail, read again
+
+33 PNGs from the final corpus, all opened — see document 63 §9. Four of §7d's
+classes are closed on the games that raised them, one class is withdrawn as a
+misread, two are parked, and three cosmetic observations are new: the 2-cycle
+game above, `2022_07_KC_SF` full's stub span at 3.01% of its axis, and the
+zero-anchor tick reading as a segment of the dashed zero rule on one game.
