@@ -26,6 +26,7 @@ PNG is a committed artifact, which is why the script caps each at 500 KB
 
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 
@@ -91,6 +92,238 @@ DOC_CHECKS = {
     "n_games_full": (1139, 0),
     "full_bucket_moves": (190, 0),
 }
+
+
+# --------------------------------------------------------------------------
+# document 64 — the one-simulator summary
+# --------------------------------------------------------------------------
+
+# Round 2 presents **one** simulator: the Full edition over the seasons FTN
+# charting reaches. Every headline number the article quotes about that corpus
+# is computed here and written into `docs/research/64-one-simulator-summary.md`.
+# These are document 64's own numbers rather than a reproduction of an older
+# document's, so they are computed and published, not `check`ed — the checks
+# below still bind every figure that redraws a *published* number.
+ONE_SIM_ARTIFACT = "full_summary.parquet"
+
+# Document 33's degeneracy definition, quoted from `research/48_magnitude_audit.py`
+# (which took it from document 10, gate V-3) rather than restated: a DTW% outside
+# the open interval is a game the bootstrap never moves off its verdict.
+DEGENERATE_LOW = 0.001
+DEGENERATE_HIGH = 0.999
+
+# Document 33 §5's margin-movement thresholds, of which the article quotes one.
+MARGIN_THRESHOLD = 3.0
+
+
+def one_simulator_summary() -> dict:
+    """Every number document 64 publishes about the 1,139-game corpus.
+
+    Definitions are document 33's, taken from `research/48_magnitude_audit.py`
+    verbatim so the two documents can be read side by side: a **sign flip** is a
+    sign disagreement between the two margins with both kinds of tie excluded, a
+    game is **too close to call** inside DTW% 0.40-0.60, and it is **degenerate**
+    outside (0.001, 0.999).
+
+    The three buckets partition the corpus. `clear flip` uses the DTW%
+    definition — the bootstrap put the realized winner below even money — with
+    the band taking precedence, which is document 33 §2a's resolution and the
+    one `full_vs_strict`'s `bucket` already draws.
+    """
+    games = pl.read_parquet(OUTPUTS / ONE_SIM_ARTIFACT)
+    actual = games["actual_margin"].to_numpy().astype(float)
+    deserved = games["deserved_margin"].to_numpy().astype(float)
+    dtw = games["dtw_home"].to_numpy().astype(float)
+    n_events = games["n_events"].to_numpy().astype(int)
+    n_dropped = games["n_dropped_picks"].to_numpy().astype(int)
+    n_drops = games["n_receiver_drops"].to_numpy().astype(int)
+    check("n_games_full", games.height)
+
+    home_won = actual > 0
+    realized_tie = actual == 0
+    deserved_tie = deserved == 0
+    sign_flip = (home_won != (deserved > 0)) & ~realized_tie & ~deserved_tie
+    # A drawn game the ledger gives a winner to. Document 33 counts it in its
+    # own category rather than as a flip, because a tie has no winner to flip.
+    tie_broken = realized_tie & ~deserved_tie
+
+    too_close = (dtw >= BAND_LOW) & (dtw <= BAND_HIGH)
+    dtw_flip = (home_won != (dtw > 0.5)) & ~realized_tie
+    clear_flip = dtw_flip & ~too_close
+    # The band absorbs the two definitions' quarrel — but that is a claim about
+    # two label *sets*, so it is compared element-wise. Equal totals would not
+    # have shown it: document 33's defect register is a round that thought they
+    # would.
+    clear_sign_flip = sign_flip & ~too_close
+    agrees = ~(clear_flip | too_close)
+    degenerate = (dtw <= DEGENERATE_LOW) | (dtw >= DEGENERATE_HIGH)
+
+    shift = np.abs(deserved - actual)
+    largest = int(np.argmax(shift))
+
+    return {
+        "n_games": games.height,
+        "seasons": sorted({int(gid[:4]) for gid in games["game_id"]}),
+        "sign_flips": int(sign_flip.sum()),
+        "sign_flip_share": float(sign_flip.mean()),
+        "sign_flips_naive": int(((deserved > 0) != (actual > 0)).sum()),
+        "realized_ties": int(realized_tie.sum()),
+        "tie_broken": int(tie_broken.sum()),
+        "dtw_flips": int(dtw_flip.sum()),
+        # Element-wise, never a difference of two totals: document 33's defect
+        # register records the round that quoted a net as a disagreement count.
+        "flip_disagreements": int((sign_flip != dtw_flip).sum()),
+        "clear_flip_disagreements": int((clear_sign_flip != clear_flip).sum()),
+        "non_degenerate": int((~degenerate).sum()),
+        "sign_flips_non_degenerate": int((sign_flip & ~degenerate).sum()),
+        "clear_flips": int(clear_flip.sum()),
+        "too_close": int(too_close.sum()),
+        "agrees": int(agrees.sum()),
+        "degenerate": int(degenerate.sum()),
+        "degenerate_share": float(degenerate.mean()),
+        "median_abs_shift": float(np.median(shift)),
+        "over_threshold": int((shift > MARGIN_THRESHOLD).sum()),
+        "over_threshold_share": float((shift > MARGIN_THRESHOLD).mean()),
+        "largest_shift": float(shift[largest]),
+        "largest_shift_game": str(games["game_id"][largest]),
+        "largest_shift_actual": float(actual[largest]),
+        "largest_shift_deserved": float(deserved[largest]),
+        "median_events": float(np.median(n_events)),
+        "mean_events": float(n_events.mean()),
+        "share_with_dropped_pick": float((n_dropped >= 1).mean()),
+        "share_with_receiver_drop": float((n_drops >= 1).mean()),
+        "median_dropped_picks": float(np.median(n_dropped)),
+        "median_receiver_drops": float(np.median(n_drops)),
+    }
+
+
+def print_summary(summary: dict) -> None:
+    """Document 64's table, printed so every number in it has a run behind it."""
+    n = summary["n_games"]
+    seasons = summary["seasons"]
+
+    def share(count: int) -> str:
+        return f"{count:5d}  ({count / n * 100:5.2f}%)"
+
+    print(
+        f"\n{'=' * 72}\nDOCUMENT 64 — the one simulator, {n:,} games "
+        f"{seasons[0]}-{seasons[-1]}\n{'=' * 72}"
+    )
+    print(f"  games                                {n:5d}")
+    print(f"  sign flips (deserved != scoreboard)  {share(summary['sign_flips'])}")
+    print(f"  realized ties given a winner         {summary['tie_broken']:5d}")
+    print(
+        f"  the same count with no tie rule      {summary['sign_flips_naive']:5d}  "
+        "(what the handoff's spot check reported)"
+    )
+    print(f"  DTW% flips (the other definition)    {share(summary['dtw_flips'])}")
+    print(
+        f"  the two definitions disagree on      {summary['flip_disagreements']:5d}  "
+        "(element-wise, never a difference of totals)"
+    )
+    print(f"  non-degenerate games                 {share(summary['non_degenerate'])}")
+    print(
+        f"  sign flips among those               {summary['sign_flips_non_degenerate']:5d}  "
+        f"({summary['sign_flips_non_degenerate'] / summary['non_degenerate'] * 100:5.2f}% "
+        "of the non-degenerate remainder)"
+    )
+    print(f"  clear flips (DTW%, outside the band) {share(summary['clear_flips'])}")
+    print(
+        f"  ... on which the two definitions      "
+        f"disagree about {summary['clear_flip_disagreements']} games (element-wise)"
+    )
+    print(f"  too close to call (0.40-0.60)        {share(summary['too_close'])}")
+    print(f"  scoreboard holds                     {share(summary['agrees'])}")
+    print(f"  degenerate (outside 0.001-0.999)     {share(summary['degenerate'])}")
+    print(f"  median |deserved - actual|           {summary['median_abs_shift']:5.2f} pt")
+    print(
+        f"  moving more than {MARGIN_THRESHOLD:.0f} pt              "
+        f"{share(summary['over_threshold'])}"
+    )
+    print(
+        f"  largest swing                        {summary['largest_shift']:5.2f} pt  "
+        f"{summary['largest_shift_game']} "
+        f"({summary['largest_shift_actual']:+.0f} -> "
+        f"{summary['largest_shift_deserved']:+.2f})"
+    )
+    print(
+        f"  luck events per game                 median "
+        f"{summary['median_events']:.0f}, mean {summary['mean_events']:.1f}"
+    )
+    print(
+        f"  games with >= 1 dropped-pick chance  {summary['share_with_dropped_pick'] * 100:5.2f}%"
+    )
+    print(
+        f"  games with >= 1 catchable ball       {summary['share_with_receiver_drop'] * 100:5.2f}%"
+    )
+
+
+# The game the article walks through, and the one fumble row document 64 §7
+# prints term by term. The play is named rather than picked by a rule so the
+# document and the article can never quote two different events: it is the
+# Washington sack-fumble at 6:43 of the second quarter.
+WALKTHROUGH_GAME = "2025_13_DEN_WAS"
+WORKED_FUMBLE_PLAY = 1438.0
+
+
+def worked_fumble_example() -> dict:
+    """One fumble row of the walk-through game, with every term of `luck(e)`.
+
+    The row comes from the Full edition's own replay — the same one the game
+    figures are drawn from, and checked against the published summary before it
+    is read — so the article's worked example is the event the ledger booked
+    rather than an illustration built to match it.
+    """
+    from nfl_simulator.render import load_sources, replay
+
+    sources = load_sources()
+    row = sources.game_row(WALKTHROUGH_GAME, edition="full")
+    result, _gaps = replay(
+        WALKTHROUGH_GAME, row, sources.schedule_row(WALKTHROUGH_GAME), edition="full"
+    )
+    ledger = result.ledger.to_frame().filter(
+        (pl.col("component") == "fumble") & (pl.col("play_id") == WORKED_FUMBLE_PLAY)
+    )
+    if ledger.height != 1:
+        raise AssertionError(
+            f"{WALKTHROUGH_GAME} play {WORKED_FUMBLE_PLAY:.0f} is not one fumble row "
+            f"in the Full ledger ({ledger.height} rows). Pick the event again."
+        )
+    event = ledger.to_dicts()[0]
+    quarters = (
+        pl.read_parquet(paths.pbp_path(int(WALKTHROUGH_GAME[:4])))
+        .filter((pl.col("game_id") == WALKTHROUGH_GAME) & (pl.col("play_id") == WORKED_FUMBLE_PLAY))
+        .select("qtr", "time")
+        .to_dicts()
+    )
+    return {
+        "game_id": WALKTHROUGH_GAME,
+        "play_id": event["play_id"],
+        "quarter": int(quarters[0]["qtr"]) if quarters else None,
+        "clock": quarters[0]["time"] if quarters else None,
+        "event_class": event["event_class"],
+        "charged_team": event["charged_team"],
+        "y": event["actual"],
+        "p": event["expected"],
+        "swing": event["swing"],
+        "luck_epa": event["luck_epa"],
+        "luck_points": event["luck_epa"] * sources.slope,
+        "slope": sources.slope,
+    }
+
+
+def print_worked_fumble(event: dict) -> None:
+    """Document 64 §7's five lines, each one an arithmetic step a reader can redo."""
+    print(f"\n{'=' * 72}\nDOCUMENT 64 §7 — one fumble, term by term\n{'=' * 72}")
+    print(f"  game            {event['game_id']}, Q{event['quarter']} {event['clock']}")
+    print(f"  class           {event['event_class']}, charged to {event['charged_team']}")
+    print(f"  y  (what happened)          {event['y']:.0f}   (1 = the charged team recovered)")
+    print(f"  p  (the class's shrunk rate) {event['p']:.4f}")
+    print(f"  swing (both branches apart) {event['swing']:+.4f} EPA")
+    print(
+        f"  luck = (y - p) x swing      {event['luck_epa']:+.4f} EPA"
+        f"   = {event['luck_points']:+.3f} pt at {event['slope']:.4f} pt/EPA"
+    )
 
 
 def check(name: str, value: float) -> float:
@@ -766,9 +999,24 @@ def audit() -> None:
     print(f"\n{len(files)} images in {FIGURE_DIR.relative_to(paths.REPO_ROOT)}, none over 500 KB")
 
 
+def summary_only() -> dict:
+    """`--summary`: document 64's numbers, and nothing drawn.
+
+    Kept separate from :func:`main` because the document is checked far more
+    often than the figures are redrawn, and because a run that writes no PNG
+    cannot leave a half-updated figure directory behind.
+    """
+    summary = one_simulator_summary()
+    print_summary(summary)
+    event = worked_fumble_example()
+    print_worked_fumble(event)
+    return {"summary": summary, "worked_fumble": event}
+
+
 def main() -> None:
     apply_base_style()
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
+    summary_only()
 
     print("game figures ...")
     for name in copy_game_figures():
@@ -790,4 +1038,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="print document 64's numbers and draw nothing",
+    )
+    if parser.parse_args().summary:
+        summary_only()
+    else:
+        main()
