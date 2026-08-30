@@ -1092,3 +1092,10 @@ Full — and three opened: the DEN–WAS waterfall (stamp clear of the title, ne
 footer, new noun), the LAC–HOU distribution (the canvas grown at the top, which
 is `reserve_stamp_strip` doing the job §15a describes) and the PHI–NE card
 (square on disk, stamp clear).
+
+## §16 — write-up round 3 fix-ups (2026-08-30, Fable)
+
+The mark scales with the image (`STAMP_LOGO_WIDTH_SHARE = 0.045`, credit-line
+ratio as the floor); the waterfall footer anchors at the figure's left edge;
+`reserve_stamp_strip` keeps a square image square by growing width with
+height. All three in one commit with their tests.
