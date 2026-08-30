@@ -65,6 +65,14 @@ BRAND_HANDLE = "@[TBD]"
 DATA_CREDIT = "Data: nflverse"
 WATERMARK = f"{DATA_CREDIT} | {BRAND_HANDLE}"
 
+# The mark itself, packaged rather than referenced. It sits inside
+# ``src/nfl_simulator`` so hatchling puts it in the wheel: a logo read from a
+# path outside the package is a logo that exists on the machine that made the
+# figures and nowhere else. RGBA with a transparent field, 400 px on its long
+# side and quantised to 128 colours, which is the whole of this flat badge and
+# a quarter of the bytes a truecolour save costs.
+BRAND_LOGO = Path(__file__).parent / "assets" / "logo.png"
+
 # Ruling R-4's two editions (document 58 §2), by the public name each wears.
 # The audit arms `"strict+dp"` and `"strict+rd"` are deliberately absent: they
 # are callable in the simulator and were never named, so an image cannot claim
@@ -456,12 +464,16 @@ def draw_title_block(
 # from the **bottom** edge since round 10 rather than down from the top.
 STAMP_MARGIN = 0.02
 STAMP_INSET = 0.012
-# The font, the logo's height and the gap between the two, all as fractions of
-# the image's short side so a card and a distribution wear the same stamp at
-# their own sizes.
+# The font, as a fraction of the image's short side, so a card and a
+# distribution wear the same stamp at their own sizes. The other two numbers of
+# the stamp hang off it rather than off the image: the mark is
+# `STAMP_LOGO_RATIO` credit lines tall, and the air beside it is
+# `STAMP_GAP_RATIO` of the mark. Chaining them means the three parts stay one
+# block however the font resolves on the machine doing the rendering — a
+# machine with Inter and one without would otherwise space them differently.
 STAMP_FONT_SCALE = 0.0095
-STAMP_LOGO_SCALE = 0.028
-STAMP_GAP_SCALE = 0.003
+STAMP_LOGO_RATIO = 1.6
+STAMP_GAP_RATIO = 0.25
 
 # Anything darker than this, on the cream, is an artist rather than the surface.
 # Used only to decide whether the stamp's corner is occupied.
@@ -481,8 +493,27 @@ def _stamp_font(reference: int):
         return ImageFont.load_default()
 
 
+def _stamp_gap(logo_height: int) -> int:
+    """The air between the mark and the credit line. Never less than two pixels."""
+    return max(2, round(logo_height * STAMP_GAP_RATIO))
+
+
+def _logo_geometry(logo_path: str | Path, text_height: int) -> tuple[int, int]:
+    """The pixels the mark is drawn at beside a credit line ``text_height`` tall.
+
+    Only the header of the PNG is read — the aspect ratio is all this needs, and
+    it is asked for twice per figure (once to reserve the strip, once to paint).
+    """
+    from PIL import Image
+
+    height = max(1, round(text_height * STAMP_LOGO_RATIO))
+    with Image.open(logo_path) as probe:
+        width = max(1, round(height * probe.width / probe.height))
+    return width, height
+
+
 def stamp_box(
-    size: tuple[int, int], text: str = WATERMARK, *, logo_height: int = 0
+    size: tuple[int, int], text: str = WATERMARK, *, logo_path: str | Path | None = None
 ) -> tuple[int, int, int, int]:
     """The pixels the credit stamp will take, as ``(left, top, right, bottom)``.
 
@@ -496,6 +527,14 @@ def stamp_box(
     1,016 of 1,139 Full ones. The stamp is painted after layout, so the title
     cannot see it and move; the only thing that can change is which corner the
     stamp takes, and the bottom-right is the one no artist is laid out in.
+
+    ``logo_path`` widens the box **leftward** by the mark and its gap, and
+    leaves the credit's own rows and right edge exactly where they were. That
+    is the whole of the brand mark's effect on this geometry: the text does not
+    move for it. The mark is 1.6 credit lines tall and so overhangs these rows
+    by 0.3 of a line either way, which is inside the clearance
+    :func:`reserve_stamp_strip` keeps above the box and inside the inset it
+    keeps below it.
     """
     from PIL import Image, ImageDraw
 
@@ -504,16 +543,19 @@ def stamp_box(
     draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     bbox = draw.textbbox((0, 0), text, font=font)
     text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    gap = int(min(width, height) * STAMP_GAP_SCALE) if logo_height else 0
 
-    block_w = max(text_w, 0)
-    block_h = logo_height + gap + text_h
     right = width - int(width * STAMP_MARGIN)
     bottom = height - int(height * STAMP_INSET)
-    return (right - block_w, bottom - block_h, right, bottom)
+    left = right - text_w
+    if logo_path is not None:
+        logo_w, logo_h = _logo_geometry(logo_path, text_h)
+        left -= _stamp_gap(logo_h) + logo_w
+    return (left, bottom - text_h, right, bottom)
 
 
-def reserve_stamp_strip(filepath: str | Path, text: str = WATERMARK) -> None:
+def reserve_stamp_strip(
+    filepath: str | Path, text: str = WATERMARK, *, logo_path: str | Path | None = None
+) -> None:
     """Grow the canvas at the bottom if the figure reaches into the stamp's box.
 
     ``bbox_inches="tight"`` crops to whatever the figure drew, so how close the
@@ -525,13 +567,17 @@ def reserve_stamp_strip(filepath: str | Path, text: str = WATERMARK) -> None:
     Only the stamp's own columns are consulted. The two card figures put their
     footers at the **left** edge, and growing every image to clear a footer the
     stamp is nowhere near would change two fixed shapes for no legibility gain.
+    ``logo_path`` is passed through to :func:`stamp_box` so those columns
+    include the ones the brand mark is pasted into: the mark is stamped over
+    whatever is under it at 85% opacity, so it needs the same clean surface the
+    credit line does.
     """
     from PIL import Image
 
     filepath = Path(filepath)
     image = Image.open(filepath).convert("RGB")
     width, height = image.size
-    left, top, _right, _bottom = stamp_box(image.size, text)
+    left, top, _right, _bottom = stamp_box(image.size, text, logo_path=logo_path)
     block_h = height - int(height * STAMP_INSET) - top
     # One block of air between the stamp and whatever is above it, so the credit
     # reads as its own line rather than as the footer's last word.
@@ -573,9 +619,15 @@ def apply_watermark(
     ``y_pct`` are gone with it: the corner is settled, and a parameter nothing
     passes is a corner a figure could still be stamped into by accident.
 
-    ``logo_path=None`` draws the text line alone. The project has no mark yet,
-    so that is the shipped path; the slot exists so adding one later does not
-    move the text.
+    ``logo_path=None`` draws the text line alone. This is the low-level exit and
+    it stays explicit about the mark; the product's default — every figure wears
+    :data:`BRAND_LOGO` — lives one level up, in :func:`finalize`.
+
+    The mark is pasted to the **left** of the credit, centred on the credit's
+    own ink, at 1.6 line heights. Left rather than above because the stamp is
+    the last thing on the image and its rows are the ones round 10 measured as
+    empty: a mark stacked above the credit reaches back up into the rows a
+    title can occupy, and a mark beside it does not.
 
     A failure here is a warning rather than an exception: the figure is already
     on disk and correct, and losing the whole render over a missing font would
@@ -589,33 +641,27 @@ def apply_watermark(
         width, height = image.size
         reference = min(width, height)
 
-        logo = None
-        logo_w = logo_h = 0
+        font = _stamp_font(reference)
+        draw = ImageDraw.Draw(image)
+        # The credit's own box, asked for without a logo: where the text lands
+        # is the one thing the mark is not allowed to change.
+        left, top, _right, _bottom = stamp_box(image.size, text)
+
         if logo_path is not None:
+            bbox = draw.textbbox((0, 0), text, font=font)
+            logo_w, logo_h = _logo_geometry(logo_path, bbox[3] - bbox[1])
             logo = Image.open(logo_path).convert("RGBA")
             pixels = np.array(logo)
             near_white = (pixels[:, :, 0] > 240) & (pixels[:, :, 1] > 240) & (pixels[:, :, 2] > 240)
             pixels[near_white, 3] = 0
             pixels[:, :, 3] = (pixels[:, :, 3].astype(float) * 0.85).astype(np.uint8)
-            logo = Image.fromarray(pixels)
-            logo_h = max(20, int(reference * STAMP_LOGO_SCALE))
-            logo_w = int(logo_h * logo.width / logo.height)
-            logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
+            logo = Image.fromarray(pixels).resize((logo_w, logo_h), Image.LANCZOS)
+            # Centred on the ink rather than on the box: `draw.text` anchors at
+            # the font's ascender line, so the ink starts `bbox[1]` below `top`.
+            middle = top + (bbox[1] + bbox[3]) // 2
+            image.paste(logo, (left - _stamp_gap(logo_h) - logo_w, middle - logo_h // 2), logo)
 
-        font = _stamp_font(reference)
-        draw = ImageDraw.Draw(image)
-        left, top, right, _bottom = stamp_box(image.size, text, logo_height=logo_h)
-        gap = int(reference * STAMP_GAP_SCALE) if logo is not None else 0
-        centre_x = (left + right) // 2
-
-        if logo is not None:
-            image.paste(logo, (centre_x - logo_w // 2, top), logo)
-        draw.text(
-            (left, top + logo_h + gap),
-            text,
-            fill=(140, 140, 140),
-            font=font,
-        )
+        draw.text((left, top), text, fill=(140, 140, 140), font=font)
         image.convert("RGB").save(filepath)
     except Exception as error:  # pragma: no cover - the figure is already saved
         print(f"Warning: could not watermark {filepath}: {error}")
@@ -626,7 +672,7 @@ def finalize(
     filepath: str | Path,
     *,
     dpi: int = 200,
-    logo_path: str | Path | None = None,
+    logo_path: str | Path | bool | None = None,
     bbox_inches: str | None = "tight",
     close: bool = True,
     edition: str | None = None,
@@ -641,6 +687,13 @@ def finalize(
     ``None`` the stamp is the bare credit, which is what every figure outside
     the per-game product — the band sweep, a diagnostic — should carry: those
     are not an adjudication of a game and have no edition to name.
+
+    The brand mark is **on by default**: ``logo_path=None`` means
+    :data:`BRAND_LOGO`, a path means that file, and ``logo_path=False`` is the
+    one way to ship a figure without it. Default-on rather than opt-in for the
+    same reason the credit is not optional — a mark that has to be asked for is
+    a mark on the figures whoever remembered it rendered, and missing from the
+    rest.
     """
     import matplotlib.pyplot as plt
 
@@ -650,11 +703,12 @@ def finalize(
         filepath, dpi=dpi, bbox_inches=bbox_inches, facecolor=PALETTE["bg"], edgecolor="none"
     )
     stamp = WATERMARK if edition is None else edition_stamp(edition)
+    mark = None if logo_path is False else BRAND_LOGO if logo_path is None else logo_path
     # Room first, then the stamp: the strip the credit lives in is reserved on
     # the saved pixels when the figure reached into it, so the credit is never
     # painted over a footer and a footer is never painted over.
-    reserve_stamp_strip(filepath, stamp)
-    apply_watermark(filepath, logo_path=logo_path, text=stamp)
+    reserve_stamp_strip(filepath, stamp, logo_path=mark)
+    apply_watermark(filepath, logo_path=mark, text=stamp)
     if close:
         plt.close(fig)
     return filepath

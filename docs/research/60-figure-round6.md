@@ -954,3 +954,20 @@ classes are closed on the games that raised them, one class is withdrawn as a
 misread, two are parked, and three cosmetic observations are new: the 2-cycle
 game above, `2022_07_KC_SF` full's stub span at 3.01% of its axis, and the
 zero-anchor tick reading as a segment of the dashed zero rule on one game.
+
+## 14. The brand mark in the corner stamp (2026-08-30)
+
+the maintainer supplied the NFL Simulator badge and asked for it on every figure, so
+`finalize` now stamps `BRAND_LOGO` — a 47 KB RGBA PNG packaged at
+`src/nfl_simulator/assets/logo.png` — unless it is handed `logo_path=False`.
+The mark sits to the **left** of the credit line at 1.6 line heights, centred on
+the credit's ink, and the text does not move for it: `apply_watermark` asks
+`stamp_box` for the logo-free box and draws the text there either way, which
+`test_the_mark_does_not_move_the_credit_line` locks by comparing every pixel
+column from the credit's left edge rightward.
+Left rather than the old stacked-above slot because §11's whole point was that
+the stamp's rows are the ones no artist is laid out in; a mark above the credit
+reaches back up into rows a title can occupy. `reserve_stamp_strip` now takes
+the mark's columns into account, so ink reaching only the badge buys the strip
+too. 929 tests pass; nine game-editions from document 63 §7d re-rendered and
+three opened.
