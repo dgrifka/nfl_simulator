@@ -10,10 +10,15 @@
 - **`11_flip_distribution.png`** — Deserved-win probability for the home team across all 1,139 games, 2022–2025, with the too-close-to-call band shaded.
 - **`13_epa_to_points.png`** — Final margin against EPA differential, 2,761 games — the 0.8389 points-per-EPA conversion the whole article quotes, r² = 0.991.
 - **`14_refused_floors.png`** — Three components that passed the mechanism test and failed on size, each against the floor committed before its effect was computed.
-- **`15_defence_shrinkage.png`** — The same shrinkage idea from a different model: the dropped-pick model is a logistic regression, not the beta-binomial figure 3 draws.
+- **`15_defense_shrinkage.png`** — The same shrinkage idea from a different model: the dropped-pick model is a logistic regression, not the beta-binomial figure 3 draws.
 - **`16_den_was_with_without.png`** — One game with and without the hands-on-the-ball rows, on one axis. Denver's share falls from 86% to 59%; the verdict did not flip, it stopped being a verdict.
+- **`17_fumble_retention_bars.png`** — How often the fumbling team keeps the ball, by class of play, on the fitted baseline the simulator prices with. A botched snap on a run is kept 76.9% of the time and a fumble on a run 46.1% — a coin, but not the same coin.
+- **`18_kicker_prior_posterior.png`** — One kicker-season priced: E. Pineiro's 31-of-32 in 2025 against the prior any kicker starts from, both as make probability from 45 yards.
+- **`19_denver_prior_posterior.png`** — The same picture for a defense's hands: Denver's 2024 defense caught 13 of 17 interceptable throws, and the model moves from the league's 49.8% to 55.2%.
+- **`20_persistent_share.png`** — How much of a dropped pick and of a fumble recovery is the team rather than the bounce — about one percent of each, on two different measurements the figure names.
+- **`21_bootstrap_buildup.png`** — Where 160,000 comes from: one posterior draw's 800 replays, then ten draws, then all 200 — the histogram the product ships.
 - **`formula_01_rule.png`** — The neutralization rule, term by term.
 - **`formula_02_points.png`** — EPA to points of margin, and the deserve-to-win share.
-- **`formula_03_fg.png`** — The field-goal make model, every covariate labelled.
+- **`formula_03_fg.png`** — The field-goal make model, every covariate labeled.
 - **`formula_04_betabinomial.png`** — The beta-binomial hierarchy that shrinks a unit's rate.
 - **`formula_05_trust.png`** — The trust dial, and what sets it.

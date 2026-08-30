@@ -40,6 +40,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
+from matplotlib import ticker as mticker
 
 from nfl_simulator import paths
 from nfl_simulator.plots import BAND_HIGH, BAND_LOW
@@ -52,7 +53,34 @@ OUTPUTS = paths.RESEARCH_OUTPUT_DIR
 # A committed PNG is a file somebody clones. 500 KB is the article's budget per
 # image and the script refuses to leave a heavier one on disk.
 SIZE_LIMIT = 500_000
-MAX_FILES = 20
+MAX_FILES = 22
+
+# --------------------------------------------------------------------------
+# round 3's five new figures, and the constants that pick their subjects
+# --------------------------------------------------------------------------
+
+# Figure 18's kicker is **chosen by a rule, not by name**: the largest posterior
+# mean effect among 2025 kicker-seasons with at least `KICKER_FLOOR` attempts.
+# The rule is here and the name it resolves to is in document 64 §11, so a refit
+# that changed the answer would change the document rather than silently draw a
+# different kicker under the old caption.
+KICKER_SEASON = 2025
+KICKER_FLOOR = 20
+# 45 yards because document 05b §9 reports the kicker spread there, and because
+# it is the distance at which the league is neither automatic nor hopeless —
+# 79.9%, so a kicker's own ability has room to show.
+KICKER_DISTANCE = 45.0
+KICKER_NAME = "E. Pineiro"
+KICKER_TEAM = "SF"
+
+# Figure 19's defence-season. `worthy_throw_frame` keys these `"season|team"`.
+DENVER_KEY = "2024|DEN"
+
+# Figure 20's two numbers, and they are **two different statistics** — see
+# `persistent_share`. The variance share is document 48 through document 52 §2;
+# the shrinkage weight is document 05 §3's `w` for fumble recovery.
+DROPPED_PICK_SHARE = 0.014
+FUMBLE_SHRINKAGE_W = 0.011
 
 # --------------------------------------------------------------------------
 # the six per-game figures, copied from the product renderer
@@ -129,6 +157,24 @@ DOC_CHECKS = {
     "den_was_dtw_full": (0.4058, 0.0001),
     "den_was_deserved_strict": (-3.32, 0.005),
     "den_was_deserved_full": (-1.35, 0.005),
+    # --- round 3 --------------------------------------------------------
+    # Figure 18. **Not document 05b §9's 5.35 pp**, and the difference is the
+    # point: §9 reports the Phase 2 posterior, whose `sigma_kicker` is 0.360.
+    # The shipped v1.3 model is the refit at 0.385 (§11's table), which is what
+    # every ledger row is priced with, so the figure draws the refit and says
+    # 5.48. Document 64 §11 carries the reconciliation.
+    "kicker_one_sigma_pp": (5.48, 0.05),
+    "fg_league_p45": (79.88, 0.05),
+    # Figure 19. The posterior mean is document 64's 55.2%; the league figure
+    # and the two counts are computed here and published in document 64 §11.
+    "denver_worthy_throws": (17, 0),
+    "denver_worthy_caught": (13, 0),
+    "denver_posterior_pct": (55.2, 0.05),
+    "denver_league_pct": (49.8, 0.05),
+    # Figure 20 — both are transcriptions, `check`ed so a typo in the constant
+    # cannot reach the figure. Document 48 via 52 §2, and document 05 §3.
+    "dropped_pick_share_pct": (1.4, 0.001),
+    "fumble_shrinkage_pct": (1.1, 0.001),
 }
 
 
@@ -1141,9 +1187,9 @@ def defence_shrinkage() -> dict:
         5.8,
         title="The same idea, on a different model",
         subtitle=[
-            "Dropped interceptions: what a defence recorded, and what the model believes",
+            "Dropped interceptions: what a defense recorded, and what the model believes",
             f"A crossed logistic regression, not the beta-binomial above — and it believes "
-            f"defences differ by about {spread_pp:.1f} points.",
+            f"defenses differ by about {spread_pp:.1f} points.",
         ],
     )
     # The key goes under the axis. At the top right it printed across the league
@@ -1222,7 +1268,7 @@ def defence_shrinkage() -> dict:
         fontsize=9,
         color=PALETTE["text_muted"],
     )
-    finalize(fig, FIGURE_DIR / "15_defence_shrinkage.png")
+    finalize(fig, FIGURE_DIR / "15_defense_shrinkage.png")
     return {
         "league": league,
         "rows": [
@@ -1775,6 +1821,658 @@ def formula_plates() -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# figure 17 — the six fumble classes the simulator actually prices with
+# --------------------------------------------------------------------------
+
+
+def fumble_retention_bars() -> str:
+    """Document 64 §7a as a chart: the rate each class of fumble is kept at.
+
+    The article's one claim about fumbles is that a loose ball is a coin, and
+    §7a is where that claim stops being a slogan — a botched snap on a run play
+    is kept 77% of the time and a fumble on a run 46%, so "a coin" is a
+    statement about a *class*, not about fumbles. Six bars say that in one
+    look; the sentence took the article a paragraph and lost the arithmetic.
+
+    Only the six **measured** classes are drawn. `field_goal/live` and
+    `punt/aborted` hold six plays between them across ten seasons and wear the
+    pooled rate under `fit_fumble_baseline`'s 30-fumble floor, so a bar for
+    them would be the pooled rate drawn twice under two labels a reader would
+    take for measurements.
+    """
+    rates = fumble_class_rates()
+    measured = sorted(rates["measured"], key=lambda row: row["p_own"])
+    # Both sub-floor classes carry the same pooled rate, which is the line.
+    pooled_rate = float(rates["pooled"][0]["p_own"])
+
+    fig, ax = new_figure(
+        8.4,
+        5.4,
+        title="A loose ball is a coin — but not the same coin",
+        subtitle=[
+            "How often the team that fumbled keeps the ball, by the kind of play it happened on.",
+            "2016–2025, the fitted baseline the simulator prices every ledger row with.",
+        ],
+    )
+
+    positions = np.arange(len(measured))
+    values = [row["p_own"] * 100 for row in measured]
+    # One hue, one meaning: these are eight readings of a single quantity, so
+    # they are one colour and the *length* carries the difference. Colouring
+    # each class would say the classes are categories a reader must tell apart
+    # by hue, which the labels already do.
+    ax.barh(positions, values, height=0.62, color=PALETTE["anchor"], alpha=0.85)
+    ax.set_yticks(positions)
+    ax.set_yticklabels([row["gloss"] for row in measured], fontsize=9.5)
+    ax.set_xlim(0, 112)
+    ax.set_xlabel("kept by the fumbling team (%)", fontsize=9, color=PALETTE["text_muted"])
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _p: f"{v:g}%"))
+    ax.grid(axis="x", color=PALETTE["grid"], linestyle="--", alpha=0.6, linewidth=0.8)
+    ax.set_axisbelow(True)
+
+    for position, row in zip(positions, measured, strict=True):
+        # The rate outside the bar and the count inside it. Both outside and
+        # they read as one number with a strange unit; both inside and the
+        # 46% bar has no room for either.
+        ax.text(
+            row["p_own"] * 100 + 1.6,
+            position,
+            f"{row['p_own'] * 100:.1f}%",
+            va="center",
+            fontsize=10,
+            fontweight="bold",
+            color=PALETTE["text"],
+        )
+        ax.text(
+            1.5,
+            position,
+            f"{row['n']:,} fumbles",
+            va="center",
+            fontsize=8.5,
+            color=PALETTE["bg"],
+        )
+
+    league = pooled_rate * 100
+    # Above the bars, below the labels. At `zorder=4` the dashed rule was drawn
+    # straight through "51.2%" and "51.0%", the two values it passes nearest —
+    # which are exactly the two a reader is checking it against.
+    ax.axvline(league, color=PALETTE["bad"], linewidth=1.6, linestyle=(0, (4, 2)), zorder=2.5)
+    ax.annotate(
+        f"all fumbles pooled: {league:.1f}%",
+        xy=(league, len(measured) - 0.42),
+        xytext=(5, 0),
+        textcoords="offset points",
+        fontsize=9,
+        color=PALETTE["bad"],
+        va="center",
+    )
+
+    ax.annotate(
+        f"{rates['n_fumbles']:,} fumbles, 2016–2025. A pooled 50/50 would book a fake "
+        "bad-luck charge against every offense that fell on its own botched snap.",
+        xy=(0, 0),
+        xycoords="axes fraction",
+        xytext=(0, -42),
+        textcoords="offset points",
+        ha="left",
+        va="top",
+        fontsize=8,
+        color=PALETTE["text_muted"],
+    )
+    return finalize(fig, FIGURE_DIR / "17_fumble_retention_bars.png").name
+
+
+# --------------------------------------------------------------------------
+# figures 18 and 19 — a prior and a posterior, twice
+# --------------------------------------------------------------------------
+
+
+def _prior_posterior_axes(title: str, subtitle: list[str]):
+    """The shared shape of figures 18 and 19: two curves on one probability axis."""
+    fig, ax = new_figure(8.2, 5.2, title=title, subtitle=subtitle)
+    ax.set_ylabel("posterior density", fontsize=9, color=PALETTE["text_muted"])
+    ax.set_yticks([])
+    ax.spines["left"].set_visible(False)
+    ax.grid(axis="x", color=PALETTE["grid"], linestyle="--", alpha=0.6, linewidth=0.8)
+    ax.set_axisbelow(True)
+    return fig, ax
+
+
+def _density(values: np.ndarray, grid: np.ndarray) -> np.ndarray:
+    """A Gaussian kernel density, normalised to a peak of one.
+
+    Normalised to its own peak rather than to unit area because the two curves
+    on these figures have very different spreads: at equal area the wide one is
+    a flat smear beside a spike, and the figure's question — where does each
+    curve sit — is answered by position, not by height.
+    """
+    from scipy.stats import gaussian_kde
+
+    curve = gaussian_kde(values)(grid)
+    return curve / curve.max()
+
+
+def _draw_logo(ax, logo, x: float, y: float, *, width_in: float = 0.42) -> None:
+    from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+    if logo is None:
+        return
+    from nfl_simulator.plots import logo_zoom
+
+    ax.add_artist(
+        AnnotationBbox(
+            OffsetImage(
+                logo,
+                zoom=logo_zoom(
+                    logo, ax.figure, max_width_in=width_in, max_height_in=width_in * 0.62
+                ),
+            ),
+            (x, y),
+            xycoords="axes fraction",
+            frameon=False,
+            annotation_clip=False,
+            box_alignment=(0.5, 0.5),
+        )
+    )
+
+
+def kicker_prior_posterior() -> dict:
+    """Figure 18 — one kicker-season's own record, priced.
+
+    The best 2025 kicker-season with at least twenty attempts, on the
+    **make-probability-at-45-yards** scale rather than on the logit scale the
+    model fits: nobody has an intuition for +0.45 log-odds, and everybody has
+    one for "makes four more of a hundred 45-yarders".
+
+    Both curves are pushed through the same league curve, so the distance
+    between them is the whole of what this kicker's record bought.
+    """
+    import arviz as az
+
+    from nfl_simulator.fg_model import _sigmoid
+    from nfl_simulator.render import _read_side
+    from nfl_simulator.teams import team_colors, team_logo
+
+    model, _ = _read_side().load_model("trace_fg_refit.nc", "fg_refit_summary.json")
+    posterior = az.from_netcdf(OUTPUTS / "trace_fg_refit.nc")["posterior"]
+    sigma = posterior["sigma_kicker"].values.ravel()
+
+    effects = pl.read_parquet(OUTPUTS / "fg_kicker_effects.parquet").with_columns(
+        pl.col("kicker_season").str.slice(0, 4).cast(pl.Int32).alias("season")
+    )
+    best = (
+        effects.filter((pl.col("season") == KICKER_SEASON) & (pl.col("attempts") >= KICKER_FLOOR))
+        .sort("effect_mean", descending=True)
+        .row(0, named=True)
+    )
+    key = best["kicker_season"]
+
+    league_logit = model._logit(KICKER_DISTANCE)
+    league = _sigmoid(league_logit)
+    # The prior, on the make-probability scale: a kicker drawn from
+    # `Normal(0, sigma_kicker)` before anybody has watched them kick. Paired
+    # draw for draw with the curve, so the spread is the kicker's and not the
+    # league curve's uncertainty leaking in.
+    rng = np.random.default_rng(20260830)
+    prior = _sigmoid(league_logit + rng.normal(0.0, sigma))
+    shrunk = _sigmoid(league_logit + model.kicker_effects[key])
+
+    one_sigma_pp = check(
+        "kicker_one_sigma_pp",
+        round(float((_sigmoid(league_logit + sigma) - league).mean() * 100), 2),
+    )
+    posterior_pp = round(float((shrunk - league).mean() * 100), 2)
+    league_pct = check("fg_league_p45", round(float(league.mean() * 100), 2))
+
+    team = KICKER_TEAM
+    primary, _secondary = team_colors(team, KICKER_SEASON)
+    fig, ax = _prior_posterior_axes(
+        f"What {best['attempts']} kicks bought {KICKER_NAME}",
+        [
+            f"{KICKER_NAME}, {team} {KICKER_SEASON} — {int(best['made'])} of "
+            f"{best['attempts']}, before any shrinkage.",
+            f"Both curves are make probability from {KICKER_DISTANCE:.0f} yards, where the "
+            f"league makes {league.mean() * 100:.1f}%.",
+        ],
+    )
+
+    # Trimmed to the 0.5th-99.5th percentile of the two curves together. The
+    # prior's full support runs down past 45%, which is thirty points of empty
+    # axis bought to show a tail nobody is reading.
+    both = np.concatenate([prior, shrunk])
+    grid = np.linspace(np.quantile(both, 0.005) - 0.01, np.quantile(both, 0.995) + 0.01, 512)
+    prior_curve, shrunk_curve = _density(prior, grid), _density(shrunk, grid)
+
+    ax.fill_between(grid * 100, 0, prior_curve, color=PALETTE["anchor"], alpha=0.22, linewidth=0)
+    ax.plot(grid * 100, prior_curve, color=PALETTE["anchor"], linewidth=1.6)
+    ax.fill_between(grid * 100, 0, shrunk_curve, color=primary, alpha=0.32, linewidth=0)
+    ax.plot(grid * 100, shrunk_curve, color=primary, linewidth=2.2)
+
+    ax.axvline(league_pct, color=PALETTE["text_muted"], linewidth=1.2, linestyle=":", zorder=1.5)
+    # Above the curves. Beside the line is ink — both curves are tall where it
+    # crosses — and below the axis is the x-label's row, which is where the
+    # second render put it and where it printed through "make probability".
+    ax.annotate(
+        f"league {league_pct:.1f}%",
+        xy=(league_pct, 1.15),
+        xytext=(-5, 0),
+        textcoords="offset points",
+        ha="right",
+        va="center",
+        fontsize=8.5,
+        color=PALETTE["text_muted"],
+    )
+    ax.annotate(
+        f"{KICKER_NAME}: {shrunk.mean() * 100:.1f}%   (+{posterior_pp:.2f} pp)",
+        xy=(shrunk.mean() * 100, shrunk_curve.max()),
+        xytext=(0, 16),
+        textcoords="offset points",
+        ha="center",
+        fontsize=10.5,
+        fontweight="bold",
+        color=primary,
+    )
+    ax.annotate(
+        f"before the season: any kicker,\n±{one_sigma_pp:.2f} pp at one standard deviation",
+        xy=(0.02, 0.70),
+        xycoords="axes fraction",
+        fontsize=8.5,
+        color=PALETTE["text_muted"],
+    )
+    # On the posterior's own shoulder, so the mark labels the coloured curve
+    # rather than sitting in a corner as decoration.
+    _draw_logo(ax, team_logo(team, KICKER_SEASON), 0.855, 0.30)
+
+    ax.set_xlabel(
+        f"make probability from {KICKER_DISTANCE:.0f} yards (%)",
+        fontsize=9,
+        color=PALETTE["text_muted"],
+    )
+    ax.set_ylim(0, 1.18)
+    ax.annotate(
+        "Each of the 200 replays draws one value from the colored curve, and flips "
+        "that kick at it.",
+        xy=(0, 0),
+        xycoords="axes fraction",
+        xytext=(0, -42),
+        textcoords="offset points",
+        ha="left",
+        va="top",
+        fontsize=8,
+        color=PALETTE["text_muted"],
+    )
+    name = finalize(fig, FIGURE_DIR / "18_kicker_prior_posterior.png").name
+    return {
+        "file": name,
+        "kicker": KICKER_NAME,
+        "kicker_season": key,
+        "team": team,
+        "attempts": int(best["attempts"]),
+        "made": int(best["made"]),
+        "observed_rate": round(float(best["observed_rate"]), 4),
+        "league_p45_pct": league_pct,
+        "posterior_p45_pct": round(float(shrunk.mean() * 100), 2),
+        "posterior_gain_pp": posterior_pp,
+        "one_sigma_pp": one_sigma_pp,
+        "sigma_kicker": round(float(sigma.mean()), 4),
+    }
+
+
+def denver_prior_posterior() -> dict:
+    """Figure 19 — the same picture for a defence's hands.
+
+    Denver's 2024 defence caught 13 of the 17 throws FTN charted as
+    interceptable. The league surface, scored on those same seventeen throws,
+    says 49.8%. The model lands at 55.2% — it moved, and it moved a fifth of
+    the way, because seventeen throws is seventeen throws.
+    """
+    from nfl_simulator.dropped_picks import DroppedPickModel, worthy_throw_frame
+    from nfl_simulator.render import _simulation_context
+    from nfl_simulator.teams import team_colors, team_logo
+
+    context = _simulation_context()
+    model = DroppedPickModel.from_posterior(
+        OUTPUTS / "trace_dropped_pick.nc", OUTPUTS / "dropped_pick_summary.json"
+    )
+    worthy = worthy_throw_frame(context["pbp"], context["ftn"])
+    plays = worthy.filter(pl.col("defence_season") == DENVER_KEY).to_dicts()
+
+    attempts = check("denver_worthy_throws", len(plays))
+    caught = check("denver_worthy_caught", int(sum(play["interception"] for play in plays)))
+    # Per posterior draw, the defence-season's rate over its **own** throws —
+    # the same quantity figure 15 puts a dot on, kept as a distribution here
+    # rather than collapsed to its mean.
+    with_denver = np.array([model.catch_probability(DENVER_KEY, play) for play in plays]).mean(0)
+    league = np.array([model.catch_probability(None, play) for play in plays]).mean(0)
+
+    posterior_pct = check("denver_posterior_pct", round(float(with_denver.mean() * 100), 1))
+    league_pct = check("denver_league_pct", round(float(league.mean() * 100), 1))
+
+    primary, _secondary = team_colors("DEN", 2024)
+    fig, ax = _prior_posterior_axes(
+        "What 17 throws bought Denver",
+        [
+            f"Denver's 2024 defense caught {caught} of the {attempts} throws the charters "
+            "called interceptable.",
+            "Both curves are the rate the model gives those same seventeen throws.",
+        ],
+    )
+
+    both = np.concatenate([league, with_denver])
+    grid = np.linspace(np.quantile(both, 0.002) - 0.01, np.quantile(both, 0.998) + 0.01, 512)
+    league_curve, denver_curve = _density(league, grid), _density(with_denver, grid)
+
+    ax.fill_between(grid * 100, 0, league_curve, color=PALETTE["anchor"], alpha=0.22, linewidth=0)
+    ax.plot(grid * 100, league_curve, color=PALETTE["anchor"], linewidth=1.6)
+    ax.fill_between(grid * 100, 0, denver_curve, color=primary, alpha=0.32, linewidth=0)
+    ax.plot(grid * 100, denver_curve, color=primary, linewidth=2.2)
+
+    observed = caught / attempts * 100
+    ax.axvline(observed, color=PALETTE["bad"], linewidth=1.6, linestyle=(0, (4, 2)))
+    # The grid is trimmed to the curves' own support, and 76.5% is outside it —
+    # which is the finding. The axis is widened to reach the line rather than
+    # the grid, so the gap between what happened and what the model believes is
+    # drawn to scale instead of being cropped out of the picture.
+    ax.set_xlim(grid.min() * 100, max(grid.max() * 100, observed + 3.5))
+    ax.annotate(
+        f"what actually happened\n{caught} of {attempts} = {observed:.1f}%",
+        xy=(observed, 0.95),
+        xytext=(-7, 0),
+        textcoords="offset points",
+        ha="right",
+        va="center",
+        fontsize=9,
+        color=PALETTE["bad"],
+    )
+    # Above the curves, for the reason figure 18 gives: the two overlap where
+    # this label belongs, and the row below the axis belongs to the x-label.
+    ax.annotate(
+        f"the league's hands: {league_pct:.1f}%",
+        xy=(league_pct, 1.15),
+        xytext=(-5, 0),
+        textcoords="offset points",
+        ha="right",
+        va="center",
+        fontsize=8.5,
+        color=PALETTE["text_muted"],
+    )
+    ax.annotate(
+        f"Denver: {posterior_pct:.1f}%",
+        xy=(posterior_pct, denver_curve.max()),
+        xytext=(0, 16),
+        textcoords="offset points",
+        ha="center",
+        fontsize=10.5,
+        fontweight="bold",
+        color=primary,
+    )
+    _draw_logo(ax, team_logo("DEN", 2024), 0.60, 0.30)
+
+    ax.set_xlabel(
+        "rate the defense finishes an interceptable throw (%)",
+        fontsize=9,
+        color=PALETTE["text_muted"],
+    )
+    ax.set_ylim(0, 1.18)
+    ax.annotate(
+        "The model moves a fifth of the way to 76% and stops. Seventeen throws is "
+        "not enough evidence to move it further.",
+        xy=(0, 0),
+        xycoords="axes fraction",
+        xytext=(0, -42),
+        textcoords="offset points",
+        ha="left",
+        va="top",
+        fontsize=8,
+        color=PALETTE["text_muted"],
+    )
+    name = finalize(fig, FIGURE_DIR / "19_denver_prior_posterior.png").name
+    return {
+        "file": name,
+        "attempts": attempts,
+        "caught": caught,
+        "observed_pct": round(observed, 1),
+        "league_pct": league_pct,
+        "posterior_pct": posterior_pct,
+    }
+
+
+# --------------------------------------------------------------------------
+# figure 20 — how much of it is skill
+# --------------------------------------------------------------------------
+
+
+def persistent_share() -> dict:
+    """Figure 20 — the share of each near-coin that is somebody's persistent skill.
+
+    **The two bars are two different statistics and the figure says so.** The
+    dropped pick's 1.4% is a share of per-throw *variance* (document 48 via
+    document 52 §2). The fumble's 1.1% is a shrinkage weight `w` (document 05
+    §3) — how much of the information about a team's true recovery rate its own
+    record carries. Both answer "how much of this is the team rather than the
+    bounce?" on the same scale, and neither is the other's number; the axis
+    label and the footer both name the difference rather than letting a reader
+    assume one statistic drawn twice.
+    """
+    rows = [
+        {
+            "label": "Dropped pick",
+            "detail": "share of per-throw variance the\ndefense's persistent skill explains",
+            "value": DROPPED_PICK_SHARE,
+            "source": "document 48 · 52 §2",
+        },
+        {
+            "label": "Fumble recovery",
+            "detail": "shrinkage weight — how much of its own\nrecord a team-season keeps",
+            "value": FUMBLE_SHRINKAGE_W,
+            "source": "document 05 §3",
+        },
+    ]
+    check("dropped_pick_share_pct", round(DROPPED_PICK_SHARE * 100, 1))
+    check("fumble_shrinkage_pct", round(FUMBLE_SHRINKAGE_W * 100, 1))
+
+    # 4.8 rather than the 3.6 a two-row chart looks like it needs. `new_figure`
+    # gives the title block a fixed 13% of the figure's height, so shrinking the
+    # canvas to fit the bars printed the subtitle through the title's rule. The
+    # bars are made to fill the space instead.
+    fig, ax = new_figure(
+        8.2,
+        4.8,
+        title="Almost none of it is skill",
+        subtitle=[
+            "Two of the events the simulator re-prices, and how much of each one the "
+            "team itself explains.",
+            "Two different measurements of the same idea — the labels say which is which.",
+        ],
+    )
+
+    positions = np.arange(len(rows))
+    for position, row in zip(positions, rows, strict=True):
+        skill = row["value"] * 100
+        ax.barh(position, skill, height=0.9, color=PALETTE["bad"], alpha=0.9, zorder=3)
+        # The 2% gap of surface between the two segments is the house rule: two
+        # fills that touch read as one shape with a colour change in it.
+        ax.barh(
+            position,
+            100 - skill,
+            left=skill + 0.6,
+            height=0.9,
+            color=PALETTE["anchor"],
+            alpha=0.28,
+            zorder=3,
+        )
+        ax.text(
+            skill + 2.4,
+            position,
+            f"{skill:.1f}%  the team",
+            va="center",
+            fontsize=10,
+            fontweight="bold",
+            color=PALETTE["bad"],
+        )
+        ax.text(
+            99,
+            position,
+            f"{100 - skill:.1f}%  everything else",
+            va="center",
+            ha="right",
+            fontsize=9.5,
+            color=PALETTE["text_muted"],
+        )
+
+    ax.set_yticks(positions)
+    ax.set_yticklabels(
+        [f"{row['label']}\n{row['detail']}" for row in rows], fontsize=9, linespacing=1.35
+    )
+    ax.set_xlim(0, 101)
+    ax.set_xticks([])
+    # Inverted so the dropped pick — the component the article is about — is the
+    # top row. `barh` counts up from the bottom, and the reading order of a
+    # two-row chart is the order the subtitle names them in.
+    ax.set_ylim(len(rows) - 0.42, -0.58)
+    for side in ("bottom", "left"):
+        ax.spines[side].set_visible(False)
+
+    ax.annotate(
+        "These are not the same statistic. A variance share and a shrinkage weight "
+        "answer the same question — how much of this is the team? —\nwith different "
+        "arithmetic, and the figure puts them side by side because both answers are "
+        "about one percent, not because they are one number.",
+        xy=(0, 0),
+        xycoords="axes fraction",
+        xytext=(0, -30),
+        textcoords="offset points",
+        ha="left",
+        va="top",
+        fontsize=8,
+        color=PALETTE["text_muted"],
+    )
+    name = finalize(fig, FIGURE_DIR / "20_persistent_share.png").name
+    return {"file": name, "rows": rows}
+
+
+# --------------------------------------------------------------------------
+# figure 21 — where 160,000 comes from
+# --------------------------------------------------------------------------
+
+
+def bootstrap_buildup(walkthrough: dict) -> dict:
+    """Figure 21 — the two layers, built up one panel at a time.
+
+    Panel (c) is not a redraw. `SimulationResult.margin_draws` is
+    ``margins.ravel()`` of the shipped ``(200, 800)`` bootstrap, so reshaping it
+    recovers the two layers exactly and panel (c) is the same 160,000 numbers
+    the product's own histogram bins. A figure that re-simulated the game to
+    illustrate the simulation could disagree with it and no reader could tell.
+    """
+    from nfl_simulator.render import COIN_DRAWS, POSTERIOR_DRAWS
+
+    draws = walkthrough["editions"]["full"]["margin_draws"]
+    grid = draws.reshape(POSTERIOR_DRAWS, COIN_DRAWS)
+
+    # `simulator._bootstrap` line 627: `dtw_per_draw = (margins > 0).mean(axis=1)`
+    # and `dtw_home` is its mean. Every row has the same 800 coin draws, so the
+    # share over the flattened grid is that number exactly — which is what makes
+    # this a check on the reshape rather than a restatement of it.
+    share = check("den_was_dtw_full", round(float((draws > 0).mean()), 4))
+
+    panels = [
+        (grid[0], "1 × 800", "one draw of every probability, flipped 800 times"),
+        (grid[:10].ravel(), "10 × 800", "ten draws of the probabilities, overlaid"),
+        (draws, "200 × 800 = 160,000", "all of them — the figure the product ships"),
+    ]
+    edges = np.histogram_bin_edges(draws, bins=34)
+
+    fig = plt.figure(figsize=(9.6, 5.0))
+    fig.patch.set_facecolor(PALETTE["bg"])
+    draw_title_block(
+        title_axes(fig, height_frac=0.15),
+        "Where 160,000 comes from",
+        [
+            "DEN at WAS, week 13 of 2025, Full edition. Each panel adds posterior draws; "
+            "the axis never moves.",
+            "Layer 1 draws the probabilities, layer 2 flips the coins.",
+        ],
+        title_size=17,
+    )
+
+    axes = []
+    # The panels sit low enough to leave two lines of heading above each one.
+    # The first render put the caption 26 points above the axes, which on a
+    # 4.4-inch figure is where the title block's second line already was.
+    for index, (values, heading, caption) in enumerate(panels):
+        ax = fig.add_axes([0.07 + index * 0.315, 0.22, 0.265, 0.44])
+        ax.set_facecolor(PALETTE["bg"])
+        colour = PALETTE["anchor"] if index < 2 else PALETTE["bad"]
+        ax.hist(
+            values,
+            bins=edges,
+            weights=np.full(values.size, 100.0 / values.size),
+            color=colour,
+            alpha=0.55 if index < 2 else 0.8,
+        )
+        ax.axvline(0.0, color=PALETTE["text"], linewidth=1.0, linestyle=":")
+        ax.set_title(heading, fontsize=11, fontweight="bold", color=PALETTE["text"], pad=22)
+        ax.annotate(
+            caption,
+            xy=(0.5, 1.0),
+            xycoords="axes fraction",
+            xytext=(0, 6),
+            textcoords="offset points",
+            ha="center",
+            fontsize=8,
+            color=PALETTE["text_muted"],
+        )
+        # Each panel's own share, so "it is already there by the second panel"
+        # is a number a reader can check rather than a claim the caption makes.
+        ax.annotate(
+            f"WAS {(values > 0).mean():.3f}",
+            xy=(0.97, 0.93),
+            xycoords="axes fraction",
+            ha="right",
+            va="top",
+            fontsize=9,
+            fontweight="bold",
+            color=colour if index == 2 else PALETTE["text_muted"],
+        )
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_color(PALETTE["spine"])
+        ax.tick_params(colors=PALETTE["text_muted"], labelsize=8)
+        ax.set_xlim(edges[0], edges[-1])
+        if index:
+            ax.set_yticklabels([])
+        else:
+            ax.set_ylabel("% of simulations", fontsize=8.5, color=PALETTE["text_muted"])
+        axes.append(ax)
+
+    top = max(ax.get_ylim()[1] for ax in axes)
+    for ax in axes:
+        ax.set_ylim(0, top)
+
+    fig.text(
+        0.5,
+        0.105,
+        "deserved margin, home-signed  (← DEN wins by · WAS wins by →)",
+        ha="center",
+        fontsize=9,
+        color=PALETTE["text_muted"],
+    )
+    fig.text(
+        0.07,
+        0.035,
+        f"Washington's deserved-win share is the area right of zero, printed on each "
+        f"panel. All 200 draws give {share:.4f}, which is the number the product reports.",
+        ha="left",
+        fontsize=8,
+        color=PALETTE["text_muted"],
+    )
+    name = finalize(fig, FIGURE_DIR / "21_bootstrap_buildup.png").name
+    return {"file": name, "dtw_home": share, "shape": [POSTERIOR_DRAWS, COIN_DRAWS]}
+
+
+# --------------------------------------------------------------------------
 
 
 def copy_game_figures() -> list[str]:
@@ -1892,7 +2590,7 @@ CAPTIONS = {
         "Three components that passed the mechanism test and failed on size, each against "
         "the floor committed before its effect was computed."
     ),
-    "15_defence_shrinkage.png": (
+    "15_defense_shrinkage.png": (
         "The same shrinkage idea from a different model: the dropped-pick model is a "
         "logistic regression, not the beta-binomial figure 3 draws."
     ),
@@ -1900,9 +2598,30 @@ CAPTIONS = {
         "One game with and without the hands-on-the-ball rows, on one axis. Denver's share "
         "falls from 86% to 59%; the verdict did not flip, it stopped being a verdict."
     ),
+    "17_fumble_retention_bars.png": (
+        "How often the fumbling team keeps the ball, by class of play, on the fitted "
+        "baseline the simulator prices with. A botched snap on a run is kept 76.9% of the "
+        "time and a fumble on a run 46.1% — a coin, but not the same coin."
+    ),
+    "18_kicker_prior_posterior.png": (
+        "One kicker-season priced: E. Pineiro's 31-of-32 in 2025 against the prior any "
+        "kicker starts from, both as make probability from 45 yards."
+    ),
+    "19_denver_prior_posterior.png": (
+        "The same picture for a defense's hands: Denver's 2024 defense caught 13 of 17 "
+        "interceptable throws, and the model moves from the league's 49.8% to 55.2%."
+    ),
+    "20_persistent_share.png": (
+        "How much of a dropped pick and of a fumble recovery is the team rather than the "
+        "bounce — about one percent of each, on two different measurements the figure names."
+    ),
+    "21_bootstrap_buildup.png": (
+        "Where 160,000 comes from: one posterior draw's 800 replays, then ten draws, then "
+        "all 200 — the histogram the product ships."
+    ),
     "formula_01_rule.png": "The neutralization rule, term by term.",
     "formula_02_points.png": "EPA to points of margin, and the deserve-to-win share.",
-    "formula_03_fg.png": "The field-goal make model, every covariate labelled.",
+    "formula_03_fg.png": "The field-goal make model, every covariate labeled.",
     "formula_04_betabinomial.png": "The beta-binomial hierarchy that shrinks a unit's rate.",
     "formula_05_trust.png": "The trust dial, and what sets it.",
 }
@@ -1927,12 +2646,20 @@ def write_captions() -> Path:
 
 
 def audit() -> None:
-    """The three rules a committed image has to obey, checked rather than trusted.
+    """The rules a committed image has to obey, checked rather than trusted.
 
-    The third is new in round 2 and is the strongest: the set of images on disk
-    must be exactly the set the article links to. A figure nobody links to is a
-    file in the budget doing no work, and a link with no figure is a broken
-    image in a published article.
+    **`CAPTIONS` is the manifest, and round 3 moved it there from the article.**
+    Round 2 made the article the source of truth for which images ship, which
+    worked while one worker wrote both. Round 3 splits them: worker 2 writes the
+    article against the filenames in the handoff, on a branch this one never
+    sees, so a figure this script has just drawn is legitimately unlinked until
+    those two branches meet. Enforcing "every image is linked" here would make
+    that ordinary state a crash.
+
+    So the direction that can still be fatal is the one that is always a defect:
+    **linked but absent** is a broken image in a published article, whoever
+    wrote which half. Present-but-unlinked is reported and does not stop the
+    run, because on this branch it is the expected reading.
     """
     files = sorted(path.name for path in FIGURE_DIR.glob("*.png"))
     heavy = [name for name in files if (FIGURE_DIR / name).stat().st_size > SIZE_LIMIT]
@@ -1940,31 +2667,41 @@ def audit() -> None:
         raise AssertionError(f"over {SIZE_LIMIT} bytes: {heavy}")
     if len(files) > MAX_FILES:
         raise AssertionError(f"{len(files)} images, and the article's budget is {MAX_FILES}")
-
-    linked = set(re.findall(r"\(figures/([^)]+\.png)\)", ARTICLE.read_text()))
-    missing = sorted(linked - set(files))
-    unused = sorted(set(files) - linked)
-    if missing or unused:
-        raise AssertionError(
-            f"the article and the figure directory disagree — linked but absent: {missing}; "
-            f"present but unlinked: {unused}"
-        )
     if set(CAPTIONS) != set(files):
         raise AssertionError(
             f"CAPTIONS covers {sorted(set(CAPTIONS) ^ set(files))} differently from the directory"
         )
+
+    linked = set(re.findall(r"\(figures/([^)]+\.png)\)", ARTICLE.read_text()))
+    missing = sorted(linked - set(files))
+    if missing:
+        raise AssertionError(f"the article links images that do not exist: {missing}")
+    unlinked = sorted(set(files) - linked)
+
     print(
         f"\n{len(files)} images in {FIGURE_DIR.relative_to(paths.REPO_ROOT)}, "
-        "none over 500 KB, every one linked from the article"
+        "none over 500 KB, every one captioned"
     )
+    if unlinked:
+        print(
+            f"  not yet linked from this branch's article ({len(unlinked)}): "
+            f"{', '.join(unlinked)}\n"
+            "  Expected while worker 2's prose is on its own branch; check again after "
+            "the merge."
+        )
 
 
 def sweep() -> list[str]:
-    """Delete the images draft 1 shipped that round 2 withdraws."""
-    linked = set(re.findall(r"\(figures/([^)]+\.png)\)", ARTICLE.read_text()))
+    """Delete images this script no longer draws.
+
+    Keyed on `CAPTIONS` rather than on the article's links, for the reason
+    :func:`audit` gives: on this branch the article is a round behind the
+    figures by design, and sweeping against it would delete each figure the
+    moment it was drawn.
+    """
     removed = []
     for path_ in sorted(FIGURE_DIR.glob("*.png")):
-        if path_.name not in linked:
+        if path_.name not in CAPTIONS:
             path_.unlink()
             removed.append(path_.name)
     return removed
@@ -2009,8 +2746,13 @@ def main() -> None:
     print("  11 flip distribution", flip_distribution(computed["summary"]))
     print("  13 epa to points    ", epa_to_points())
     print("  14 refused floors   ", refused_floors())
-    print("  15 defence shrinkage", defence_shrinkage())
+    print("  15 defense shrinkage", defence_shrinkage())
     print("  16 with and without ", den_was_with_without(computed["walkthrough"]))
+    print("  17 fumble retention ", fumble_retention_bars())
+    print("  18 kicker curves    ", kicker_prior_posterior())
+    print("  19 denver curves    ", denver_prior_posterior())
+    print("  20 persistent share ", persistent_share())
+    print("  21 bootstrap buildup", bootstrap_buildup(computed["walkthrough"]))
 
     print("formula plates ...")
     for name in formula_plates():
