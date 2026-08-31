@@ -593,10 +593,11 @@ def stamp_box(
         block_top = int(height * STAMP_INSET)
         text_top = block_top + mark_h + gap
     else:
-        title_top, collision = anchor
-        if collision:
-            # Something besides the rule is in the stamp's columns (a wide
-            # title): stack the block above the title instead of into it.
+        title_top, foreign = anchor
+        block_h = mark_h + gap + text_h + gap
+        if any(title_top - 4 <= r <= title_top + block_h + 4 for r in foreign):
+            # A wide title reaches into the stamp's own rows: stack the block
+            # above the title instead of into it.
             text_top = title_top - gap - text_h
             block_top = text_top - gap - mark_h
         else:
@@ -624,14 +625,13 @@ def _rule_rows(ink) -> np.ndarray:
     return np.nonzero(ink.sum(axis=1) > width * 0.70)[0]
 
 
-def _ink_anchor(image, left: int, width: int, height: int) -> tuple[int, bool] | None:
-    """``(block_top, collision)`` for the stamp, or ``None`` for an empty top.
+def _ink_anchor(image, left: int, width: int, height: int) -> tuple[int, list[int]] | None:
+    """``(title_top, foreign_rows)`` for the stamp, or ``None`` for an empty top.
 
-    the maintainer 2026-08-31 (round 6): the mark's **top** aligns with the title's top
-    — the block sits *in* the title band, and the divider rule is cut where
-    the block crosses it. ``collision`` is True when something other than the
-    rule already inks the stamp's own columns, in which case the caller falls
-    back to stacking the block above the title (round 4's placement).
+    ``foreign_rows`` are the rows in the stamp's own columns holding ink that
+    is not the divider rule; :func:`stamp_box` checks them against the block's
+    candidate rows only, so plot ink lower in the band does not force the
+    fallback.
     """
     ink = _top_ink(image, height)
     top = _title_top(ink)
@@ -640,7 +640,7 @@ def _ink_anchor(image, left: int, width: int, height: int) -> tuple[int, bool] |
     rule = set(_rule_rows(ink).tolist())
     columns = ink[:, max(0, left) :]
     foreign = [r for r in np.nonzero(columns.any(axis=1))[0].tolist() if r not in rule]
-    return top, bool(foreign)
+    return top, foreign
 
 
 def reserve_stamp_strip(

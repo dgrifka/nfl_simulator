@@ -133,6 +133,8 @@ ARTICLE_DTW = ("05_den_was_2025_wk13_dtw_full", "2025_13_DEN_WAS", "full")
 # land on a number a numbered document already published. These are those
 # numbers, with their document, and `check` raises rather than warns.
 DOC_CHECKS = {
+    "den_2025_worthy": (21, 0.001),
+    "den_2025_caught": (8, 0.001),
     # document 02 §1, the pooled recovery-rate split half
     "fumble_rate_split_half_r": (0.051, 0.001),
     # document 02, test 1 — the six split-half correlations
@@ -1174,6 +1176,38 @@ def refused_floors() -> dict:
 SHRINKAGE_ROWS = 5
 
 
+def denver_2025_followup() -> dict:
+    """Denver the year after: the shrunk 55.2% beat the raw 76.5% as a forecast.
+
+    the maintainer 2026-08-31. Raw 2025 rate on interception-worthy throws against the
+    Denver defense, from the same charting join every drop figure uses. The
+    check pins the counts so the article's sentence cannot drift from the data.
+    """
+    import glob
+
+    pbp = pl.read_parquet("data/pbp/pbp_2025.parquet").with_columns(
+        pl.col("play_id").cast(pl.Int32)
+    )
+    ftn = pl.read_parquet(glob.glob("data/ftn/*2025*")[0])
+    joined = pbp.join(
+        ftn,
+        left_on=["game_id", "play_id"],
+        right_on=["nflverse_game_id", "nflverse_play_id"],
+        how="inner",
+    )
+    worthy = joined.filter(pl.col("is_interception_worthy"))
+    denver = worthy.filter(pl.col("defteam") == "DEN")
+    caught = int(denver["interception"].sum())
+    check("den_2025_worthy", denver.height)
+    check("den_2025_caught", caught)
+    return {
+        "worthy": denver.height,
+        "caught": caught,
+        "rate": caught / denver.height,
+        "league": float(worthy["interception"].mean()),
+    }
+
+
 def defence_shrinkage() -> dict:
     """Five defence-seasons' raw dropped-pick rate, and where the model puts it.
 
@@ -1826,7 +1860,7 @@ TRUST_TERMS = [
 ]
 
 TRUST_LABELS = {
-    "weight": "how much to trust\nits own record",
+    "weight": "how much to trust\nits own rate",
     "unit": "what this\nunit did",
     "league": "what the\nleague does",
 }
@@ -1879,6 +1913,23 @@ def formula_plates() -> list[str]:
 # --------------------------------------------------------------------------
 # figure 17 — the six fumble classes the simulator actually prices with
 # --------------------------------------------------------------------------
+
+
+def _align_title_with_ticks(fig, ax) -> None:
+    """Left-align the title block with the y tick labels (the maintainer 2026-08-31).
+
+    `barh` tick labels hang outside the axes, further left than the title
+    block's own margin, and the mismatch reads as a layout accident. Measured
+    after a draw because the labels' width is a font fact, not a layout one.
+    """
+    fig.canvas.draw()
+    labels = ax.get_yticklabels()
+    if not labels:
+        return
+    left = min(label.get_window_extent().x0 for label in labels) / fig.get_window_extent().width
+    title_ax = fig.axes[0]
+    box = title_ax.get_position()
+    title_ax.set_position([left, box.y0, box.x1 - left, box.height])
 
 
 def fumble_retention_bars() -> str:
@@ -1975,6 +2026,7 @@ def fumble_retention_bars() -> str:
         fontsize=8,
         color=PALETTE["text_muted"],
     )
+    _align_title_with_ticks(fig, ax)
     return finalize(fig, FIGURE_DIR / "17_fumble_retention_bars.png").name
 
 
@@ -2215,9 +2267,10 @@ def denver_prior_posterior() -> dict:
     posterior_pct = check("denver_posterior_pct", round(float(with_denver.mean() * 100), 1))
     league_pct = check("denver_league_pct", round(float(league.mean() * 100), 1))
 
-    primary, _secondary = team_colors("DEN", 2024)
+    # the maintainer 2026-08-31: navy reads like the league grey — use the orange.
+    _navy, primary = team_colors("DEN", 2024)
     fig, ax = _prior_posterior_axes(
-        "What 17 throws bought Denver",
+        "Modeling Denver's interception catch rate",
         [
             f"Denver's 2024 defense caught {caught} of the {attempts} throws the charters "
             "called interceptable.",
@@ -2254,7 +2307,7 @@ def denver_prior_posterior() -> dict:
     # Above the curves, for the reason figure 18 gives: the two overlap where
     # this label belongs, and the row below the axis belongs to the x-label.
     ax.annotate(
-        f"the league's hands: {league_pct:.1f}%",
+        f"league interception-worthy catch rate: {league_pct:.1f}%",
         xy=(league_pct, 1.15),
         xytext=(-5, 0),
         textcoords="offset points",
@@ -3166,6 +3219,7 @@ def main() -> None:
     print("  13 epa to points    ", epa_to_points())
     print("  14 refused floors   ", refused_floors())
     print("  15 defense shrinkage", defence_shrinkage())
+    print("  den 2025 follow-up  ", denver_2025_followup())
     print("  16 with and without ", den_was_with_without(computed["walkthrough"]))
     print("  17 fumble retention ", fumble_retention_bars())
     print("  18 kicker curves    ", kicker_prior_posterior())
