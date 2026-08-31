@@ -53,7 +53,9 @@ OUTPUTS = paths.RESEARCH_OUTPUT_DIR
 # A committed PNG is a file somebody clones. 500 KB is the article's budget per
 # image and the script refuses to leave a heavier one on disk.
 SIZE_LIMIT = 500_000
-MAX_FILES = 22
+# Round 5's budget, two above round 3's: figures 22 and 23 join the set and
+# nothing is withdrawn, so twenty-two are drawn against a cap of twenty-four.
+MAX_FILES = 24
 
 # --------------------------------------------------------------------------
 # round 3's five new figures, and the constants that pick their subjects
@@ -70,11 +72,32 @@ KICKER_FLOOR = 20
 # it is the distance at which the league is neither automatic nor hopeless —
 # 79.9%, so a kicker's own ability has room to show.
 KICKER_DISTANCE = 45.0
-KICKER_NAME = "E. Pineiro"
+# Spelled as he spells it. Round 3 wrote "Pineiro" because the effects parquet
+# keys on a player id and the name was typed from memory; round 5's audit
+# (document 65) is the reason it is now typed from the man's name.
+KICKER_NAME = "E. Pi\u00f1eiro"
 KICKER_TEAM = "SF"
+# Untracked and gitignored — a headshot is not this repository's to redistribute.
+# Absent, figure 18 falls back to the team mark, which is what round 3 drew.
+KICKER_HEADSHOT = "headshots/pineiro.png"
 
 # Figure 19's defence-season. `worthy_throw_frame` keys these `"season|team"`.
 DENVER_KEY = "2024|DEN"
+
+# Figure 22 overlays two defence-seasons so the reader sees that a replay draws
+# from the *unit's own* curve rather than from one league curve. Denver 2024 is
+# figure 19's strong unit; the Jets' 2025 defence is the other end — nine
+# interceptable throws and none of them caught — and the pair shows shrinkage
+# working in both directions from one league middle.
+SAMPLING_KEYS = ("2024|DEN", "2025|NYJ")
+
+# Figure 23 is figure 18's mirror on the offence: one receiving corps' drop rate
+# before and after shrinking. **Chosen by a rule, like the kicker.** Among
+# corps-seasons with at least `CORPS_FLOOR` catchable targets, the one whose raw
+# rate sits furthest from its own posterior — the largest visible shrink, which
+# is what the figure is for. It resolves to Jacksonville 2025.
+CORPS_FLOOR = 200
+CORPS_KEY = "2025|JAX"
 
 # Figure 20's two numbers, and they are **two different statistics** — see
 # `persistent_share`. The variance share is document 48 through document 52 §2;
@@ -152,20 +175,26 @@ DOC_CHECKS = {
     "fumble_rate_kickoff_live": (0.5124, 0.00005),
     "fumble_rate_pass_aborted": (1.0, 0.00005),
     # Document 64 §8 — the walk-through game with and without the
-    # hands-on-the-ball rows, pre-registered from worker 2's own computation
-    # and reproduced here rather than copied.
-    "den_was_dtw_strict": (0.1449, 0.0001),
-    "den_was_dtw_full": (0.4058, 0.0001),
-    "den_was_deserved_strict": (-3.32, 0.005),
-    "den_was_deserved_full": (-1.35, 0.005),
+    # hands-on-the-ball rows — **at v1.4**, where document 68 §7c republishes
+    # all four. The game is Denver *at* Washington, played at Northwest
+    # Stadium's 180 feet: below the model's 569-foot centre, so every kick in it
+    # is now priced slightly harder and each of the four numbers moves a little.
+    # v1.3's values were 0.1449 / 0.4058 / -3.32 / -1.35.
+    "den_was_dtw_strict": (0.1497, 0.0001),
+    "den_was_dtw_full": (0.4094, 0.0001),
+    "den_was_deserved_strict": (-3.27, 0.005),
+    "den_was_deserved_full": (-1.31, 0.005),
     # --- round 3 --------------------------------------------------------
     # Figure 18. **Not document 05b §9's 5.35 pp**, and the difference is the
     # point: §9 reports the Phase 2 posterior, whose `sigma_kicker` is 0.360.
-    # The shipped v1.3 model is the refit at 0.385 (§11's table), which is what
-    # every ledger row is priced with, so the figure draws the refit and says
-    # 5.48. Document 64 §11 carries the reconciliation.
-    "kicker_one_sigma_pp": (5.48, 0.05),
-    "fg_league_p45": (79.88, 0.05),
+    # The shipped model is the refit, which is what every ledger row is priced
+    # with, so the figure draws the refit. Document 64 §11 carries the
+    # reconciliation, and round 5 moves both numbers to **v1.4**: adding the
+    # elevation term re-centres the league curve (79.88 -> 79.92 at 45 yards)
+    # and narrows `sigma_kicker` from 0.3855 to 0.3837, which carries the
+    # one-standard-deviation kicker from 5.48 pp to 5.45.
+    "kicker_one_sigma_pp": (5.45, 0.05),
+    "fg_league_p45": (79.92, 0.05),
     # Figure 19. The posterior mean is document 64's 55.2%; the league figure
     # and the two counts are computed here and published in document 64 §11.
     "denver_worthy_throws": (17, 0),
@@ -177,6 +206,21 @@ DOC_CHECKS = {
     "dropped_pick_share_pct": (1.4, 0.001),
     "fumble_shrinkage_pct": (1.1, 0.001),
     "receiver_drop_share_pct": (0.088, 0.001),
+    # --- round 5 --------------------------------------------------------
+    # Figure 22's second unit, the other end of figure 19's axis. Nine
+    # interceptable throws, none caught, and the model still says 42.6% — which
+    # is the whole of what the figure is drawn to show.
+    "nyj_worthy_throws": (9, 0),
+    "nyj_worthy_caught": (0, 0),
+    "nyj_posterior_pct": (42.6, 0.05),
+    # Figure 23, the offence mirror. Jacksonville's 2025 corps dropped 40 of the
+    # 420 balls FTN charted catchable — 9.52%, nearly twice the league's rate on
+    # those same targets — and the model keeps about a third of that record.
+    "corps_targets": (420, 0),
+    "corps_drops": (40, 0),
+    "corps_raw_pct": (9.52, 0.01),
+    "corps_posterior_pct": (6.34, 0.01),
+    "corps_league_pct": (5.14, 0.01),
 }
 
 
@@ -190,7 +234,12 @@ DOC_CHECKS = {
 # These are document 64's own numbers rather than a reproduction of an older
 # document's, so they are computed and published, not `check`ed — the checks
 # below still bind every figure that redraws a *published* number.
-ONE_SIM_ARTIFACT = "full_summary.parquet"
+# **v1.4's artifact**, not v1.3's. Simulator v1.4 put stadium elevation into the
+# shipped field-goal model (document 68); `render.py` reads the v1.4 files, and a
+# figure drawn from `full_summary.parquet` beside a waterfall drawn from
+# `full_summary_v14.parquet` would be two adjudications wearing one article.
+# Document 68 §6 is the list of what moved between them.
+ONE_SIM_ARTIFACT = "full_summary_v14.parquet"
 
 # Document 33's degeneracy definition, quoted from `research/48_magnitude_audit.py`
 # (which took it from document 10, gate V-3) rather than restated: a DTW% outside
@@ -842,7 +891,7 @@ def flip_distribution(summary: dict) -> dict:
         subtitle=[
             f"Deserved-win probability for the home team · {games.height:,} games, 2022–2025",
             f"{degenerate:,} games ({degenerate / games.height:.0%}) are decided beyond "
-            "luck's reach — the two end bars.",
+            "luck's reach — DTW% pinned at 0 or 100.",
         ],
     )
     edges = np.linspace(0.0, 1.0, 41)
@@ -1187,11 +1236,16 @@ def defence_shrinkage() -> dict:
     fig, ax = new_figure(
         8.0,
         5.8,
-        title="The same idea, on a different model",
+        # the maintainer, round 5. The old title said "what a defense recorded" while the
+        # x-axis said "actually picked", and document 65's finding A-3 names
+        # that mixed framing as the soil the article's reversed caption (W-1)
+        # grew in. One frame now, in the title and on the axis: this is a
+        # **catch** rate, and high is good.
+        title="Modeling each defense's interception catch rate",
         subtitle=[
-            "Dropped interceptions: what a defense recorded, and what the model believes",
+            "What a defense caught on interceptable throws, and where the model puts it",
             f"A crossed logistic regression, not the beta-binomial above — and it believes "
-            f"defenses differ by about {spread_pp:.1f} points.",
+            f"defenses differ by about {spread_pp:.1f} percentage points.",
         ],
     )
     # The key goes under the axis. At the top right it printed across the league
@@ -1253,7 +1307,7 @@ def defence_shrinkage() -> dict:
     ax.set_ylim(-0.7, len(positions) - 0.15)
     ax.xaxis.set_major_formatter(lambda v, _: f"{v:.0%}")
     ax.set_xlabel(
-        "share of interception-worthy throws actually picked",
+        "share of interception-worthy throws the defense caught",
         color=PALETTE["text_muted"],
         fontsize=10,
     )
@@ -1264,7 +1318,7 @@ def defence_shrinkage() -> dict:
     fig.text(
         0.22,
         0.055,
-        "red = what happened   ·   grey = what the model believes",
+        "red = what the defense caught   ·   grey = what the model believes",
         ha="left",
         va="center",
         fontsize=9,
@@ -1995,8 +2049,8 @@ def kicker_prior_posterior() -> dict:
     from nfl_simulator.render import _read_side
     from nfl_simulator.teams import team_colors, team_logo
 
-    model, _ = _read_side().load_model("trace_fg_refit.nc", "fg_refit_summary.json")
-    posterior = az.from_netcdf(OUTPUTS / "trace_fg_refit.nc")["posterior"]
+    model, _ = _read_side().load_model("trace_fg_v14.nc", "fg_v14_summary.json")
+    posterior = az.from_netcdf(OUTPUTS / "trace_fg_v14.nc")["posterior"]
     sigma = posterior["sigma_kicker"].values.ravel()
 
     effects = pl.read_parquet(OUTPUTS / "fg_kicker_effects.parquet").with_columns(
@@ -2028,13 +2082,17 @@ def kicker_prior_posterior() -> dict:
 
     team = KICKER_TEAM
     primary, _secondary = team_colors(team, KICKER_SEASON)
+    # the maintainer, round 5. The subtitle has to say, in those words, which of the two
+    # numbers on this figure is a record and which is a model: readers were
+    # taking the 31 of 32 for the curve's own claim, when the curve is the
+    # shrunk posterior and sits nowhere near 97%.
     fig, ax = _prior_posterior_axes(
-        f"What {best['attempts']} kicks bought {KICKER_NAME}",
+        f"{KICKER_NAME}'s FG probability vs the league",
         [
-            f"{KICKER_NAME}, {team} {KICKER_SEASON} — {int(best['made'])} of "
-            f"{best['attempts']}, before any shrinkage.",
-            f"Both curves are make probability from {KICKER_DISTANCE:.0f} yards, where the "
-            f"league makes {league.mean() * 100:.1f}%.",
+            f"His {KICKER_SEASON} record is {int(best['made'])} of {best['attempts']} — raw, "
+            "unshrunk, and not what the simulator prices with.",
+            f"The colored curve is his shrunk posterior at {KICKER_DISTANCE:.0f} yards, "
+            f"against a league that makes {league.mean() * 100:.1f}%.",
         ],
     )
 
@@ -2081,9 +2139,16 @@ def kicker_prior_posterior() -> dict:
         fontsize=8.5,
         color=PALETTE["text_muted"],
     )
-    # On the posterior's own shoulder, so the mark labels the coloured curve
-    # rather than sitting in a corner as decoration.
-    _draw_logo(ax, team_logo(team, KICKER_SEASON), 0.855, 0.30)
+    # the maintainer, round 5: the man rather than the badge, when the file is there.
+    # Drawn **outside** the posterior's right tail rather than on it — a face
+    # over the curve is ink on the quantity the figure exists to show. The file
+    # is untracked and gitignored, so a fresh clone falls back to the team mark
+    # and the figure still draws.
+    headshot = OUTPUTS / KICKER_HEADSHOT
+    if headshot.exists():
+        _draw_logo(ax, plt.imread(headshot), 0.93, 0.62, width_in=0.60)
+    else:
+        _draw_logo(ax, team_logo(team, KICKER_SEASON), 0.855, 0.30)
 
     ax.set_xlabel(
         f"make probability from {KICKER_DISTANCE:.0f} yards (%)",
@@ -2284,14 +2349,21 @@ def persistent_share() -> dict:
     # gives the title block a fixed 13% of the figure's height, so shrinking the
     # canvas to fit the bars printed the subtitle through the title's rule. The
     # bars are made to fill the space instead.
+    # the maintainer, round 5. "Almost none of it is skill" was read as a claim about the
+    # *play*, and it is not: forcing an interceptable throw is real, persistent
+    # defensive skill and the simulator never touches it. What these bars
+    # measure is the **finish** — whether the forced ball is held — and that is
+    # the part the ledger re-flips. The title now says which half is which, and
+    # the subtitle names what is kept before it names what is re-priced.
     fig, ax = new_figure(
         8.2,
         5.6,
-        title="Almost none of it is skill",
+        title="The finish is the coin, the pressure is the skill",
         subtitle=[
-            "Three of the events the simulator re-prices, and how much of each one the "
-            "team itself explains.",
-            "Two different measurements of the same idea — the labels say which is which.",
+            "The skill that forced the throw is kept exactly as earned. Only the catch-"
+            "or-drop of it is re-flipped,",
+            "and this is how little of that finish is the unit — on two measurements the "
+            "labels tell apart.",
         ],
     )
 
@@ -2360,6 +2432,309 @@ def persistent_share() -> dict:
 
 
 # --------------------------------------------------------------------------
+# figure 22 — two defenses, two curves, and the draw that picks between them
+# --------------------------------------------------------------------------
+
+
+def _draw_ticks(ax, values: np.ndarray, colour: str, y: float, *, n: int = 12) -> None:
+    """A few of the draws a replay actually takes, as ticks along a curve's foot.
+
+    Evenly spaced *quantiles* rather than a random subsample: the point is
+    "this is the spread a replay samples from", and a random twelve of 8,000
+    draws would land wherever the seed put them and read as noise.
+
+    ``y`` is an **axes fraction** and the ticks are drawn inside the axes on a
+    blended transform. The first render hung them below the axis, where two rows
+    of twelve printed straight through the tick labels and the x-axis title.
+    """
+    from matplotlib.transforms import blended_transform_factory
+
+    picks = np.quantile(values, np.linspace(0.06, 0.94, n))
+    ax.plot(
+        picks * 100,
+        np.full(n, y),
+        marker="|",
+        markersize=8,
+        markeredgewidth=1.4,
+        linestyle="none",
+        color=colour,
+        alpha=0.9,
+        transform=blended_transform_factory(ax.transData, ax.transAxes),
+        zorder=6,
+    )
+
+
+def defence_sampling() -> dict:
+    """Figure 22 — every replay draws from the *unit's own* curve.
+
+    Figure 19 shows one defence-season moving off the league. This shows two of
+    them at once, at opposite ends, because the sentence the article needs is
+    not "the model shrinks" but **"a strong unit keeps its edge in every
+    re-run"** — which is a claim about what each of the 200 posterior draws is
+    drawn from, and is invisible on a figure holding one unit.
+
+    Denver 2024 caught 13 of 17. The Jets' 2025 defence caught none of 9. The
+    model puts them 12 percentage points apart and leaves them there, so no
+    replay of a Denver game prices its hands at the Jets' rate.
+    """
+    from nfl_simulator.dropped_picks import DroppedPickModel, worthy_throw_frame
+    from nfl_simulator.render import _simulation_context
+    from nfl_simulator.teams import team_colors, team_logo
+
+    context = _simulation_context()
+    model = DroppedPickModel.from_posterior(
+        OUTPUTS / "trace_dropped_pick.nc", OUTPUTS / "dropped_pick_summary.json"
+    )
+    worthy = worthy_throw_frame(context["pbp"], context["ftn"])
+
+    units = []
+    for key in SAMPLING_KEYS:
+        plays = worthy.filter(pl.col("defence_season") == key).to_dicts()
+        season, team = key.split("|")
+        curve = np.array([model.catch_probability(key, play) for play in plays]).mean(0)
+        units.append(
+            {
+                "key": key,
+                "team": team,
+                "season": int(season),
+                "n": len(plays),
+                "caught": int(sum(play["interception"] for play in plays)),
+                "curve": curve,
+                "mean": float(curve.mean()),
+            }
+        )
+    league_curve = np.array(
+        [
+            model.catch_probability(None, play)
+            for play in worthy.filter(pl.col("defence_season") == SAMPLING_KEYS[0]).to_dicts()
+        ]
+    ).mean(0)
+
+    check("denver_worthy_throws", units[0]["n"])
+    check("denver_worthy_caught", units[0]["caught"])
+    check("nyj_worthy_throws", units[1]["n"])
+    check("nyj_worthy_caught", units[1]["caught"])
+    check("denver_posterior_pct", round(units[0]["mean"] * 100, 1))
+    check("nyj_posterior_pct", round(units[1]["mean"] * 100, 1))
+
+    fig, ax = _prior_posterior_axes(
+        "Every replay draws from the unit's own curve",
+        [
+            f"{units[0]['team']} {units[0]['season']} caught {units[0]['caught']} of "
+            f"{units[0]['n']} interceptable throws; {units[1]['team']} {units[1]['season']} "
+            f"caught {units[1]['caught']} of {units[1]['n']}.",
+            "The ticks are draws a replay takes. A strong unit keeps its edge in every "
+            "re-run — it is never re-priced at the league's hands.",
+        ],
+    )
+
+    both = np.concatenate([unit["curve"] for unit in units] + [league_curve])
+    grid = np.linspace(np.quantile(both, 0.002) - 0.02, np.quantile(both, 0.998) + 0.02, 512)
+
+    league_density = _density(league_curve, grid)
+    ax.plot(grid * 100, league_density, color=PALETTE["text_muted"], linewidth=1.2, linestyle=":")
+    ax.annotate(
+        f"the league's hands: {league_curve.mean() * 100:.1f}%",
+        xy=(league_curve.mean() * 100, 1.15),
+        xytext=(0, 0),
+        textcoords="offset points",
+        ha="center",
+        va="center",
+        fontsize=8.5,
+        color=PALETTE["text_muted"],
+    )
+
+    # Two tick rows, one per unit, at the foot of the axes rather than under it,
+    # so twelve ticks never print through the tick labels. Each unit's mark sits
+    # **over its own curve** — the first render placed them by list order, which
+    # put Denver's badge above the Jets' curve and the Jets' above Denver's, the
+    # one mistake this figure cannot afford to make.
+    for offset, unit in enumerate(units):
+        primary, _secondary = team_colors(unit["team"], unit["season"])
+        density = _density(unit["curve"], grid)
+        ax.fill_between(grid * 100, 0, density, color=primary, alpha=0.30, linewidth=0)
+        ax.plot(grid * 100, density, color=primary, linewidth=2.2)
+        ax.annotate(
+            f"{unit['team']}: {unit['mean'] * 100:.1f}%",
+            xy=(unit["mean"] * 100, density.max()),
+            xytext=(0, 14),
+            textcoords="offset points",
+            ha="center",
+            fontsize=10.5,
+            fontweight="bold",
+            color=primary,
+        )
+        _draw_ticks(ax, unit["curve"], primary, 0.045 + 0.052 * offset)
+        unit["density_peak"] = float(density.max())
+
+    ax.set_xlim(grid.min() * 100, grid.max() * 100)
+    low, high = ax.get_xlim()
+    midpoint = float(np.mean([unit["mean"] for unit in units]))
+    for unit in units:
+        # Data value -> axes fraction, because `_draw_logo` anchors in axes
+        # coordinates. Half-way up the unit's own curve, pushed to whichever
+        # shoulder faces away from the other unit so the two marks never meet
+        # where the curves cross.
+        centre = (unit["mean"] * 100 - low) / (high - low)
+        outward = 0.11 if unit["mean"] >= midpoint else -0.11
+        _draw_logo(
+            ax,
+            team_logo(unit["team"], unit["season"]),
+            min(0.95, max(0.05, centre + outward)),
+            0.62,
+        )
+
+    ax.set_xlabel(
+        "rate the defense catches an interceptable throw (%)",
+        fontsize=9,
+        color=PALETTE["text_muted"],
+    )
+    ax.set_ylim(0, 1.18)
+    ax.annotate(
+        "Neither unit is priced at the league rate, and neither is priced at its own raw "
+        "record. Each replay takes one\nvalue from its own curve, so the gap between two "
+        "defenses survives all 160,000 of them.",
+        xy=(0, 0),
+        xycoords="axes fraction",
+        xytext=(0, -52),
+        textcoords="offset points",
+        ha="left",
+        va="top",
+        fontsize=8,
+        color=PALETTE["text_muted"],
+    )
+    name = finalize(fig, FIGURE_DIR / "22_defense_sampling.png").name
+    return {
+        "file": name,
+        "units": [{k: unit[k] for k in ("key", "n", "caught", "mean")} for unit in units],
+        "league_pct": round(float(league_curve.mean() * 100), 1),
+    }
+
+
+# --------------------------------------------------------------------------
+# figure 23 — the offense's mirror of figure 18
+# --------------------------------------------------------------------------
+
+
+def corps_prior_posterior() -> dict:
+    """Figure 23 — one receiving corps' drop rate, raw and shrunk.
+
+    Figure 18 does this for a kicker and figure 19 for a defence; the offence's
+    hands had no picture at all, which left the article's "each event is priced
+    at the unit's own shrunk rate" resting on two examples that were both
+    somebody else's mistake. **Chosen by a rule** — the corps-season with the
+    largest gap between its raw rate and its posterior, among those with at
+    least `CORPS_FLOOR` catchable targets — so a refit that moved the answer
+    would move the figure rather than draw a different corps under this caption.
+    """
+    from nfl_simulator.receiver_drops import ReceiverDropModel, catchable_target_frame
+    from nfl_simulator.render import _simulation_context
+    from nfl_simulator.teams import team_colors, team_logo
+
+    context = _simulation_context()
+    model = ReceiverDropModel.from_posterior(
+        OUTPUTS / "trace_receiver_drop.nc", OUTPUTS / "receiver_drop_summary.json"
+    )
+    targets = catchable_target_frame(context["pbp"], context["ftn"])
+    plays = targets.filter(pl.col("entity_season") == CORPS_KEY).to_dicts()
+    season, team = CORPS_KEY.split("|")
+
+    n = check("corps_targets", len(plays))
+    drops = check("corps_drops", int(sum(bool(play["is_drop"]) for play in plays)))
+    posterior = np.array([model.drop_probability(CORPS_KEY, play) for play in plays]).mean(0)
+    league = np.array([model.drop_probability(None, play) for play in plays]).mean(0)
+
+    raw_pct = check("corps_raw_pct", round(drops / n * 100, 2))
+    posterior_pct = check("corps_posterior_pct", round(float(posterior.mean() * 100), 2))
+    league_pct = check("corps_league_pct", round(float(league.mean() * 100), 2))
+
+    primary, _secondary = team_colors(team, int(season))
+    # Titled like figure 18, because it is figure 18's sentence about the other
+    # side of the ball and the two are read as a pair.
+    fig, ax = _prior_posterior_axes(
+        f"{team}'s {season} drop rate vs the league",
+        [
+            f"{team}'s {season} receiving corps dropped {drops} of {n} balls the charters "
+            f"called catchable — {raw_pct:.2f}%, raw and unshrunk.",
+            "Grey is the league's rate on those same targets; the colored curve is where "
+            "the model puts this corps.",
+        ],
+    )
+
+    both = np.concatenate([league, posterior])
+    grid = np.linspace(np.quantile(both, 0.002) - 0.004, np.quantile(both, 0.998) + 0.004, 512)
+    league_density, corps_density = _density(league, grid), _density(posterior, grid)
+
+    ax.fill_between(grid * 100, 0, league_density, color=PALETTE["anchor"], alpha=0.22, linewidth=0)
+    ax.plot(grid * 100, league_density, color=PALETTE["anchor"], linewidth=1.6)
+    ax.fill_between(grid * 100, 0, corps_density, color=primary, alpha=0.32, linewidth=0)
+    ax.plot(grid * 100, corps_density, color=primary, linewidth=2.2)
+
+    # The raw rate is off the right end of both curves, which is the finding.
+    # The axis is widened to reach it, for figure 19's reason: cropping it out
+    # would hide the distance the figure exists to draw.
+    ax.axvline(raw_pct, color=PALETTE["bad"], linewidth=1.6, linestyle=(0, (4, 2)))
+    ax.set_xlim(grid.min() * 100, max(grid.max() * 100, raw_pct + 0.7))
+    ax.annotate(
+        f"what actually happened\n{drops} of {n} = {raw_pct:.2f}%",
+        xy=(raw_pct, 0.95),
+        xytext=(-7, 0),
+        textcoords="offset points",
+        ha="right",
+        va="center",
+        fontsize=9,
+        color=PALETTE["bad"],
+    )
+    ax.annotate(
+        f"the league: {league_pct:.2f}%",
+        xy=(league_pct, 1.15),
+        xytext=(0, 0),
+        textcoords="offset points",
+        ha="center",
+        va="center",
+        fontsize=8.5,
+        color=PALETTE["text_muted"],
+    )
+    ax.annotate(
+        f"{team}: {posterior_pct:.2f}%",
+        xy=(posterior_pct, corps_density.max()),
+        xytext=(0, 16),
+        textcoords="offset points",
+        ha="center",
+        fontsize=10.5,
+        fontweight="bold",
+        color=primary,
+    )
+    _draw_logo(ax, team_logo(team, int(season)), 0.80, 0.30)
+
+    ax.set_xlabel("drop rate on catchable targets (%)", fontsize=9, color=PALETTE["text_muted"])
+    ax.set_ylim(0, 1.18)
+    ax.annotate(
+        "The model keeps about a third of the record and gives the rest back to the league. "
+        'The caveat travels with it:\n"catchable" is a human charter\'s judgment, and the '
+        "article's section 6 says why that is open rather than settled.",
+        xy=(0, 0),
+        xycoords="axes fraction",
+        xytext=(0, -52),
+        textcoords="offset points",
+        ha="left",
+        va="top",
+        fontsize=8,
+        color=PALETTE["text_muted"],
+    )
+    name = finalize(fig, FIGURE_DIR / "23_corps_prior_posterior.png").name
+    return {
+        "file": name,
+        "corps": CORPS_KEY,
+        "targets": n,
+        "drops": drops,
+        "raw_pct": raw_pct,
+        "posterior_pct": posterior_pct,
+        "league_pct": league_pct,
+    }
+
+
+# --------------------------------------------------------------------------
 # figure 21 — where 160,000 comes from
 # --------------------------------------------------------------------------
 
@@ -2384,10 +2759,17 @@ def bootstrap_buildup(walkthrough: dict) -> dict:
     # this a check on the reshape rather than a restatement of it.
     share = check("den_was_dtw_full", round(float((draws > 0).mean()), 4))
 
+    # **The middle panel draws ten outlines, not one pooled histogram.**
+    # Document 65's finding W-7: round 3 passed `grid[:10].ravel()` to a single
+    # `ax.hist`, which flattens the ten draws into 8,000 numbers and bins them
+    # together. The caption promised "ten draws overlaid, visibly disagreeing"
+    # and the panel drew one smooth histogram with nothing to disagree — in the
+    # one figure whose entire job is to make layer one visible. Each draw now
+    # gets its own outline, and the disagreement between them *is* layer one.
     panels = [
-        (grid[0], "1 × 800", "one draw of every probability, flipped 800 times"),
-        (grid[:10].ravel(), "10 × 800", "ten draws of the probabilities, overlaid"),
-        (draws, "200 × 800 = 160,000", "all of them — the figure the product ships"),
+        (grid[:1], "1 × 800", "one draw of every probability, flipped 800 times"),
+        (grid[:10], "10 × 800", "ten draws, each outlined — they disagree"),
+        (draws.reshape(1, -1), "200 × 800 = 160,000", "all of them — the figure the product ships"),
     ]
     edges = np.histogram_bin_edges(draws, bins=34)
 
@@ -2408,17 +2790,34 @@ def bootstrap_buildup(walkthrough: dict) -> dict:
     # The panels sit low enough to leave two lines of heading above each one.
     # The first render put the caption 26 points above the axes, which on a
     # 4.4-inch figure is where the title block's second line already was.
-    for index, (values, heading, caption) in enumerate(panels):
+    for index, (rows_, heading, caption) in enumerate(panels):
         ax = fig.add_axes([0.07 + index * 0.315, 0.22, 0.265, 0.44])
         ax.set_facecolor(PALETTE["bg"])
         colour = PALETTE["anchor"] if index < 2 else PALETTE["bad"]
-        ax.hist(
-            values,
-            bins=edges,
-            weights=np.full(values.size, 100.0 / values.size),
-            color=colour,
-            alpha=0.55 if index < 2 else 0.8,
-        )
+        values = rows_.ravel()
+        if index == 1:
+            # One outline per posterior draw. `histtype="step"` so ten curves
+            # can sit on one axis without ten fills hiding each other, and each
+            # is scaled by its own row length so the panel's y axis stays the
+            # "% of simulations" every other panel uses.
+            for row in rows_:
+                ax.hist(
+                    row,
+                    bins=edges,
+                    weights=np.full(row.size, 100.0 / row.size),
+                    histtype="step",
+                    linewidth=1.0,
+                    color=colour,
+                    alpha=0.65,
+                )
+        else:
+            ax.hist(
+                values,
+                bins=edges,
+                weights=np.full(values.size, 100.0 / values.size),
+                color=colour,
+                alpha=0.55 if index < 2 else 0.8,
+            )
         ax.axvline(0.0, color=PALETTE["text"], linewidth=1.0, linestyle=":")
         ax.set_title(heading, fontsize=11, fontweight="bold", color=PALETTE["text"], pad=22)
         ax.annotate(
@@ -2569,7 +2968,7 @@ def article_dtw_figure() -> str:
 CAPTIONS = {
     "04_lac_hou_2024_wk19_ledger_full.png": (
         "The luck ledger for LAC at HOU, wild-card round 2024 — the article's drops "
-        "showcase, and the corpus's largest swing at 19.05 points."
+        "showcase, and the corpus's largest swing at 19.03 points."
     ),
     "05_den_was_2025_wk13_dtw_full.png": (
         "Deserved margin across 160,000 re-simulations of DEN at WAS, week 13 of 2025, "
@@ -2592,15 +2991,15 @@ CAPTIONS = {
     ),
     "13_epa_to_points.png": (
         "Final margin against EPA differential, 2,761 games — the 0.8389 points-per-EPA "
-        "conversion the whole article quotes, r² = 0.991."
+        "conversion the whole article quotes, r² = 0.992."
     ),
     "14_refused_floors.png": (
         "Three components that passed the mechanism test and failed on size, each against "
         "the floor committed before its effect was computed."
     ),
     "15_defense_shrinkage.png": (
-        "The same shrinkage idea from a different model: the dropped-pick model is a "
-        "logistic regression, not the beta-binomial figure 3 draws."
+        "Five defense-seasons' interception catch rate on interceptable throws, and where "
+        "the model puts each — a logistic regression, not the beta-binomial figure 3 draws."
     ),
     "16_den_was_with_without.png": (
         "One game with and without the hands-on-the-ball rows, on one axis. Denver's share "
@@ -2612,20 +3011,32 @@ CAPTIONS = {
         "time and a fumble on a run 46.1% — a coin, but not the same coin."
     ),
     "18_kicker_prior_posterior.png": (
-        "One kicker-season priced: E. Pineiro's 31-of-32 in 2025 against the prior any "
-        "kicker starts from, both as make probability from 45 yards."
+        "One kicker-season priced: E. Pi\u00f1eiro's 2025 record of 31 of 32 is raw, and "
+        "the colored curve is his shrunk posterior — both read as make probability from "
+        "45 yards."
     ),
     "19_denver_prior_posterior.png": (
         "The same picture for a defense's hands: Denver's 2024 defense caught 13 of 17 "
         "interceptable throws, and the model moves from the league's 49.8% to 55.2%."
     ),
     "20_persistent_share.png": (
-        "How much of a dropped pick, a receiver drop and a fumble recovery is the team rather "
-        "than the bounce — one percent or less of each, on measurements the figure names."
+        "How much of the *finish* of a dropped pick, a receiver drop and a fumble recovery "
+        "is the unit rather than the bounce — one percent or less of each, on two "
+        "measurements the figure names apart. The skill that forced the throw is untouched."
     ),
     "21_bootstrap_buildup.png": (
-        "Where 160,000 comes from: one posterior draw's 800 replays, then ten draws, then "
-        "all 200 — the histogram the product ships."
+        "Where 160,000 comes from: one posterior draw's 800 replays, then ten draws each "
+        "outlined separately, then all 200 — the histogram the product ships."
+    ),
+    "22_defense_sampling.png": (
+        "Two defense-seasons' catch-rate curves on one axis — Denver 2024's 13 of 17 and "
+        "the Jets' 2025 none of 9 — with the draws a replay takes ticked beneath each. "
+        "A strong unit keeps its edge in every re-run."
+    ),
+    "23_corps_prior_posterior.png": (
+        "The offense's mirror of the kicker figure: Jacksonville's 2025 receiving corps "
+        "dropped 40 of 420 catchable balls, 9.52%, and the model puts them at 6.34% "
+        "against a league rate of 5.14% on those same targets."
     ),
     "formula_01_rule.png": "The neutralization rule, term by term.",
     "formula_02_points.png": "EPA to points of margin, and the deserve-to-win share.",
@@ -2761,6 +3172,8 @@ def main() -> None:
     print("  19 denver curves    ", denver_prior_posterior())
     print("  20 persistent share ", persistent_share())
     print("  21 bootstrap buildup", bootstrap_buildup(computed["walkthrough"]))
+    print("  22 defense sampling ", defence_sampling())
+    print("  23 corps curves     ", corps_prior_posterior())
 
     print("formula plates ...")
     for name in formula_plates():
