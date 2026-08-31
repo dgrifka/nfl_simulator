@@ -593,23 +593,54 @@ def stamp_box(
         block_top = int(height * STAMP_INSET)
         text_top = block_top + mark_h + gap
     else:
-        text_top = anchor - gap - text_h
-        block_top = text_top - gap - mark_h
+        title_top, collision = anchor
+        if collision:
+            # Something besides the rule is in the stamp's columns (a wide
+            # title): stack the block above the title instead of into it.
+            text_top = title_top - gap - text_h
+            block_top = text_top - gap - mark_h
+        else:
+            block_top = title_top
+            text_top = block_top + mark_h + gap
     top = block_top if logo_path is not None else text_top
     return (left, top, right, text_top + text_h)
 
 
-def _ink_anchor(image, left: int, width: int, height: int) -> int | None:
-    """The row the credit's bottom should sit above, or ``None`` for no ink.
-
-    Scans the stamp's own columns over the top 30% of the image for the first
-    ink — a title's rule, a wide subtitle. Below that band nothing is a title,
-    and anchoring to plot ink would float the stamp mid-figure.
-    """
+def _top_ink(image, height: int) -> np.ndarray:
+    """Boolean ink map of the top 30% of the image, mean-channel thresholded."""
     band = int(height * 0.30)
-    columns = np.asarray(image.convert("RGB"), dtype=float)[:band, max(0, left) :].mean(axis=2)
-    occupied = np.nonzero((columns < _SURFACE_INK).any(axis=1))[0]
-    return int(occupied.min()) if occupied.size else None
+    return np.asarray(image.convert("RGB"), dtype=float)[:band].mean(axis=2) < _SURFACE_INK
+
+
+def _title_top(ink) -> int | None:
+    """The topmost inked row anywhere across the width, or ``None``."""
+    rows = np.nonzero(ink.any(axis=1))[0]
+    return int(rows.min()) if rows.size else None
+
+
+def _rule_rows(ink) -> np.ndarray:
+    """Rows whose ink spans most of the width — a title block's divider rule."""
+    width = ink.shape[1]
+    return np.nonzero(ink.sum(axis=1) > width * 0.70)[0]
+
+
+def _ink_anchor(image, left: int, width: int, height: int) -> tuple[int, bool] | None:
+    """``(block_top, collision)`` for the stamp, or ``None`` for an empty top.
+
+    the maintainer 2026-08-31 (round 6): the mark's **top** aligns with the title's top
+    — the block sits *in* the title band, and the divider rule is cut where
+    the block crosses it. ``collision`` is True when something other than the
+    rule already inks the stamp's own columns, in which case the caller falls
+    back to stacking the block above the title (round 4's placement).
+    """
+    ink = _top_ink(image, height)
+    top = _title_top(ink)
+    if top is None:
+        return None
+    rule = set(_rule_rows(ink).tolist())
+    columns = ink[:, max(0, left) :]
+    foreign = [r for r in np.nonzero(columns.any(axis=1))[0].tolist() if r not in rule]
+    return top, bool(foreign)
 
 
 def reserve_stamp_strip(
@@ -695,6 +726,24 @@ def apply_watermark(
         # is the one thing the mark is not allowed to change.
         left, top, right, bottom = stamp_box(image.size, text, image=image)
         painted_top = top
+        # Cut the divider rule where the block crosses it (round 6): within
+        # the block's columns, rule rows go back to the surface so the line
+        # reads as stopping short of the mark rather than running under it.
+        ink = _top_ink(image, image.size[1])
+        # The erase range covers the whole block, mark included.
+        _bl, block_top, _br, block_bottom = stamp_box(
+            image.size, text, logo_path=logo_path or True, image=image
+        )
+        for row in _rule_rows(ink).tolist():
+            for offset in (-1, 0, 1):
+                r = row + offset
+                if block_top - 4 <= r <= block_bottom + 4 and 0 <= r < image.size[1]:
+                    image.paste(
+                        Image.new(
+                            "RGBA", (image.size[0] - (left - 12), 1), (*_rgb255(PALETTE["bg"]), 255)
+                        ),
+                        (left - 12, r),
+                    )
 
         if logo_path is not None:
             bbox = draw.textbbox((0, 0), text, font=font)

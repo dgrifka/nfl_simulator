@@ -450,13 +450,12 @@ def test_the_mark_and_the_credit_line_do_not_touch(blank, tmp_path):
 
 
 def test_the_stamp_sits_beside_a_title_not_above_it(blank, tmp_path):
-    """the maintainer 2026-08-31: a figure with a title rule keeps the stamp in line
-    with the title band instead of adding a strip of surface above it."""
+    """the maintainer 2026-08-31 round 6: the mark's top aligns with the title band's
+    top, and the divider rule is cut where the block crosses it."""
     from nfl_simulator.style import BRAND_LOGO, apply_watermark, reserve_stamp_strip
 
     ax = blank.axes[0] if blank.axes else blank.add_axes([0.1, 0.1, 0.8, 0.8])
     ax.axis("off")
-    # A full-width rule at ~12% from the top, the shape draw_header leaves.
     blank.add_artist(
         __import__("matplotlib").lines.Line2D(
             [0.02, 0.98], [0.88, 0.88], color="#3a3a3a", lw=2, transform=blank.transFigure
@@ -466,15 +465,22 @@ def test_the_stamp_sits_beside_a_title_not_above_it(blank, tmp_path):
     blank.savefig(path, dpi=200, bbox_inches="tight", facecolor=PALETTE["bg"])
     reserve_stamp_strip(path, WATERMARK, logo_path=BRAND_LOGO)
 
-    # Where the rule sits after any growth, before the stamp adds its own ink.
     image = Image.open(path)
     width, height = image.size
     dark = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2)
-    rule_top = int(np.nonzero((dark < 240).sum(axis=1) > width * 0.9)[0].min())
+    rule_top = int(np.nonzero((dark < 240).sum(axis=1) > width * 0.7)[0].min())
 
     left, top, right, bottom = apply_watermark(path, logo_path=BRAND_LOGO, text=WATERMARK)
     assert top >= 0, "the block ran off the canvas"
-    assert bottom < rule_top, "the credit does not clear the rule"
-    # And the canvas did not grow a whole block above the rule: the rule is
-    # still in the top fifth of the image.
-    assert rule_top < height * 0.20
+    # The block's top is the title band's top (the rule is the only title ink
+    # on this synthetic figure).
+    assert abs(top - rule_top) <= 4, "the mark's top is not in line with the title's"
+
+    # The rule is cut inside the block's columns and intact to their left.
+    after = np.asarray(Image.open(path).convert("RGB"), dtype=float).mean(axis=2)
+    assert (after[rule_top - 1 : rule_top + 2, left + 4 : width - 4] > 240).all(), (
+        "the rule still runs under the mark"
+    )
+    assert (after[rule_top : rule_top + 2, : left // 2] < 240).any(), (
+        "the rule was erased everywhere, not just under the mark"
+    )
