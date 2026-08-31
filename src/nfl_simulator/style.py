@@ -483,7 +483,12 @@ STAMP_GAP_RATIO = 0.25
 # the maintainer 2026-08-30, second pass: 2.5 credit lines still read as a thumbnail,
 # because the credit line itself is small. The mark scales with the image —
 # this share of its width — and the credit-line ratio above becomes the floor.
-STAMP_LOGO_WIDTH_SHARE = 0.045
+#
+# the maintainer 2026-08-31, round 5: 0.045 put the mark *over* the title band instead of
+# in it. 0.035 is the share at which the stamp slots into the band the way
+# `15_defense_shrinkage.png` already did, on every figure rather than on the one
+# whose proportions happened to suit it.
+STAMP_LOGO_WIDTH_SHARE = 0.035
 
 # Anything darker than this, on the cream, is an artist rather than the surface.
 # Used only to decide whether the stamp's corner is occupied.

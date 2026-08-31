@@ -413,7 +413,13 @@ def _simulation_context():
 
     read_side = _read_side()
     pbp = load_pbp(PBP_SEASONS, columns=simulation_columns())
-    fg_model, _ = read_side.load_model("trace_fg_refit.nc", "fg_refit_summary.json")
+    # v1.4's posterior, not v1.3's. Document 68 §8 moved this module's four
+    # artifact pointers to the v1.4 files and left the posterior behind, which
+    # nothing caught because v1.4 rendered no figure (§11). The round trip in
+    # `replay` catches it the moment one is drawn: a v1.3 `p_make` replayed
+    # against a v1.4 summary row misses `2025_13_DEN_WAS` by 0.0048 of DTW%,
+    # and the guard refuses to draw rather than shipping the gap.
+    fg_model, _ = read_side.load_model("trace_fg_v14.nc", "fg_v14_summary.json")
     dropped_pick_model, ftn = _dropped_pick_pieces()
     receiver_drop_model = _receiver_drop_pieces()
     return {

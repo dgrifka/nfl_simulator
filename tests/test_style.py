@@ -201,12 +201,18 @@ def test_the_mark_is_a_share_of_the_image_width(blank, tmp_path):
     thumbnail, because the credit line itself is small. The mark now scales
     with the image — `STAMP_LOGO_WIDTH_SHARE` of its width — with the credit
     lines as a floor so a tiny image never loses the mark entirely.
+
+    the maintainer 2026-08-31 (round 5): 0.045 of the width made the mark sit *over* the
+    title band rather than in it. The share drops to 0.035 so the stamp slots
+    into the band the way `15_defense_shrinkage.png` already did — smaller, and
+    the same block on every figure. The credit-line floor is untouched, so a
+    narrow image still keeps its mark.
     """
     from nfl_simulator.style import STAMP_LOGO_WIDTH_SHARE, _mark_height
 
-    assert STAMP_LOGO_WIDTH_SHARE == 0.045
+    assert STAMP_LOGO_WIDTH_SHARE == 0.035
     # Unit: on a wide image the width share wins; on a narrow one the floor.
-    assert _mark_height(10, 2000) == 90
+    assert _mark_height(10, 2000) == 70
     assert _mark_height(10, 100) == 25
 
     path = tmp_path / "scale.png"
@@ -217,7 +223,7 @@ def test_the_mark_is_a_share_of_the_image_width(blank, tmp_path):
     badge_rows = np.nonzero((spread(path) > SATURATED).any(axis=1))[0]
     badge_h = badge_rows.max() - badge_rows.min() + 1
     # The measured ink can run a little under the box (transparent badge edge).
-    assert badge_h >= 0.038 * width
+    assert badge_h >= 0.029 * width
 
 
 def test_the_strip_is_reserved_when_a_figure_reaches_into_the_stamp_s_corner(blank, tmp_path):
