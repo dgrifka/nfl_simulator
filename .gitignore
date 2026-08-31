@@ -1,5 +1,8 @@
 # Cached data pulls — never tracked. Regenerate with `uv run python -m nfl_simulator.ingest`.
-data/
+# Anchored to the repo root: the rule is about the top-level cache, and an
+# unanchored `data/` also swallowed `src/nfl_simulator/data/`, the committed
+# reference tables, which is a silent miss — `git add` reports nothing.
+/data/
 *.parquet
 
 # Environments
