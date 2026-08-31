@@ -72,7 +72,6 @@ from nfl_simulator.style import (  # noqa: E402
     CLASH_DISTANCE,
     PALETTE,
     colour_distance,
-    finalize,
 )
 
 
@@ -983,34 +982,6 @@ def test_the_pill_clears_the_heading_and_the_subtitle_it_shares_a_row_with(bucke
     box = pill.get_window_extent()
     assert not box.overlaps(heading.get_window_extent()), "the pill runs into the heading"
     assert not box.overlaps(subtitle.get_window_extent()), "the pill runs into the subtitle"
-
-
-def test_the_pill_stays_clear_of_the_corner_the_watermark_is_stamped_into(tmp_path):
-    """The credit is stamped on the saved pixels, so the pill has to leave it room.
-
-    Saved with the mark suppressed: since write-up round 3 the stamp is back in
-    the top-right and its badge is the one coloured thing allowed in that
-    corner, so a test that asks "is anything coloured here?" would be answered
-    by the stamp itself. With `logo_path=False` the only ink the box may carry
-    is the credit's mid-grey, and a pill is neither grey nor faint.
-
-    Measured on `stamp_box` rather than on a fraction of the image. The box
-    hangs a fixed number of pixels from the top edge while the corner of a
-    `bbox_inches="tight"` save is whatever height the figure cropped to, so a
-    fraction that fitted the bottom-right corner is a different region here.
-    """
-    from nfl_simulator.style import WATERMARK, stamp_box
-
-    game = branded(draws=np.linspace(-20, 6, 160_000))
-    fig, ax = plot_bootstrap_distribution(game)
-    path = finalize(fig, tmp_path / "corner.png", logo_path=False)
-    pixels = np.asarray(Image.open(path).convert("RGB"), dtype=float)
-    left, top, right, bottom = stamp_box(pixels.shape[1::-1], WATERMARK)
-    corner = pixels[:bottom, left:right]
-    # The pill is a saturated fill; the credit is mid-grey on cream. Nothing in
-    # the stamp's box — or above it — may be as coloured as a pill.
-    spread = corner.max(axis=2) - corner.min(axis=2)
-    assert spread.max() < 40, "something coloured is in the watermark's corner"
 
 
 def test_a_degenerate_game_still_names_the_side_that_won_nothing():
@@ -4539,27 +4510,46 @@ FOREIGN_INK = 120
 
 
 def _stamped(fig, tmp_path, name, *, mark: bool = True):
-    """A figure through the shipped exit, and the box the stamp took.
+    """A figure through the shipped pipeline, and the box the painter reports.
+
+    Runs save → reserve → paint by hand rather than through `finalize`, because
+    since write-up round 4 the block is anchored on the figure's own ink and
+    only :func:`apply_watermark` knows where it actually landed — recomputing
+    `stamp_box` on the stamped PNG would anchor on the stamp itself.
 
     ``mark=False`` suppresses the badge so the only ink inside the box is the
     credit's mid-grey — which is what lets a caller ask whether anybody *else*
     drew there without the answer being "yes, the brand mark did".
     """
-    from nfl_simulator.style import edition_stamp, stamp_box
+    from nfl_simulator.style import (
+        BRAND_LOGO,
+        PALETTE,
+        apply_watermark,
+        edition_stamp,
+        reserve_stamp_strip,
+    )
 
-    path = finalize(fig, tmp_path / name, edition="strict", logo_path=None if mark else False)
-    image = Image.open(path).convert("RGB")
-    return image, stamp_box(image.size, edition_stamp("strict"))
+    path = tmp_path / name
+    text = edition_stamp("strict")
+    logo = BRAND_LOGO if mark else None
+    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor=PALETTE["bg"], edgecolor="none")
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+    reserve_stamp_strip(path, text, logo_path=logo)
+    box = apply_watermark(path, logo_path=logo, text=text)
+    assert box is not None, "the painter failed"
+    return Image.open(path).convert("RGB"), box
 
 
 @pytest.mark.parametrize("figure", ["dtw", "waterfall"])
-def test_nothing_is_drawn_where_the_credit_stamp_is_painted(figure, tmp_path):
-    """Document 63: the title ran under the stamp on 84–89% of distributions.
+def test_the_stamp_box_holds_nothing_but_the_credit(figure, tmp_path):
+    """Write-up round 4: the stamp sits beside the title band, not above it.
 
-    The stamp is painted on the saved pixels after layout, so no artist can see
-    it coming and no artist can move out of its way. The corner it takes has to
-    be one nothing is laid out in — and on a `bbox_inches="tight"` save that is
-    only true if the strip is reserved when the footer reaches it.
+    The old invariant — every artist's ink below the stamp's rows — is gone by
+    design: the title's rows and the stamp's overlap now. What replaces it is
+    the guarantee the anchor actually makes: the painted box itself holds no
+    ink but the credit's own mid-grey.
     """
     game = branded(draws=np.linspace(-20, 6, 160_000))
     fig = (
@@ -4567,54 +4557,25 @@ def test_nothing_is_drawn_where_the_credit_stamp_is_painted(figure, tmp_path):
         if figure == "dtw"
         else waterfall(game)[0]
     )
-    image, (left, top, right, bottom) = _stamped(fig, tmp_path, f"{figure}.png")
+    image, (left, top, right, bottom) = _stamped(fig, tmp_path, f"{figure}.png", mark=False)
     pixels = np.asarray(image, dtype=float).mean(axis=2)
-    foreign = pixels[top:bottom, left:right] < FOREIGN_INK
-    assert not foreign.any(), f"{int(foreign.sum())} px of somebody else's ink under the stamp"
+    block = pixels[max(0, top) : bottom, left:right]
+    assert block.min() < 240, "the credit itself was not painted"
+    assert (block >= FOREIGN_INK).all(), "somebody else's ink is inside the stamp's box"
 
 
-@pytest.mark.parametrize("figure", ["dtw", "waterfall"])
-def test_the_stamp_sits_above_everything_that_shares_its_columns(figure, tmp_path):
-    """The strip is reserved, not borrowed: the title keeps out of its own room.
+def test_the_pill_stays_clear_of_the_corner_the_watermark_is_stamped_into(tmp_path):
+    """The credit is stamped on the saved pixels, so the pill must leave it room.
 
-    Above rather than below since write-up round 3, when the stamp went back to
-    the top-right and `reserve_stamp_strip` started growing the canvas at the
-    top instead of the bottom. Measured with the mark suppressed, so the only
-    ink the box may hold is the credit's own.
+    With the mark suppressed the only ink the painted box may carry is the
+    credit's mid-grey, and a pill is neither grey nor faint.
     """
     game = branded(draws=np.linspace(-20, 6, 160_000))
-    fig = (
-        plot_bootstrap_distribution(game, coverage=False)[0]
-        if figure == "dtw"
-        else waterfall(game)[0]
-    )
-    image, (left, _top, _right, bottom) = _stamped(fig, tmp_path, f"{figure}.png", mark=False)
-    pixels = np.asarray(image, dtype=float).mean(axis=2)
-    column = pixels[:, left:]
-    ink_rows = np.nonzero((column < FOREIGN_INK).any(axis=1))[0]
-    assert ink_rows.size, "the figure drew nothing in the stamp's columns at all"
-    assert ink_rows.min() > bottom, "an artist reaches into the stamp's strip"
-
-
-def test_the_title_starts_below_the_stamp_that_shares_its_edge(tmp_path):
-    """The two the corpus found on top of each other, measured apart.
-
-    They share the top edge now — the stamp is right, the title left — so
-    "opposite ends of the image" is no longer the invariant. What replaces it
-    is the one `reserve_stamp_strip` actually guarantees: the title's first
-    inked row is below the stamp's last, so a reader's eye clears the credit
-    before it reaches the heading.
-    """
-    game = branded(draws=np.linspace(-20, 6, 160_000))
-    fig, ax = plot_bootstrap_distribution(game, coverage=False)
-    heading = next(t for t in ax.texts if t.get_text().startswith("Deserve-to-Win"))
-    assert heading.get_text(), "the title this test is about"
-    image, (left, _top, _right, bottom) = _stamped(fig, tmp_path, "title.png", mark=False)
-    pixels = np.asarray(image, dtype=float).mean(axis=2)
-    # The title's own columns, which start well left of the stamp's.
-    title_rows = np.nonzero((pixels[:, : left // 2] < FOREIGN_INK).any(axis=1))[0]
-    assert title_rows.size, "the title drew nothing"
-    assert title_rows.min() > bottom, "the title starts above the stamp's last row"
+    fig, _ax = plot_bootstrap_distribution(game)
+    image, (left, top, right, bottom) = _stamped(fig, tmp_path, "corner.png", mark=False)
+    corner = np.asarray(image, dtype=float)[max(0, top) : bottom, left:right]
+    spread = corner.max(axis=2) - corner.min(axis=2)
+    assert spread.max() < 40, "something coloured is in the watermark's box"
 
 
 # --------------------------------------------------------------------------

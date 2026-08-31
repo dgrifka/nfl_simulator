@@ -1485,13 +1485,13 @@ RULE_TERMS = [
     ("p", r"$p(e)$", 4.0),
     ("close", r"$\left.\right)$", 15.0),
     ("times", r"$\times$", 15.0),
-    ("swing", r"$\mathrm{swing}(e)$", 0.0),
+    ("swing", r"$\mathrm{impact}(e)$", 0.0),
 ]
 
 RULE_LABELS = {
     "y": "what happened\n1 if the ball fell\ntheir way, 0 if not",
     "p": "what was expected\nthe shrunk rate\nfor events like it",
-    "swing": "what it was worth\nthe gap between\nthe two branches",
+    "swing": "what it was worth\nthe gap between\nthe two outcomes",
 }
 
 
@@ -1850,7 +1850,7 @@ def fumble_retention_bars() -> str:
     fig, ax = new_figure(
         8.4,
         5.4,
-        title="A loose ball is a coin — but not the same coin",
+        title="Not all fumbles are the same",
         subtitle=[
             "How often the team that fumbled keeps the ball, by the kind of play it happened on.",
             "2016–2025, the fitted baseline the simulator prices every ledger row with.",
@@ -1879,7 +1879,7 @@ def fumble_retention_bars() -> str:
         ax.text(
             row["p_own"] * 100 + 1.6,
             position,
-            f"{row['p_own'] * 100:.1f}%",
+            f"{row['p_own'] * 100:.0f}%",
             va="center",
             fontsize=10,
             fontweight="bold",
@@ -1900,7 +1900,7 @@ def fumble_retention_bars() -> str:
     # which are exactly the two a reader is checking it against.
     ax.axvline(league, color=PALETTE["bad"], linewidth=1.6, linestyle=(0, (4, 2)), zorder=2.5)
     ax.annotate(
-        f"all fumbles pooled: {league:.1f}%",
+        f"all fumbles pooled: {league:.0f}%",
         xy=(league, len(measured) - 0.42),
         xytext=(5, 0),
         textcoords="offset points",

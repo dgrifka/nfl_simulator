@@ -187,12 +187,13 @@ def test_the_mark_is_anchored_to_the_top_right_corner_itself(blank, tmp_path):
 
     assert rows.size and columns.size, "the badge was not drawn at all"
     assert rows.min() <= height * 0.02, "the badge's top edge is not at the top"
-    # Measured against the credit's right edge rather than the canvas's: the
-    # badge is right-aligned *with the credit*, and both sit 2% in from the
-    # canvas. `columns.max()` is the badge's last inked column, so it lands one
-    # short of the edge itself.
-    assert right >= width * 0.98, "the credit's right edge is not 2% in"
-    assert columns.max() >= right - 2, "the badge is not flush with the credit's right edge"
+    # the maintainer 2026-08-31: the badge is centred over the credit's text, so its
+    # column centre matches the credit box's centre rather than its right edge.
+    from nfl_simulator.style import stamp_box as _sb
+
+    box_left, _t, box_right, _b = _sb((width, height), WATERMARK)
+    badge_cx = (columns.min() + columns.max()) / 2
+    assert abs(badge_cx - (box_left + box_right) / 2) <= 4, "the badge is not centred on the credit"
 
 
 def test_the_mark_is_a_share_of_the_image_width(blank, tmp_path):
@@ -248,12 +249,12 @@ def test_the_strip_is_reserved_when_a_figure_reaches_into_the_stamp_s_corner(bla
 def test_a_wide_title_does_not_run_under_the_stamp(blank, tmp_path):
     """The collision document 63 measured, on the widest title the suite draws.
 
-    Checked over the *whole* block — the mark's reserved rows as well as the
-    credit's — with the mark suppressed, so the only ink that box may contain
-    is the credit's own mid-grey at 140. Anything darker is a title that ran
-    under the stamp, which is the thing round 10 moved the corner to avoid.
+    Checked over the block :func:`apply_watermark` says it painted, with the
+    mark suppressed, so the only ink that box may contain is the credit's own
+    mid-grey at 140. The box comes from the painter itself because recomputing
+    it on the stamped PNG would anchor on the stamp's own ink.
     """
-    from nfl_simulator.style import BRAND_LOGO, stamp_box
+    from nfl_simulator.style import apply_watermark, reserve_stamp_strip
 
     draw_title_block(
         title_axes(blank, height_frac=0.2),
@@ -261,11 +262,16 @@ def test_a_wide_title_does_not_run_under_the_stamp(blank, tmp_path):
         ["Deserved-to-win share across 160,000 re-simulations of the Full edition"],
     )
     path = tmp_path / "wide_title.png"
-    finalize(blank, path, logo_path=False)
+    blank.savefig(path, dpi=200, bbox_inches="tight", facecolor=PALETTE["bg"])
+    reserve_stamp_strip(path, WATERMARK)
+    left, top, right, bottom = apply_watermark(path, text=WATERMARK)
 
     image = Image.open(path)
-    left, top, right, bottom = stamp_box(image.size, WATERMARK, logo_path=BRAND_LOGO)
-    block = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2)[top:bottom, left:right]
+    block = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2)[
+        max(0, top) : bottom, left:right
+    ]
+    assert top >= 0, "the block ran off the canvas"
+    assert block.min() < 240, "the credit itself was not painted"
     assert (block >= FOREIGN_INK).all(), "the title is under the stamp"
 
 
@@ -435,3 +441,34 @@ def test_the_mark_and_the_credit_line_do_not_touch(blank, tmp_path):
     badge_h = badge_rows.max() - badge_rows.min() + 1
 
     assert text_top - badge_rows.max() - 1 >= badge_h / 8
+
+
+def test_the_stamp_sits_beside_a_title_not_above_it(blank, tmp_path):
+    """the maintainer 2026-08-31: a figure with a title rule keeps the stamp in line
+    with the title band instead of adding a strip of surface above it."""
+    from nfl_simulator.style import BRAND_LOGO, apply_watermark, reserve_stamp_strip
+
+    ax = blank.axes[0] if blank.axes else blank.add_axes([0.1, 0.1, 0.8, 0.8])
+    ax.axis("off")
+    # A full-width rule at ~12% from the top, the shape draw_header leaves.
+    blank.add_artist(
+        __import__("matplotlib").lines.Line2D(
+            [0.02, 0.98], [0.88, 0.88], color="#3a3a3a", lw=2, transform=blank.transFigure
+        )
+    )
+    path = tmp_path / "titled.png"
+    blank.savefig(path, dpi=200, bbox_inches="tight", facecolor=PALETTE["bg"])
+    reserve_stamp_strip(path, WATERMARK, logo_path=BRAND_LOGO)
+
+    # Where the rule sits after any growth, before the stamp adds its own ink.
+    image = Image.open(path)
+    width, height = image.size
+    dark = np.asarray(image.convert("RGB"), dtype=float).mean(axis=2)
+    rule_top = int(np.nonzero((dark < 240).sum(axis=1) > width * 0.9)[0].min())
+
+    left, top, right, bottom = apply_watermark(path, logo_path=BRAND_LOGO, text=WATERMARK)
+    assert top >= 0, "the block ran off the canvas"
+    assert bottom < rule_top, "the credit does not clear the rule"
+    # And the canvas did not grow a whole block above the rule: the rule is
+    # still in the top fifth of the image.
+    assert rule_top < height * 0.20

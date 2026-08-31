@@ -541,34 +541,34 @@ def _logo_geometry(logo_path: str | Path, text_height: int, image_width: int) ->
 
 
 def stamp_box(
-    size: tuple[int, int], text: str = WATERMARK, *, logo_path: str | Path | None = None
+    size: tuple[int, int],
+    text: str = WATERMARK,
+    *,
+    logo_path: str | Path | None = None,
+    image=None,
 ) -> tuple[int, int, int, int]:
     """The pixels the credit stamp will take, as ``(left, top, right, bottom)``.
 
     Public because two callers outside :func:`apply_watermark` need it: the
-    strip reservation below, which has to know whether anything was drawn there
-    before the stamp covers it, and the corpus read, which counts foreign ink
-    inside it on a written PNG.
+    strip reservation below, which has to know whether the block fits, and the
+    corpus read, which counts foreign ink inside it on a written PNG. Pass
+    ``image`` only for a PNG that has **not** been stamped yet — on a stamped
+    one the scan finds the stamp's own ink and anchors above itself.
 
-    **Top-right again since write-up round 3.** Round 10 moved the stamp to the
-    bottom-right because document 63 measured the title running under it in the
-    top-right on 2,325 of 2,759 Strict distribution figures and 1,016 of 1,139
-    Full ones. the maintainer reversed that on 2026-08-30: the corner is the sibling
-    MLB simulator's, and the collision document 63 measured is now bought off
-    by :func:`reserve_stamp_strip`, which grows the canvas *above* the figure
-    rather than by conceding the corner a reader looks at first.
+    **In line with the title since write-up round 4 (the maintainer 2026-08-31).** The
+    block — the mark centred above the credit line — no longer hangs from the
+    top edge above everything. When ``image`` is passed, the credit's bottom is
+    anchored just above the first ink the stamp's columns meet in the top third
+    of the image (a figure's title rule, usually), so the block occupies the
+    empty top-right corner *beside* the title instead of adding a band of
+    surface above it. Without ``image`` — a caller that only knows the size —
+    the block hangs from the top inset exactly as before.
 
-    The mark stacks **above** the credit, right-aligned with it — the MLB
-    simulator's arrangement — rather than beside it. Anchored to the top edge a
-    mark 2.5 lines tall cannot overhang the credit's rows the way round 10's
-    1.6-line mark overhung them at the bottom: it would run off the canvas.
-
-    The credit's own rows do not depend on ``logo_path``. They hang a fixed
-    mark-plus-gap below the top inset whether a mark is drawn or not, so a
-    figure rendered with ``logo_path=False`` puts its credit in exactly the
-    pixels a marked one does. ``logo_path`` grows the returned box **upward**
-    to cover the mark's rows, which is what the strip reservation and the
-    corpus read need and what the painter must not use.
+    The credit's own rows do not depend on ``logo_path``: the text is anchored
+    first and the mark stacks above it, so a figure rendered with
+    ``logo_path=False`` puts its credit in exactly the pixels a marked one
+    does. ``logo_path`` grows the returned box **upward** to cover the mark's
+    rows.
     """
     from PIL import Image, ImageDraw
 
@@ -579,65 +579,59 @@ def stamp_box(
     text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
     mark_h = _mark_height(text_h, width)
-    block_top = int(height * STAMP_INSET)
-    text_top = block_top + mark_h + _stamp_gap(mark_h)
+    gap = _stamp_gap(mark_h)
     right = width - int(width * STAMP_MARGIN)
     left = right - text_w
+
+    anchor = _ink_anchor(image, left, width, height) if image is not None else None
+    if anchor is None:
+        block_top = int(height * STAMP_INSET)
+        text_top = block_top + mark_h + gap
+    else:
+        text_top = anchor - gap - text_h
+        block_top = text_top - gap - mark_h
     top = block_top if logo_path is not None else text_top
     return (left, top, right, text_top + text_h)
+
+
+def _ink_anchor(image, left: int, width: int, height: int) -> int | None:
+    """The row the credit's bottom should sit above, or ``None`` for no ink.
+
+    Scans the stamp's own columns over the top 30% of the image for the first
+    ink — a title's rule, a wide subtitle. Below that band nothing is a title,
+    and anchoring to plot ink would float the stamp mid-figure.
+    """
+    band = int(height * 0.30)
+    columns = np.asarray(image.convert("RGB"), dtype=float)[:band, max(0, left) :].mean(axis=2)
+    occupied = np.nonzero((columns < _SURFACE_INK).any(axis=1))[0]
+    return int(occupied.min()) if occupied.size else None
 
 
 def reserve_stamp_strip(
     filepath: str | Path, text: str = WATERMARK, *, logo_path: str | Path | None = None
 ) -> None:
-    """Grow the canvas at the top if the figure reaches into the stamp's box.
+    """Grow the canvas at the top if the stamp block cannot fit above the ink.
 
-    ``bbox_inches="tight"`` crops to whatever the figure drew, so how close the
-    title comes to the top edge is a per-game fact — a two-line subtitle and a
-    one-line one crop to two different images. Rather than ask every figure to
-    leave room for a stamp it cannot see, the room is made here, in the same
-    pixels the stamp is painted into.
-
-    **This is what buys back the corner round 10 gave up.** Document 63's
-    finding was not that the top-right is a bad corner; it was that a title
-    laid out before the stamp exists will run under it. Making the room on the
-    saved pixels answers that without moving the mark somewhere no reader looks
-    first, and it is the same trick round 10 used at the bottom, mirrored.
-
-    Only the stamp's own columns are consulted. Growing every image to clear a
-    title the stamp is nowhere near would change two fixed shapes for no
-    legibility gain. ``logo_path`` is passed through to :func:`stamp_box` so
-    those columns include the rows the brand mark is pasted into: the mark is
-    stamped over whatever is under it at 85% opacity, so it needs the same clean
-    surface the credit line does.
+    With the block anchored just above the title's ink (see :func:`stamp_box`),
+    most figures need no growth at all: the block lives in the empty corner
+    beside the title. Growth happens only when the title band starts too close
+    to the top edge for the block to fit above its rule — and then only by the
+    deficit, not by the whole block.
     """
     from PIL import Image
 
     filepath = Path(filepath)
     image = Image.open(filepath).convert("RGB")
     width, height = image.size
-    left, top, _right, bottom = stamp_box(image.size, text, logo_path=logo_path)
-    block_h = bottom - top
-    # One block of air between the stamp and whatever is below it, so the credit
-    # reads as its own line rather than as the title's first word.
-    clearance = block_h
-
-    columns = np.asarray(image, dtype=float)[:, max(0, left - clearance) :].mean(axis=2)
-    occupied = np.nonzero((columns < _SURFACE_INK).any(axis=1))[0]
-    highest = int(occupied.min()) if occupied.size else height
-    if highest > bottom + clearance:
+    _left, top, _right, _bottom = stamp_box(image.size, text, logo_path=logo_path, image=image)
+    inset = int(height * STAMP_INSET)
+    if top >= inset:
         return
 
-    # How far the figure has to move down for the box's bottom to clear the ink.
-    # The box is anchored to the top edge, so the added rows push the ink away
-    # from it; `STAMP_INSET` of the added height follows the box down, and the
-    # two spare pixels absorb that rounding.
-    shift = bottom + clearance - highest
-    shift = int(np.ceil(shift / (1.0 - STAMP_INSET))) + 2
+    shift = int(np.ceil((inset - top) / (1.0 - STAMP_INSET))) + 2
     # A square image stays square: the two card figures are square by design
     # (their preview crop depends on it), so the same shift is added to the
-    # width. The stamp is re-anchored to the new right edge when it is painted,
-    # which also moves it clear of a centred title horizontally.
+    # width; the stamp re-anchors to the new right edge when it is painted.
     new_width = width + shift if width == height else width
     canvas = Image.new("RGB", (new_width, height + shift), tuple(_rgb255(PALETTE["bg"])))
     canvas.paste(image, (0, shift))
@@ -694,7 +688,8 @@ def apply_watermark(
         draw = ImageDraw.Draw(image)
         # The credit's own box, asked for without a logo: where the text lands
         # is the one thing the mark is not allowed to change.
-        left, top, right, _bottom = stamp_box(image.size, text)
+        left, top, right, bottom = stamp_box(image.size, text, image=image)
+        painted_top = top
 
         if logo_path is not None:
             bbox = draw.textbbox((0, 0), text, font=font)
@@ -705,15 +700,21 @@ def apply_watermark(
             pixels[near_white, 3] = 0
             pixels[:, :, 3] = (pixels[:, :, 3].astype(float) * 0.85).astype(np.uint8)
             logo = Image.fromarray(pixels).resize((logo_w, logo_h), Image.LANCZOS)
-            # Sat on the credit's ink rather than on its box: `draw.text`
-            # anchors at the font's ascender line, so the ink starts `bbox[1]`
-            # below `top` and a gap measured to the box would look uneven.
-            image.paste(logo, (right - logo_w, top + bbox[1] - _stamp_gap(logo_h) - logo_h), logo)
+            # Centred over the credit's text (the maintainer 2026-08-31, the MLB
+            # arrangement), sat on the credit's ink rather than on its box:
+            # `draw.text` anchors at the ascender line, so the ink starts
+            # `bbox[1]` below `top`.
+            logo_x = left + (right - left - logo_w) // 2
+            logo_top = top + bbox[1] - _stamp_gap(logo_h) - logo_h
+            painted_top = min(painted_top, logo_top)
+            image.paste(logo, (logo_x, logo_top), logo)
 
         draw.text((left, top), text, fill=(140, 140, 140), font=font)
         image.convert("RGB").save(filepath)
+        return (left, painted_top, right, bottom)
     except Exception as error:  # pragma: no cover - the figure is already saved
         print(f"Warning: could not watermark {filepath}: {error}")
+        return None
 
 
 def finalize(

@@ -1099,3 +1099,13 @@ The mark scales with the image (`STAMP_LOGO_WIDTH_SHARE = 0.045`, credit-line
 ratio as the floor); the waterfall footer anchors at the figure's left edge;
 `reserve_stamp_strip` keeps a square image square by growing width with
 height. All three in one commit with their tests.
+
+## §17 — write-up round 4 stamp anchor (2026-08-31, Fable)
+
+The stamp block — mark centered above the credit — anchors just above the
+first ink its columns meet in the top 30% (a title's rule), so it sits in
+line with the title instead of adding a band above it; `reserve_stamp_strip`
+grows only the deficit. `apply_watermark` returns the painted box.
+**Caveat:** `research/79_render_all.py`'s foreign-ink check still computes
+`stamp_box` without `image=` and must pass the pre-stamp image before the
+next corpus run, or it will measure the wrong corner.
