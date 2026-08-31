@@ -437,3 +437,67 @@ is the number the product reports.
   the model §9 describes, and document 05b is not this round's document. The
   risk is quotation, so the rule is written here: any public number about kicker
   spread comes from §11b unless the sentence is explicitly about Phase 2's gate.
+
+---
+
+## 12. Addendum — what simulator v1.4 supersedes in this document
+
+*Added 2026-08-31 by the community write-up's round 5, which re-rendered every
+article figure on the v1.4 artifacts. This document was computed under v1.3 and
+is **not** rewritten: it stays the record of what v1.3 published. This section is
+the map from its numbers to the ones a reader should quote now, and
+`docs/research/68-simulator-v14.md` is the authority for every "v1.4" column.*
+
+**What did not move.** The headline is unchanged: **168 sign flips of 1,139,
+14.75%**, one game in seven. So are the 167 DTW% flips, the 3 realized ties, the
+flips among the non-degenerate (167), the count of games moving more than a field
+goal (631), and the identity of the largest-swing game (`2024_19_LAC_HOU`).
+Section 7's worked fumble — `p` 0.5096, `swing` +4.2675, luck +2.0928 EPA,
++1.756 points — is a fumble and does not move at all.
+
+**What moved.**
+
+| This document | Section | **v1.4** | Source |
+|---|---|---|---|
+| Degenerate 310 (27.22%) | §4 | **309 (27.13%)** | doc 68 §6 |
+| Non-degenerate 829 | §4 | **830** | doc 68 §6 |
+| Buckets 128 / 95 / 916 | §4 | **127 / 97 / 915** | §12a below |
+| Median \|deserved − actual\| 3.43 pt | §4 | **3.44 pt** | doc 68 §6 |
+| Largest swing 19.05 pt | §4 | **19.03 pt** | doc 68 §6 |
+| DEN–WAS DTW% Strict 0.1449 / Full 0.4058 | §8c | **0.1497 / 0.4094** | doc 68 §7c |
+| DEN–WAS deserved −3.3181 / −1.3498 | §8c | **−3.2741 / −1.3094** | doc 68 §7c |
+| DEN–WAS net luck +0.350 pt | §8b | **+0.309 pt** | doc 68 §7c |
+| Denver's Strict share "86%" | §8c | **85%** | doc 68 §7c |
+| League make rate at 45 yd 79.88% | §11b | **79.92%** | doc 68 §3 |
+| `sigma_kicker` 0.3855 | §11b | **0.3837** | round 5's redraw |
+| A one-SD kicker at 45 yd, +5.48 pp | §11b | **+5.45 pp** | round 5's redraw |
+| Piñeiro's make rate 83.14% (+3.26 pp) | §11b | **83.36% (+3.43 pp)** | round 5's redraw |
+| Nine of the twelve DEN–WAS kicking rows | §8a | repriced | doc 68 §7b |
+
+§11e's three bootstrap shares also move with the game: the shipped panel is now
+**0.4094**, and the two build-up panels are redrawn at v1.4.
+
+### 12a. The bucket counts, and which convention this document uses
+
+Document 68 §6 prints **128 / 97 / 914** for v1.4 and §6a explains why that row
+is not the one to quote: `research/68`'s `bucket()` has no tie clause, so it
+labels the drawn game `2022_13_WAS_NYG` a clear flip, while §2 of *this*
+document books a realized tie in its own row. Under this document's convention —
+which is `one_simulator_summary()` in `research/80_writeup_figures.py`, the
+function that computes every number the article prints — v1.4 is **127 / 97 /
+915**, and the v1.3 rerun reproduces this document's published **128 / 95 / 916**
+exactly.
+
+**The article quotes 127 / 97 / 915.** Document 68 §6a's defect is still open and
+still belongs to `bucket()`, not here.
+
+### 12b. Added to the defect register
+
+- **2026-08-31, `research/80_writeup_figures.py` and `research/68` disagree on
+  which 2025 kicker-season is the largest.** §11b's rule reads `effect_mean` from
+  `fg_kicker_effects.parquet` and resolves to `2025_00-0034173` (Piñeiro).
+  Ranking the same candidates by the posterior's own `kicker_effects` means
+  resolves to a different kicker-season, under v1.3 and v1.4 alike. **Not acted
+  on** — the parquet is the refit's published artifact, the article and this
+  document have both named Piñeiro since round 3, and the audit verified his
+  figures. Recorded so a later round can decide which ranking §11b's rule means.
