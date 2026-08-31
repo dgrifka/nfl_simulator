@@ -4,7 +4,7 @@ likely the defence was to catch it.
 This is the read side of `docs/research/49-dropped-pick-variant-prereg.md`, the
 **labelled variant** of the adjudication that neutralizes a charted
 interception-worthy throw at the throwing defence's posterior-sampled catch
-probability. It sits beside the v1.3 ledger and never inside it: document 32's
+probability. It sits beside the Strict ledger and never inside it: document 32's
 closure stands, document 28's consistency argument stands, and FTN charting
 starts in 2022 so 2016-2021 could never carry the component at all. Everything
 here is reached only when a caller passes a fitted model in, and

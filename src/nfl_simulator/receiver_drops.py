@@ -3,7 +3,7 @@ the offence was to catch it.
 
 This is the read side of `docs/research/56-receiver-drop-mirror-prereg.md`, the
 other direction of amendment A-3's hands-on-the-ball class. It sits beside the
-v1.3 ledger and never inside it, on the same terms
+Strict ledger and never inside it, on the same terms
 `nfl_simulator.dropped_picks` does: FTN charting starts in 2022, and everything
 here is reached only when a caller passes a fitted model in.
 

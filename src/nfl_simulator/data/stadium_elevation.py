@@ -15,10 +15,11 @@ to foot-level precision on a stadium bowl that is itself 100 feet deep would be
 false accuracy. The two rows that carry the covariate — Denver and Mexico City —
 are the two the tests pin, and neither is in dispute at that resolution.
 
-The keys are exactly the 42 ``stadium_id`` values that appear in 2016–2025
-play-by-play. `tests/test_stadium_elevation.py` checks that completeness against
-the cache, so a stadium added by a future season fails the suite rather than
-silently falling back to a default.
+The keys are the 42 ``stadium_id`` values that appear in 2016–2025 play-by-play,
+plus one **forward-dated** row for the Melbourne Cricket Ground, where the NFL
+plays in week 2 of 2026. `tests/test_stadium_elevation.py` checks the 2016–2025
+completeness against the cache, so a stadium added by a future season fails the
+suite rather than silently falling back to a default.
 """
 
 from __future__ import annotations
@@ -75,6 +76,16 @@ STADIUM_ELEVATION_FT: dict[str, float] = {
     "MIA00": 10.0,  # Miami Gardens, FL — Hard Rock Stadium.
     "NOR00": 10.0,  # New Orleans, LA — Caesars/Mercedes-Benz Superdome.
     "NYC01": 10.0,  # East Rutherford, NJ — MetLife Stadium.
+    # --- forward-dated: not in 2016-2025 play-by-play -----------------------
+    "MEL00": 100.0,  # Melbourne, Australia — Melbourne Cricket Ground, ~30 m,
+    #                  where the NFL plays in week 2 of 2026. The elevation is
+    #                  sourced the same way every other row is; the *key* is a
+    #                  guess, because nflverse has not assigned this site a
+    #                  `stadium_id` yet. That is not a risk this table has to
+    #                  carry alone: a key that turns out wrong is simply never
+    #                  matched, and `elevation_ft` then raises on the real id
+    #                  and names this file. Entering the row costs nothing and
+    #                  entering the elevation now is the part worth doing early.
 }
 
 

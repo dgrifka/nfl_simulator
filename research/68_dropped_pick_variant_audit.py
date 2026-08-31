@@ -580,8 +580,20 @@ class AuditContext:
     ftn_by_game: dict
 
 
-def load_context(*, with_ftn: bool = True) -> AuditContext:
-    """Round 4's `main` prologue, callable."""
+def load_context(
+    *,
+    with_ftn: bool = True,
+    fg_trace: str = "trace_fg_refit.nc",
+    fg_summary: str = "fg_refit_summary.json",
+    shipped_artifact: str = V13_ARTIFACT,
+) -> AuditContext:
+    """Round 4's `main` prologue, callable.
+
+    The three artifact names default to v1.3's, so every caller written before
+    v1.4 loads exactly what it loaded then. `research/84` passes v1.4's trace,
+    its summary and its Strict artifact instead — one context builder for both
+    releases, rather than a second copy that could drift from this one.
+    """
     paths.ensure_data_dirs()
     columns = list(
         dict.fromkeys(
@@ -595,7 +607,7 @@ def load_context(*, with_ftn: bool = True) -> AuditContext:
         )
     )
     pbp = load_pbp(PBP_SEASONS, columns=columns)
-    fg_model, _ = _read_side.load_model("trace_fg_refit.nc", "fg_refit_summary.json")
+    fg_model, _ = _read_side.load_model(fg_trace, fg_summary)
     baselines = {
         "fumble": fit_fumble_baseline(pbp),
         "fg": fit_fg_baseline(pbp),
@@ -616,7 +628,7 @@ def load_context(*, with_ftn: bool = True) -> AuditContext:
         fg_model=fg_model,
         slope=slope,
         margins=dict(zip(games["game_id"], games["margin"], strict=True)),
-        shipped=pl.read_parquet(paths.RESEARCH_OUTPUT_DIR / V13_ARTIFACT),
+        shipped=pl.read_parquet(paths.RESEARCH_OUTPUT_DIR / shipped_artifact),
         ftn_by_game=ftn_by_game,
     )
 

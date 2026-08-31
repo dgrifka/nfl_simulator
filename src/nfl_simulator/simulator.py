@@ -125,7 +125,7 @@ class SimulationResult:
     # second one.
     home_point_draws: np.ndarray | None = None
     away_point_draws: np.ndarray | None = None
-    # Which adjudication produced these numbers. `"strict"` is v1.3's ledger,
+    # Which adjudication produced these numbers. `"strict"` is v1.4's ledger,
     # renamed by ruling R-4 (document 58 §2); `"full"` is the other edition —
     # at least one dropped-pick row (document 49 §5) *and* at least one
     # receiver-drop row (document 56 §2), the two directions amendment A-3
@@ -264,7 +264,10 @@ def field_goal_events(
         )
         weather = _weather_for(row)
         draws = fg_model.make_probability(
-            kicker_season, float(row["kick_distance"]), weather=weather
+            kicker_season,
+            float(row["kick_distance"]),
+            weather=weather,
+            stadium_id=row.get("stadium_id"),
         )
         home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
         events.append(
@@ -287,6 +290,10 @@ def _weather_for(row: dict) -> Weather | None:
     A frame without `roof`/`wind`/`temp` is not an error — it is a Phase 2 replay,
     and it must reproduce the Phase 2 ledger exactly. Returning None there means
     the model's weather terms never fire.
+
+    `stadium_id` — v1.4's elevation covariate — is read the same way, with
+    `row.get`, and for the same reason: a frame that predates the column prices
+    every kick at the fitted mean elevation, which is exactly what v1.3 did.
     """
     if "roof" not in row:
         return None
@@ -336,6 +343,7 @@ def extra_point_events(
                 float(row["kick_distance"]),
                 weather=_weather_for(row),
                 extra_point=True,
+                stadium_id=row.get("stadium_id"),
             )
             expected = _resample(draws, n_draws, rng)
         else:
@@ -366,9 +374,10 @@ def dropped_pick_events(
 ) -> list[LuckEvent]:
     """The **variant** component: interceptable throws, at the defence's rate.
 
-    Document 49, and nothing about it is v1.3. It fires only when a caller hands
-    in both a fitted model and a charting frame, which is why every v1.3 number
-    in the repo is reproduced by this function returning an empty list.
+    Document 49, and nothing about it is in the Strict edition. It fires only when
+    a caller hands in both a fitted model and a charting frame, which is why every
+    Strict number in the repo — v1.1 through v1.4 — is reproduced by this function
+    returning an empty list.
 
     The branch is **escape**, and the offence is charged: ``actual`` is 1 when
     the throw got away, ``expected`` is the posterior probability that it would,
@@ -378,9 +387,9 @@ def dropped_pick_events(
     still means good fortune for the home team no matter who threw the ball.
 
     Coverage is a warning, never an error (document 49 §6, V-4). A pre-2022 game
-    asked for the variant gets v1.3, because FTN charting does not reach it; a
-    2022+ game whose charting has no worthy throws gets v1.3 too, because there
-    was nothing interceptable to adjudicate.
+    asked for the variant gets the Strict adjudication, because FTN charting does
+    not reach it; a 2022+ game whose charting has no worthy throws gets it too,
+    because there was nothing interceptable to adjudicate.
     """
     if model is None or ftn is None:
         return []
@@ -390,7 +399,7 @@ def dropped_pick_events(
         warnings.warn(
             f"{plays['game_id'][0]} is a {season} game and FTN charting starts in "
             f"{FIRST_CHARTED_SEASON}; the dropped-pick variant cannot be built for it "
-            "and the v1.3 adjudication is returned unchanged.",
+            "and the Strict adjudication is returned unchanged.",
             UserWarning,
             stacklevel=2,
         )
@@ -427,8 +436,8 @@ def receiver_drop_events(
     """The **variant** component: catchable targets, at the receiving corps' rate.
 
     Document 56, the other direction of amendment A-3's hands-on-the-ball class,
-    and nothing about it is v1.3. It fires only when a caller hands in both a
-    fitted model and a charting frame.
+    and nothing about it is in the Strict edition. It fires only when a caller
+    hands in both a fitted model and a charting frame.
 
     The branch is **the catch**, and the offence is charged: ``actual`` is 1 when
     the ball was caught, ``expected`` is the posterior probability that it would
@@ -443,7 +452,8 @@ def receiver_drop_events(
     books a twentieth of one the other way.
 
     Coverage is a warning, never an error (document 56 §2's V-4). A pre-2022 game
-    asked for the variant gets v1.3, because FTN charting does not reach it.
+    asked for the variant gets the Strict adjudication, because FTN charting does
+    not reach it.
     """
     if model is None or ftn is None:
         return []
@@ -453,7 +463,7 @@ def receiver_drop_events(
         warnings.warn(
             f"{plays['game_id'][0]} is a {season} game and FTN charting starts in "
             f"{RECEIVER_FIRST_CHARTED_SEASON}; the receiver-drop variant cannot be "
-            "built for it and the v1.3 adjudication is returned unchanged.",
+            "built for it and the Strict adjudication is returned unchanged.",
             UserWarning,
             stacklevel=2,
         )
@@ -818,7 +828,7 @@ def simulate_game(
     deserved points, split out of the same replay the margin came from.
     `edition` is a switch over the model handles, not a second code path. A
     caller holding both fitted models — `render._simulation_context` does —
-    asks for `"strict"` to get v1.3 without dropping them, and for `"full"` to
+    asks for `"strict"` to get v1.4 without dropping them, and for `"full"` to
     use both. Left `None`, whichever models were passed are used, which is how
     the audit arms `"strict+dp"` and `"strict+rd"` stay reachable.
     """
@@ -856,9 +866,9 @@ def simulate_game(
     events += extra_point_events(
         plays, xp_baseline, fg_model, n_posterior_draws, rng, include_blocked=include_blocked
     )
-    # Last, and after the shared random stream has been drawn from by every v1.3
+    # Last, and after the shared random stream has been drawn from by every Strict
     # builder. Appending rather than interleaving is what keeps `None` byte-for-
-    # byte identical to v1.3: the draws the fumble and kicking coins consume do
+    # byte identical to Strict: the draws the fumble and kicking coins consume do
     # not move when the variant is switched on.
     dropped_picks = dropped_pick_events(plays, ftn, dropped_pick_model, n_posterior_draws, rng)
     events += dropped_picks
