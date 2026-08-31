@@ -264,7 +264,10 @@ def field_goal_events(
         )
         weather = _weather_for(row)
         draws = fg_model.make_probability(
-            kicker_season, float(row["kick_distance"]), weather=weather
+            kicker_season,
+            float(row["kick_distance"]),
+            weather=weather,
+            stadium_id=row.get("stadium_id"),
         )
         home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
         events.append(
@@ -287,6 +290,10 @@ def _weather_for(row: dict) -> Weather | None:
     A frame without `roof`/`wind`/`temp` is not an error — it is a Phase 2 replay,
     and it must reproduce the Phase 2 ledger exactly. Returning None there means
     the model's weather terms never fire.
+
+    `stadium_id` — v1.4's elevation covariate — is read the same way, with
+    `row.get`, and for the same reason: a frame that predates the column prices
+    every kick at the fitted mean elevation, which is exactly what v1.3 did.
     """
     if "roof" not in row:
         return None
@@ -336,6 +343,7 @@ def extra_point_events(
                 float(row["kick_distance"]),
                 weather=_weather_for(row),
                 extra_point=True,
+                stadium_id=row.get("stadium_id"),
             )
             expected = _resample(draws, n_draws, rng)
         else:

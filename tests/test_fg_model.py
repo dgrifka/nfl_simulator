@@ -257,7 +257,9 @@ def test_a_roof_effect_of_the_wrong_length_is_rejected():
 # ---- loading a fitted posterior ------------------------------------------
 
 
-def _write_posterior(path, *, with_weather: bool, with_cubic: bool = False):
+def _write_posterior(
+    path, *, with_weather: bool, with_cubic: bool = False, with_elevation: bool = False
+):
     """A tiny fitted posterior on disk, in the shape `research/14_*` writes.
 
     Built here rather than read from `research/outputs/`, so the suite never
@@ -286,6 +288,9 @@ def _write_posterior(path, *, with_weather: bool, with_cubic: bool = False):
         draws["delta_cubic"] = (("chain", "draw"), np.array([[-0.081, -0.079]]))
         draws["delta_xp"] = (("chain", "draw"), np.array([[0.167, 0.160]]))
         draws["lambda_xp"] = (("chain", "draw"), np.array([[1.263, 1.250]]))
+    if with_elevation:
+        # Document 67 §2's coefficient: log-odds per 1,000 feet.
+        draws["beta_elev"] = (("chain", "draw"), np.array([[0.0602, 0.0590]]))
 
     # ArviZ 1.x stores a fit as an xarray DataTree with one group per role, which
     # is what `az.from_netcdf` hands back and what the loader indexes into.
@@ -522,3 +527,196 @@ def test_a_phase_two_posterior_still_loads_without_the_new_parameters(tmp_path):
     assert model.delta_cubic is None
     assert model.delta_xp is None
     assert model.lambda_xp is None
+
+
+# --------------------------------------------------------------------------
+# stadium elevation — docs/research/66 (the pre-registration), 67 (the result),
+# 68 (the v1.4 adoption)
+#
+# `beta_elev` is a linear log-odds shift per 1,000 feet, centred on the fitted
+# sample's kick-weighted mean elevation. It is the first term the read side
+# resolves from something that is *not* on the play row — the elevation comes
+# from `stadium_id` through a lookup table — so these tests pin both halves:
+# that the lookup is consulted, and that a posterior without the term is
+# untouched by any of it.
+# --------------------------------------------------------------------------
+
+BETA_ELEV = np.array([0.0602, 0.0602])
+ELEVATION_CENTRE = 0.5687  # kft, document 66 §11
+
+DENVER = "DEN00"  # 5,280 ft
+SEA_LEVEL = "NYC01"  # MetLife, 10 ft
+VEGAS = "VEG00"  # 2,030 ft, and a dome — the row that separates roof from height
+
+
+def build_elevation_model(**overrides) -> FieldGoalModel:
+    """A v1.4 posterior: every v1.3 parameter plus the elevation term."""
+    kwargs = {
+        "beta_elev": BETA_ELEV,
+        "elevation_centre": ELEVATION_CENTRE,
+    }
+    kwargs.update(overrides)
+    return build_full_model(**kwargs)
+
+
+def test_a_denver_kick_is_priced_above_the_same_kick_at_sea_level():
+    """The whole point of the term: thin air is less drag, and less drag is a longer kick."""
+    model = build_elevation_model()
+    denver = model.make_probability("2024_GOOD", 45.0, stadium_id=DENVER).mean()
+    metlife = model.make_probability("2024_GOOD", 45.0, stadium_id=SEA_LEVEL).mean()
+    assert denver > metlife
+
+
+def test_the_denver_gain_at_45_yards_is_about_four_points():
+    """Document 67 §2's headline, at the league curve: +4.09 pp mean elevation -> Denver.
+
+    Pinned as a band rather than a point because this model carries a kicker
+    effect and two posterior draws, not the fitted 4,000.
+    """
+    model = build_elevation_model(kicker_effects={})
+    centre_kick = model.league_make_probability(45.0).mean()
+    denver = model.league_make_probability(45.0, stadium_id=DENVER).mean()
+    assert (denver - centre_kick) * 100 == pytest.approx(4.09, abs=0.6)
+
+
+def test_the_elevation_term_reproduces_the_fitted_arithmetic():
+    """`beta_elev * (elev_kft - centre)`, added to the logit and nothing else."""
+    from nfl_simulator.data.stadium_elevation import elevation_kft
+
+    model = build_elevation_model()
+    without = build_full_model()
+    shift = BETA_ELEV * (elevation_kft(DENVER) - ELEVATION_CENTRE)
+    expected_logit = fitted_logit(45.0, kicker=np.array([0.5, 0.5])) + shift
+    np.testing.assert_allclose(
+        model.make_probability("2024_GOOD", 45.0, stadium_id=DENVER),
+        1.0 / (1.0 + np.exp(-expected_logit)),
+        atol=1e-12,
+    )
+    # and the same model with no stadium is the v1.3 number, unmoved.
+    np.testing.assert_allclose(
+        model.make_probability("2024_GOOD", 45.0),
+        without.make_probability("2024_GOOD", 45.0),
+        atol=1e-12,
+    )
+
+
+def test_a_kick_at_the_fitted_centre_gets_no_adjustment():
+    """Centring is what keeps `alpha` meaning what it meant: the average kick."""
+    model = build_elevation_model(elevation_centre=5.280)
+    np.testing.assert_allclose(
+        model.make_probability("2024_GOOD", 45.0, stadium_id=DENVER),
+        build_full_model().make_probability("2024_GOOD", 45.0),
+        atol=1e-12,
+    )
+
+
+def test_a_dome_at_altitude_keeps_its_roof_effect_and_gains_the_elevation_one():
+    """Allegiant is a dome at 2,030 feet — the row that lets the two terms separate."""
+    model = build_elevation_model()
+    roofed = Weather("dome", None, None)
+    with_both = model.make_probability("2024_GOOD", 45.0, weather=roofed, stadium_id=VEGAS)
+    roof_only = model.make_probability("2024_GOOD", 45.0, weather=roofed)
+    height_only = model.make_probability("2024_GOOD", 45.0, stadium_id=VEGAS)
+    plain = model.make_probability("2024_GOOD", 45.0)
+    assert with_both.mean() > roof_only.mean() > plain.mean()
+    assert with_both.mean() > height_only.mean() > plain.mean()
+
+
+def test_an_extra_point_at_altitude_gets_the_elevation_term_too():
+    """The extra point goes through the same curve, so it goes through the same air."""
+    model = build_elevation_model()
+    denver = model.make_probability("2024_GOOD", 33.0, stadium_id=DENVER, extra_point=True)
+    metlife = model.make_probability("2024_GOOD", 33.0, stadium_id=SEA_LEVEL, extra_point=True)
+    assert denver.mean() > metlife.mean()
+
+
+def test_the_league_curve_takes_a_stadium():
+    model = build_elevation_model(kicker_effects={})
+    np.testing.assert_allclose(
+        model.league_make_probability(45.0, stadium_id=DENVER),
+        model.make_probability(None, 45.0, stadium_id=DENVER),
+        atol=1e-12,
+    )
+
+
+def test_a_posterior_without_an_elevation_term_ignores_the_stadium_entirely():
+    """v1.1, v1.2 and v1.3 have to stay reproducible: absent means absent.
+
+    A caller that hands a v1.3 posterior a `stadium_id` is not making an error
+    — the simulator passes one on every kick from v1.4 on — and the v1.3 ledger
+    must come back byte for byte anyway.
+    """
+    model = build_full_model()
+    np.testing.assert_allclose(
+        model.make_probability("2024_GOOD", 45.0, stadium_id=DENVER),
+        model.make_probability("2024_GOOD", 45.0),
+        atol=1e-15,
+    )
+
+
+def test_no_stadium_id_means_no_elevation_term_rather_than_sea_level():
+    """The `w = 0` endpoint of document 05 §1, applied to the air.
+
+    A Phase 2 replay frame carries no `stadium_id` column at all. Pricing those
+    kicks at sea level would be a claim the data does not make; pricing them at
+    the fitted centre is the same "no evidence, no term" fallback an unknown
+    kicker gets.
+    """
+    model = build_elevation_model()
+    np.testing.assert_allclose(
+        model.make_probability("2024_GOOD", 45.0, stadium_id=None),
+        build_full_model().make_probability("2024_GOOD", 45.0),
+        atol=1e-12,
+    )
+
+
+def test_an_unknown_stadium_raises_and_names_the_file_to_edit():
+    """Handoff constraint 5: a stadium nobody entered fails loudly.
+
+    The 2026 season plays at the Melbourne Cricket Ground. A silent sea-level
+    default would price that game's kicks wrong and say nothing.
+    """
+    model = build_elevation_model()
+    with pytest.raises(KeyError, match="stadium_elevation.py"):
+        model.make_probability("2024_GOOD", 45.0, stadium_id="ZZZ99")
+
+
+def test_a_beta_elev_of_the_wrong_length_is_rejected():
+    with pytest.raises(ValueError, match="same number of posterior draws"):
+        build_elevation_model(beta_elev=np.array([0.06, 0.06, 0.06]))
+
+
+def test_loading_a_v14_posterior_recovers_and_applies_the_elevation_term(tmp_path):
+    path = _write_posterior(
+        tmp_path / "trace.nc", with_weather=True, with_cubic=True, with_elevation=True
+    )
+    model = FieldGoalModel.from_posterior(
+        path, wind_centre=8.12, temp_centre=58.16, elevation_centre=ELEVATION_CENTRE
+    )
+    np.testing.assert_allclose(model.beta_elev, [0.0602, 0.0590])
+    assert model.elevation_centre == ELEVATION_CENTRE
+    assert (
+        model.make_probability("2024_GOOD", 50.0, stadium_id=DENVER).mean()
+        > model.make_probability("2024_GOOD", 50.0, stadium_id=SEA_LEVEL).mean()
+    )
+
+
+def test_loading_an_elevation_posterior_without_its_centre_is_refused(tmp_path):
+    """The centring constant is a property of the fitted sample, not a default.
+
+    Loading a v1.4 trace at the default centre of zero would price every kick
+    in the league as if it were 569 feet lower than it is — a silent, uniform
+    error of the exact kind document 30 was written to stop.
+    """
+    path = _write_posterior(
+        tmp_path / "trace.nc", with_weather=True, with_cubic=True, with_elevation=True
+    )
+    with pytest.raises(ValueError, match="elevation_centre"):
+        FieldGoalModel.from_posterior(path, wind_centre=8.12, temp_centre=58.16)
+
+
+def test_a_v13_posterior_still_loads_without_an_elevation_centre(tmp_path):
+    path = _write_posterior(tmp_path / "trace.nc", with_weather=True, with_cubic=True)
+    model = FieldGoalModel.from_posterior(path, wind_centre=8.12, temp_centre=58.16)
+    assert model.beta_elev is None
+    assert model.elevation_centre == 0.0

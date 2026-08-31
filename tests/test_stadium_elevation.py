@@ -81,3 +81,31 @@ def test_every_stadium_in_the_pbp_resolves():
     assert not missing, f"stadium ids with no elevation: {sorted(missing)}"
     assert pbp["stadium_id"].null_count() == 0
     del pl
+
+
+# --------------------------------------------------------------------------
+# the 2026 season's new site, and the guard that makes a missing row loud
+# --------------------------------------------------------------------------
+
+
+def test_the_melbourne_cricket_ground_has_a_row():
+    """The NFL plays at the MCG in week 2 of 2026, and it is not in 2016-2025 data.
+
+    The row is entered ahead of the season rather than after the first kick is
+    mispriced. Its `stadium_id` is provisional — nflverse has not assigned one
+    — which is exactly why the guard below matters more than the row does.
+    """
+    assert elevation_ft("MEL00") == pytest.approx(100.0, abs=60.0)
+
+
+def test_the_unknown_stadium_message_names_the_file_to_edit():
+    """Handoff constraint 5: the error has to say what to do about itself.
+
+    A `KeyError` reading `'AUS01'` tells a reader a stadium is missing. This one
+    tells them which file to add it to, which is the difference between a
+    five-minute fix and a bisect.
+    """
+    with pytest.raises(KeyError, match=r"stadium_elevation\.py"):
+        elevation_ft("AUS01")
+    with pytest.raises(KeyError, match=r"stadium_elevation\.py"):
+        elevation_kft("AUS01")

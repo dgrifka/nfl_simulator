@@ -21,8 +21,10 @@ the extra-point arm fitted with it:
               + beta_temp * (temp - temp_centre) * has_weather
               + delta_xp * is_extra_point
               + kicker_effect * (1 + (lambda_xp - 1) * is_extra_point)
+              + beta_elev * (elev_kft - elevation_centre)
 
-    where d = distance - distance_centre
+    where d = distance - distance_centre, and elev_kft is the kick's stadium
+    elevation in thousands of feet, looked up from `stadium_id`
 
 **Every fitted term is optional and absent means absent**, never zero-by-
 assumption: a posterior fitted before Phase 3 carries no weather parameters and
@@ -36,6 +38,15 @@ quadratic curve whose `gamma` had been fitted jointly with a cubic term it then
 discarded, and priced extra points as plain field goals from 33 yards. Document
 30 §5a makes agreement with the fit a gate rather than a hope: the read side
 must reproduce `research/14_fg_weather_model.make_probabilities` on every kick.
+
+**Elevation arrived in v1.4** (documents 66, 67 and 68). It is the first term
+resolved from something that is not on the play row: the covariate is a lookup
+from `stadium_id` through `nfl_simulator.data.stadium_elevation`, so a caller
+prices a kick at altitude by naming the stadium rather than by computing
+anything. The lookup **raises** on a stadium nobody has entered — sea level is
+a real elevation in that table, so a silent default would be indistinguishable
+from a correct row — while *no* `stadium_id` at all stays the same `w = 0`
+endpoint an unknown kicker gets, and prices the kick at the fitted centre.
 """
 
 from __future__ import annotations
@@ -44,6 +55,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+
+from nfl_simulator.data.stadium_elevation import elevation_kft
 
 DEFAULT_DISTANCE_CENTRE = 40.0
 
@@ -120,10 +133,12 @@ class FieldGoalModel:
     delta_cubic: np.ndarray | None = None
     delta_xp: np.ndarray | None = None
     lambda_xp: np.ndarray | None = None
+    beta_elev: np.ndarray | None = None
+    elevation_centre: float = 0.0
 
     def __post_init__(self) -> None:
         lengths = {len(self.alpha), len(self.beta), len(self.gamma)}
-        for optional in (self.delta_cubic, self.delta_xp, self.lambda_xp):
+        for optional in (self.delta_cubic, self.delta_xp, self.lambda_xp, self.beta_elev):
             if optional is not None:
                 lengths.add(len(optional))
         if len(lengths) != 1:
@@ -156,9 +171,17 @@ class FieldGoalModel:
             logit = logit + self.delta_xp
         return logit
 
-    def league_make_probability(self, distance: float, *, extra_point: bool = False) -> np.ndarray:
+    def league_make_probability(
+        self,
+        distance: float,
+        *,
+        extra_point: bool = False,
+        stadium_id: str | None = None,
+    ) -> np.ndarray:
         """Make probability for an average kicker, one value per posterior draw."""
-        return _sigmoid(self._logit(distance, extra_point=extra_point))
+        return _sigmoid(
+            self._logit(distance, extra_point=extra_point) + self._elevation_logit(stadium_id)
+        )
 
     def _kicker_logit(self, effect: np.ndarray, *, extra_point: bool) -> np.ndarray:
         """A kicker's effect, transferred to extra points at the fitted rate.
@@ -196,6 +219,29 @@ class FieldGoalModel:
                 adjustment = adjustment + self.beta_temp * (weather.temp - self.temp_centre)
         return adjustment
 
+    def _elevation_logit(self, stadium_id: str | None) -> np.ndarray | float:
+        """Log-odds adjustment for the air this stadium sits in. Zero when silent.
+
+        Two different silences, and they mean different things:
+
+        * **This posterior has no `beta_elev`** — anything before v1.4. The term
+          is not in the model, so there is nothing to add, and a caller handing
+          a `stadium_id` to a v1.3 posterior gets the v1.3 number back
+          unchanged. That is what keeps every shipped ledger reproducible.
+        * **No `stadium_id` was passed** — a Phase 2 replay frame, which has no
+          such column. The kick is priced at the fitted centre, which is
+          document 05 §1's `w = 0` endpoint applied to the air: no evidence
+          about where this kick was taken, so no elevation term.
+
+        An *unknown* stadium is neither of those and raises, from
+        `stadium_elevation.elevation_kft`. Sea level is a real value in that
+        table, so falling back to it would price a Mexico City kick as a New
+        Jersey one and say nothing about it.
+        """
+        if self.beta_elev is None or stadium_id is None:
+            return 0.0
+        return self.beta_elev * (elevation_kft(stadium_id) - self.elevation_centre)
+
     def make_probability(
         self,
         kicker_season: str | None,
@@ -203,6 +249,7 @@ class FieldGoalModel:
         *,
         weather: Weather | None = None,
         extra_point: bool = False,
+        stadium_id: str | None = None,
     ) -> np.ndarray:
         """Make probability for this kicker in these conditions, one value per draw.
 
@@ -220,9 +267,19 @@ class FieldGoalModel:
         rather than being pinned at a constant, and `delta_xp` then means what
         the fit says it means: the difference between an extra point and a field
         goal *from the same distance*.
+
+        `stadium_id` selects the elevation term fitted in v1.4 (document 68).
+        The stadium is named rather than the elevation passed, so the read side
+        and the fit consult one table and cannot disagree about how high Denver
+        is. Omitting it prices the kick at the fitted centre; naming a stadium
+        the table does not hold raises.
         """
         effect = self.kicker_effects.get(kicker_season) if kicker_season else None
-        logit = self._logit(distance, extra_point=extra_point) + self._weather_logit(weather)
+        logit = (
+            self._logit(distance, extra_point=extra_point)
+            + self._weather_logit(weather)
+            + self._elevation_logit(stadium_id)
+        )
         if effect is not None:
             logit = logit + self._kicker_logit(effect, extra_point=extra_point)
         return _sigmoid(logit)
@@ -239,6 +296,7 @@ class FieldGoalModel:
         distance_centre: float = DEFAULT_DISTANCE_CENTRE,
         wind_centre: float = 0.0,
         temp_centre: float = 0.0,
+        elevation_centre: float | None = None,
     ) -> FieldGoalModel:
         """Load a fitted posterior written by `research/07_`, `research/14_` or
         `research/42_`.
@@ -251,6 +309,15 @@ class FieldGoalModel:
         centring constants are passed in rather than stored in the trace because
         they are properties of the *sample* the model was fitted on, and a caller
         scoring new seasons must use the same ones the fit did.
+
+        `elevation_centre` is the one centring constant that is **required when
+        its term is present**, rather than defaulting to zero like the other
+        two. The reason is that its default would not be silent-but-harmless:
+        wind and temperature only reach a kick that has a reading, so a missing
+        centre affects a subset, while every kick has an elevation. Loading a
+        v1.4 posterior at a centre of zero would price the whole league as if
+        it sat 569 feet lower than it does — one uniform, invisible shift of
+        exactly the kind document 30 was written to stop.
         """
         import arviz as az
 
@@ -271,6 +338,15 @@ class FieldGoalModel:
         def optional(name: str) -> np.ndarray | None:
             return posterior[name].values.ravel() if name in posterior else None
 
+        beta_elev = optional("beta_elev")
+        if beta_elev is not None and elevation_centre is None:
+            raise ValueError(
+                f"{trace_path.name} carries an elevation term, so it needs the "
+                "elevation_centre it was fitted at — document 66 §11 puts it at "
+                "0.5687 kft, and `fg_v14_summary.json` carries it under "
+                "centres['elevation']"
+            )
+
         return cls(
             alpha=alpha,
             beta=beta,
@@ -285,6 +361,8 @@ class FieldGoalModel:
             delta_cubic=optional("delta_cubic"),
             delta_xp=optional("delta_xp"),
             lambda_xp=optional("lambda_xp"),
+            beta_elev=beta_elev,
+            elevation_centre=0.0 if elevation_centre is None else elevation_centre,
         )
 
 

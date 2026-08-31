@@ -1159,3 +1159,101 @@ def test_a_cap_row_falls_back_to_the_charged_team_when_a_drive_has_no_offence(ba
     result = run(two_fumbles_on_one_drive(), baselines, fg_model, edition="full")
     caps = [row for row in result.ledger if row.component == POSSESSION_CAP_COMPONENT]
     assert all(row.charged_team is not None for row in caps)
+
+
+# --------------------------------------------------------------------------
+# stadium elevation reaches the ledger — docs/research/66, 67, 68 (v1.4)
+#
+# The elevation term is fitted per stadium, so the simulator has to hand the
+# model a `stadium_id` on every kick. These tests pin both directions: a kick
+# in Denver is priced through the term, and a frame that carries no stadium
+# column at all — every replay before v1.4 — still prices exactly as it did.
+# --------------------------------------------------------------------------
+
+DENVER, SEA_LEVEL = "DEN00", "NYC01"
+
+
+@pytest.fixture
+def elevation_fg_model(full_fg_model):
+    """v1.4's posterior: the full v1.3 model plus document 67's coefficient."""
+    import dataclasses
+
+    return dataclasses.replace(
+        full_fg_model, beta_elev=np.full(50, 0.0602), elevation_centre=0.5687
+    )
+
+
+def test_a_field_goal_in_denver_is_priced_through_the_elevation_term(baselines, elevation_fg_model):
+    result = run(
+        [fg_play(1.0, kicker="K_GOOD", distance=52.0, made=False, stadium_id=DENVER)],
+        baselines,
+        elevation_fg_model,
+    )
+    entry = next(e for e in result.ledger if e.component == "field_goal")
+    expected = elevation_fg_model.make_probability("2024_K_GOOD", 52.0, stadium_id=DENVER)
+    assert entry.expected == pytest.approx(float(expected.mean()))
+
+
+def test_the_same_kick_at_sea_level_is_priced_lower(baselines, elevation_fg_model):
+    """The luck a Denver make books is smaller, because more of it was the air."""
+
+    def expected_for(stadium_id: str) -> float:
+        result = run(
+            [fg_play(1.0, kicker="K_GOOD", distance=52.0, made=True, stadium_id=stadium_id)],
+            baselines,
+            elevation_fg_model,
+        )
+        return next(e for e in result.ledger if e.component == "field_goal").expected
+
+    assert expected_for(DENVER) > expected_for(SEA_LEVEL)
+
+
+def test_an_extra_point_in_denver_is_priced_through_the_elevation_term(
+    baselines, elevation_fg_model, xp_baseline
+):
+    result = run(
+        [play(1.0), xp_play(2.0, kicker="K_GOOD", made=True, stadium_id=DENVER)],
+        baselines,
+        elevation_fg_model,
+        xp_baseline=xp_baseline,
+    )
+    entry = next(e for e in result.ledger if e.component == "extra_point")
+    expected = elevation_fg_model.make_probability(
+        "2024_K_GOOD", 33.0, stadium_id=DENVER, extra_point=True
+    )
+    assert entry.expected == pytest.approx(float(expected.mean()))
+
+
+def test_a_frame_with_no_stadium_column_prices_exactly_as_v13_did(baselines, full_fg_model):
+    """Hard constraint: every shipped ledger stays reproducible.
+
+    A Phase 2 replay frame has no `stadium_id` column. Asking a row for one has
+    to be a no-op rather than a `KeyError`, and the number that comes back has
+    to be the number v1.3 booked.
+    """
+    result = run(
+        [fg_play(1.0, kicker="K_GOOD", distance=52.0, made=False)], baselines, full_fg_model
+    )
+    entry = next(e for e in result.ledger if e.component == "field_goal")
+    assert entry.expected == pytest.approx(
+        float(full_fg_model.make_probability("2024_K_GOOD", 52.0).mean())
+    )
+
+
+def test_a_v13_posterior_ignores_a_stadium_column_it_was_not_fitted_with(baselines, full_fg_model):
+    """The other half of the same constraint: v1.4's *frame* with v1.3's *model*.
+
+    The wide frame is loaded once and used for both editions, so a v1.3 replay
+    runs on rows that carry a `stadium_id`. Absent means absent: no `beta_elev`,
+    no adjustment, whatever the column says.
+    """
+
+    def expected_for(**overrides) -> float:
+        result = run(
+            [fg_play(1.0, kicker="K_GOOD", distance=52.0, made=False, **overrides)],
+            baselines,
+            full_fg_model,
+        )
+        return next(e for e in result.ledger if e.component == "field_goal").expected
+
+    assert expected_for(stadium_id=DENVER) == pytest.approx(expected_for(), abs=1e-15)
