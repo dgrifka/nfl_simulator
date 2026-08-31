@@ -13,6 +13,15 @@ the three corrections moved what.*
 `research/outputs/dtw_games_v13.parquet`, `dtw_ledger_v13.parquet`,
 `model_metadata_v13.json`, `46_ledger_delta.json`.*
 
+> **Status: superseded by v1.4 on 2026-08-31.** Document 68 is the current ship
+> record. v1.4 adds one term — stadium elevation in the make-probability model
+> (documents 66 and 67) — and changes nothing else: the components, the
+> population, the seed and the draws are this document's. **Everything below
+> stands as written**; v1.3 replays at 0.00e+00 under v1.4's code, which is
+> document 68's Gate W-1, so every number here is still reproducible from
+> `trace_fg_refit.nc`. What is no longer current is only which artifacts the
+> product reads. Pointer only — nothing in this document is edited.
+
 ---
 
 ## 1. The answer, stated first

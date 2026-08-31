@@ -19,8 +19,11 @@ Gates:
          actual margin less its booked luck.
 
 Reported, not gated: the v1.3-to-v1.4 comparison, document 64's headline set,
-and the walk-through game — which is `2025_13_DEN_WAS`, a Denver game whose
-four field goals and five extra points are all repriced by this change.
+and the walk-through game. That game is `2025_13_DEN_WAS` — Denver *at*
+Washington, played at Northwest Stadium's 180 feet, not at Denver's 5,280.
+It is the low-altitude side of the change: every one of its nine kicking rows
+is now priced slightly harder than v1.3 priced it, because a stadium below the
+fitted centre of 569 feet gets a negative elevation term.
 
     uv run python research/84_full_edition_v14.py
 
@@ -56,7 +59,8 @@ V14_FULL_ARTIFACT = "full_summary_v14.parquet"
 V13_FULL_ARTIFACT = "full_summary.parquet"
 OUTPUT_NAME = "84_full_edition_v14.json"
 
-# Document 64 §8's walk-through game — and, as it happens, a game at 5,280 feet.
+# Document 64 §8's walk-through game. Denver *at* Washington: the game is played
+# at 180 feet, below the fitted centre, so v1.4 prices its kicks slightly harder.
 WALKTHROUGH = "2025_13_DEN_WAS"
 
 # Document 64's published headline set, quoted so the run says out loud which
@@ -237,12 +241,14 @@ def edition_delta(v13: pl.DataFrame, v14: pl.DataFrame) -> dict:
 
 
 def walkthrough(strict_ledger: pl.DataFrame, full_ledger: pl.DataFrame, slope: float) -> dict:
-    """Document 64 §§7-8, recomputed — and this game is played at 5,280 feet.
+    """Document 64 §§7-8, recomputed at Northwest Stadium's 180 feet.
 
-    Every kicking row in it is repriced by v1.4, which makes it the single most
-    load-bearing recomputation of this round for the article: §7's worked
-    example is a fumble and does not move, but §8a's twelve rows and §8b's
-    component totals both do.
+    Every kicking row in it is repriced by v1.4, which makes it the article's
+    most load-bearing recomputation of this round: §7's worked example is a
+    fumble and does not move at all, but §8a's twelve rows and §8b's component
+    totals both do. The direction is *down* — 180 feet is below the fitted
+    centre of 569 — so this game is the mirror of the Denver story rather than
+    an instance of it.
     """
     print(f"\n{'=' * 82}\nTHE WALK-THROUGH GAME, {WALKTHROUGH}, REPRICED\n{'=' * 82}")
     out = {}
