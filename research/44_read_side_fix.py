@@ -76,6 +76,12 @@ SIM_COLUMNS = [
     # still 0.00e+00 over 2,761 games with both loaded (`research/78`).
     "fixed_drive",
     "qtr",
+    # v1.4, and unlike every column above it this one **prices**: it is where
+    # the elevation term reads a kick's altitude (documents 66-68). It is still
+    # inert under a v1.3 posterior, which carries no `beta_elev` to apply it
+    # with, and `research/83` re-proves that at 0.00e+00 over 2,761 games rather
+    # than assuming it.
+    "stadium_id",
 ]
 
 # Document 27 §14f, on the shipped population and the incumbent posterior: the
@@ -91,12 +97,21 @@ def shipped_read_side(model: FieldGoalModel) -> FieldGoalModel:
 
 
 def load_model(trace: str, summary: str) -> FieldGoalModel:
+    """The posterior plus the centring constants it was fitted at.
+
+    `centres["elevation"]` is v1.4's and is passed only when the summary has
+    it, so a v1.1/v1.2/v1.3 summary loads through this same call unchanged. The
+    read side refuses a trace that carries `beta_elev` without it, so the pair
+    cannot come apart silently: a v1.4 trace loaded against a v1.3 summary
+    raises here rather than pricing the league 569 feet too low.
+    """
     with (paths.RESEARCH_OUTPUT_DIR / summary).open() as handle:
         centres = json.load(handle)["centres"]
     return FieldGoalModel.from_posterior(
         paths.RESEARCH_OUTPUT_DIR / trace,
         wind_centre=centres["wind"],
         temp_centre=centres["temp"],
+        elevation_centre=centres.get("elevation"),
     ), centres
 
 
