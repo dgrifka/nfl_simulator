@@ -302,8 +302,8 @@ class FieldGoalModel:
         `research/42_`.
 
         Every optional parameter is read when present and skipped when absent, so
-        the Phase 2 trace, the quadratic arm, the adopted cubic arm and the v1.3
-        refit all load through one path. **Skipped means the term is not in the
+        the Phase 2 trace, the quadratic arm, the adopted cubic arm, the v1.3
+        refit and the v1.4 elevation posterior all load through one path. **Skipped means the term is not in the
         model**, never that it is zero by assumption — the distinction is what
         keeps an older ledger reproducible. The
         centring constants are passed in rather than stored in the trace because

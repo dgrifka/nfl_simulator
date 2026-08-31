@@ -173,7 +173,7 @@ class GameVerdict:
     dtw_interval: tuple[float, float]
     margin_draws: np.ndarray
     # The scoreboard facts, for the header. Optional because the simulator's
-    # summary does not carry them — a verdict built from `dtw_games_v13.parquet`
+    # summary does not carry them — a verdict built from `dtw_games_v14.parquet`
     # alone still has to draw, it just states the margin instead of the score.
     home_score: int | None = None
     away_score: int | None = None
@@ -351,7 +351,7 @@ def verdict_from_row(
     overtime. Nothing in it can change the adjudication; the summary row is
     still the sole source of every number the figure states.
 
-    ``edition`` says which summary the row came from — `dtw_games_v13.parquet`
+    ``edition`` says which summary the row came from — `dtw_games_v14.parquet`
     is Strict and `full_summary.parquet` is Full — and ``counterpart`` is the
     other edition's verdict, for the one line that quotes it. Neither can move
     a number: the row is still the only source of every figure on the image.
@@ -4035,7 +4035,7 @@ OVERTIME_SWING_ETI = "+1.04 to +3.07"
 OVERTIME_MEDIAN_MOVE = "3.93 pp"  # §8 Gate O-3
 OVERTIME_FLOOR = "4.06 pp"  # the incumbent's own median 89% half-width
 OVERTIME_SIDE_FLIPS = "14 of 155"
-# §8's impact run was simulator v1.1. The share this module prints is v1.3, so a
+# §8's impact run was simulator v1.1. The share this module prints is v1.4, so a
 # per-game move quoted beside it is a size and not a correction.
 OVERTIME_IMPACT_VERSION = "v1.1"
 # §4d, pre-registered: the era split cannot be read as a finding either way.
@@ -4102,7 +4102,7 @@ def overtime_lines(verdict: GameVerdict, toss: OvertimeToss) -> list[str]:
             # is true on both.
             f"Here the toss is worth {move * 100:+.0f} pp of {favoured}'s share in the "
             f"Strict edition — measured on simulator {OVERTIME_IMPACT_VERSION} against "
-            "Strict (v1.3), so it sizes the toss rather than correcting it."
+            "Strict (v1.4), so it sizes the toss rather than correcting it."
         )
 
     if toss.season >= OVERTIME_NEW_RULES_SEASON:

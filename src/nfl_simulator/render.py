@@ -7,10 +7,10 @@ marks, put plain words on the events, and write three files named the way the
 baseball simulator names its own.
 
 **Nothing here recomputes a published number.** The deserved margin, the DTW%
-and the interval are read from `dtw_games_v13.parquet`; the events are read
-from `dtw_ledger_v13.parquet`; the slope is read from `model_metadata_v13.json`.
+and the interval are read from `dtw_games_v14.parquet`; the events are read
+from `dtw_ledger_v14.parquet`; the slope is read from `model_metadata_v14.json`.
 The one thing that *is* recomputed is the bootstrap's margin draws, because the
-shipped summary does not keep them — and it is recomputed under v1.3's exact
+shipped summary does not keep them — and it is recomputed under v1.4's exact
 settings and checked against the summary before a pixel is drawn, exactly as
 `research/54_bootstrap_figures.py` does. A replay that disagrees is a stop, not
 a footnote.
@@ -47,24 +47,24 @@ from nfl_simulator.simulator import EDITIONS
 from nfl_simulator.style import finalize
 from nfl_simulator.teams import era_code, pair_colors, team_logo, team_name
 
-GAMES_ARTIFACT = "dtw_games_v13.parquet"
-LEDGER_ARTIFACT = "dtw_ledger_v13.parquet"
+GAMES_ARTIFACT = "dtw_games_v14.parquet"
+LEDGER_ARTIFACT = "dtw_ledger_v14.parquet"
 OVERTIME_ARTIFACT = "26_overtime_games.parquet"
-METADATA = "model_metadata_v13.json"
+METADATA = "model_metadata_v14.json"
 
 # Ruling R-4's second edition (document 58 §2), written by
-# `research/76_full_edition_summary.py`. It is not a v1.3 artifact and it is not
+# `research/84_full_edition_v14.py`. It is not a Strict artifact and it is not
 # shipped: a checkout that has not run that script renders Strict and says so
 # when it is asked for Full, rather than quietly checking a Full render against
 # Strict's published numbers.
-FULL_ARTIFACT = "full_summary.parquet"
+FULL_ARTIFACT = "full_summary_v14.parquet"
 
 # The first season FTN charting reaches, which is the first season the Full
 # edition exists at all. Read from `ingest` rather than written as 2022 so the
 # two cannot drift.
 FIRST_CHARTED_SEASON = min(FTN_SEASONS)
 
-# v1.3's shipped settings, quoted from `research/46_simulator_v13.py` the same
+# v1.4's shipped settings, quoted from `research/83_simulator_v14.py` the same
 # way drivers 54 and 57 quote them. Changing any of them changes the draws, and
 # the replay check below is what says so.
 RANDOM_SEED = 20260817
@@ -280,8 +280,8 @@ class Sources:
     overtime: pl.DataFrame
     slope: float
     # The Full edition's summary, and it is allowed to be empty. `games` is the
-    # shipped v1.3 artifact and is always there; this one is written by
-    # `research/76_full_edition_summary.py` and a checkout that has not run it
+    # shipped Strict artifact and is always there; this one is written by
+    # `research/84_full_edition_v14.py` and a checkout that has not run it
     # still renders every Strict figure.
     full: pl.DataFrame = field(default_factory=_empty_summary)
 
@@ -363,7 +363,7 @@ def _read_side():
 def simulation_columns() -> list[str]:
     """The play-by-play columns a replay of **either** edition needs.
 
-    v1.3's own frame plus what the two hands-on-the-ball models price on — the
+    v1.4's own frame plus what the two hands-on-the-ball models price on — the
     same list `research/68_dropped_pick_variant_audit.py` builds, and for the
     same reason. It is loaded unconditionally rather than per edition because
     document 49 §6's V-1 replayed all 2,761 shipped games on the wide frame at
@@ -440,7 +440,7 @@ def _simulation_context():
 def edition_handles(dropped_pick_model, receiver_drop_model) -> dict[str, dict]:
     """What each edition passes to `simulate_game` (document 58 §2).
 
-    Strict pays for no model — it is v1.3 byte for byte, and that is the whole
+    Strict pays for no model — it is v1.4 byte for byte, and that is the whole
     point of the name. Full pays for both directions of the hands-on-the-ball
     class, which amendment A-3 clause 3 admits together or not at all. A handle
     that failed to load stays `None`: a checkout without the traces still
@@ -469,7 +469,7 @@ def edition_handles(dropped_pick_model, receiver_drop_model) -> dict[str, dict]:
 def _dropped_pick_pieces():
     """The variant's fitted model and the charting frame, or ``(None, None)``.
 
-    Absence is not an error. The v1.3 figures are the product, and a checkout
+    Absence is not an error. The Strict figures are the product, and a checkout
     that has not run `research/67_dropped_pick_model.py` must still render every
     one of them — so a missing trace degrades to "no variant available" rather
     than taking the render down with it.
@@ -558,7 +558,7 @@ def replay(game_id: str, row: dict, schedule: dict | None = None, *, edition: st
 
     ``edition`` names which adjudication is replayed, and ``row`` must be that
     edition's published row — `Sources.game_row` is what pairs them. Strict is
-    v1.3 with both variant models switched off and replays at 0.00e+00 against
+    v1.4 with both variant models switched off and replays at 0.00e+00 against
     the shipped summary, exactly as it did before this argument existed.
     """
     from nfl_simulator.simulator import simulate_game
@@ -729,7 +729,7 @@ def render_game(
     )
 
     # Strict reads the shipped ledger artifact, which is the committed record of
-    # v1.3's rows. Full has no shipped ledger and takes the rows from the replay
+    # v1.4's rows. Full has no shipped ledger and takes the rows from the replay
     # that was just checked against its summary — the same coins the histogram
     # above them is drawn from, which is the rule this module opens with.
     ledger = (

@@ -289,7 +289,7 @@ def walkthrough(strict_ledger: pl.DataFrame, full_ledger: pl.DataFrame, slope: f
                 "component",
                 "event_class",
                 "charged_team",
-                pl.col("realized").alias("y"),
+                pl.col("actual").alias("y"),
                 pl.col("expected").round(4).alias("p"),
                 pl.col("swing").round(4),
                 pl.col("luck_epa").round(4),
