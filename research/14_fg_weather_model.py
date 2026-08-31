@@ -61,13 +61,18 @@ COLUMNS = [
 ]
 
 
-def load_kicks(exclude_blocked: bool = False) -> pl.DataFrame:
+def load_kicks(exclude_blocked: bool = False, with_stadium: bool = False) -> pl.DataFrame:
     """Field goals and extra points, sanitized, in one table.
 
     ``exclude_blocked`` was added by document 27, which refits this model on the
     population that excludes blocked kicks. It defaults to ``False`` so the
     published posterior is reproduced exactly, and it lives here rather than in a
     copy of this loader so the fit and the refit cannot drift apart.
+
+    ``with_stadium`` was added by document 66, the elevation round, for the same
+    reason and with the same default: it carries ``stadium_id`` through so the
+    elevation covariate can be joined on, and it is one extra column on the same
+    loader rather than a second copy of these masks.
 
 
     Extra points carry their own `kick_distance` (33 yards for 98.5% of them,
@@ -76,7 +81,8 @@ def load_kicks(exclude_blocked: bool = False) -> pl.DataFrame:
     the difference between an extra point and a field goal *from the same
     distance*.
     """
-    pbp = load_pbp(PBP_SEASONS, columns=COLUMNS)
+    columns = [*COLUMNS, "stadium_id"] if with_stadium else COLUMNS
+    pbp = load_pbp(PBP_SEASONS, columns=columns)
 
     fg_mask = (pl.col("play_type") == "field_goal") & pl.col("kick_distance").is_not_null()
     xp_mask = (
@@ -89,22 +95,17 @@ def load_kicks(exclude_blocked: bool = False) -> pl.DataFrame:
         fg_mask = fg_mask & (pl.col("field_goal_result") != "blocked")
         xp_mask = xp_mask & (pl.col("extra_point_result") != "blocked")
 
+    shared = ["season", "kicker_player_id", "roof", "temp", "wind"]
+    if with_stadium:
+        shared = [*shared, "stadium_id", "game_id"]
     field_goals = pbp.filter(fg_mask).select(
-        "season",
-        "kicker_player_id",
-        "roof",
-        "temp",
-        "wind",
+        *shared,
         pl.col("kick_distance").cast(pl.Float64).alias("distance"),
         (pl.col("field_goal_result") == "made").cast(pl.Int64).alias("made"),
         pl.lit(0).alias("is_xp"),
     )
     extra_points = pbp.filter(xp_mask).select(
-        "season",
-        "kicker_player_id",
-        "roof",
-        "temp",
-        "wind",
+        *shared,
         pl.col("kick_distance").cast(pl.Float64).alias("distance"),
         (pl.col("extra_point_result") == "good").cast(pl.Int64).alias("made"),
         pl.lit(1).alias("is_xp"),
