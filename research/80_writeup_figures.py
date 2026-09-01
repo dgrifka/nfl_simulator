@@ -2581,7 +2581,7 @@ def defence_sampling() -> dict:
             f"{units[0]['n']} interceptable throws; {units[1]['team']} {units[1]['season']} "
             f"caught {units[1]['caught']} of {units[1]['n']}.",
             "The ticks are draws a replay takes. A strong unit keeps its edge in every "
-            "re-run — it is never re-priced at the league's hands.",
+            "re-run — it is never re-priced at the league rate.",
         ],
     )
 
@@ -2591,7 +2591,7 @@ def defence_sampling() -> dict:
     league_density = _density(league_curve, grid)
     ax.plot(grid * 100, league_density, color=PALETTE["text_muted"], linewidth=1.2, linestyle=":")
     ax.annotate(
-        f"the league's hands: {league_curve.mean() * 100:.1f}%",
+        f"league interception-worthy catch rate: {league_curve.mean() * 100:.1f}%",
         xy=(league_curve.mean() * 100, 1.15),
         xytext=(0, 0),
         textcoords="offset points",
@@ -2608,6 +2608,9 @@ def defence_sampling() -> dict:
     # one mistake this figure cannot afford to make.
     for offset, unit in enumerate(units):
         primary, _secondary = team_colors(unit["team"], unit["season"])
+        if unit["team"] == "DEN":
+            # Same ruling as figure 8: Broncos navy reads like the league grey.
+            primary = _secondary
         density = _density(unit["curve"], grid)
         ax.fill_between(grid * 100, 0, density, color=primary, alpha=0.30, linewidth=0)
         ax.plot(grid * 100, density, color=primary, linewidth=2.2)
@@ -2639,6 +2642,7 @@ def defence_sampling() -> dict:
             team_logo(unit["team"], unit["season"]),
             min(0.95, max(0.05, centre + outward)),
             0.62,
+            width_in=0.62,
         )
 
     ax.set_xlabel(
