@@ -1813,15 +1813,18 @@ FG_TERMS = [
     ("plus5", r"$+$", 15.0),
     ("temp", r"$\beta_{t}T$", 15.0),
     ("plus6", r"$+$", 15.0),
-    ("kicker", r"$\sigma_{k}z_{k}$", 0.0),
+    ("elev", r"$\beta_{e}E$", 26.0),
+    ("plus7", r"$+$", 15.0),
+    ("kicker", r"$\sigma_{k}z_{k}$", 15.0),
 ]
 
 FG_LABELS = {
     "distance": "how far,\nfrom 40 yards",
-    "curve": "the bend — long kicks\nfall away faster",
+    "curve": "the distance curve —\nlong kicks fall away faster",
     "roof": "indoors\nor out",
     "wind": "wind",
     "temp": "temperature",
+    "elev": "elevation\n(kft)",
     "kicker": "this kicker,\nthis season",
 }
 
@@ -1886,7 +1889,7 @@ PLATES = {
         23.0,
         10.5,
     ),
-    "formula_03_fg": ([(FG_TERMS, FG_LABELS)], 12.5, 20.0, 9.5),
+    "formula_03_fg": ([(FG_TERMS, FG_LABELS)], 14.6, 20.0, 9.5),
     "formula_04_betabinomial": (
         [(BETA_TERMS, BETA_LABELS), (BINOMIAL_TERMS, BINOMIAL_LABELS)],
         9.6,
@@ -3093,7 +3096,7 @@ CAPTIONS = {
     ),
     "formula_01_rule.png": "The neutralization rule, term by term.",
     "formula_02_points.png": "EPA to points of margin, and the deserve-to-win share.",
-    "formula_03_fg.png": "The field-goal make model, every covariate labeled.",
+    "formula_03_fg.png": "The field-goal make model, every covariate labeled — elevation included since v1.4.",
     "formula_04_betabinomial.png": "The beta-binomial hierarchy that shrinks a unit's rate.",
     "formula_05_trust.png": "The trust dial, and what sets it.",
 }

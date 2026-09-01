@@ -21,6 +21,6 @@
 - **`23_corps_prior_posterior.png`** — The offense's mirror of the kicker figure: Jacksonville's 2025 receiving corps dropped 40 of 420 catchable balls, 9.52%, and the model puts them at 6.34% against a league rate of 5.14% on those same targets.
 - **`formula_01_rule.png`** — The neutralization rule, term by term.
 - **`formula_02_points.png`** — EPA to points of margin, and the deserve-to-win share.
-- **`formula_03_fg.png`** — The field-goal make model, every covariate labeled.
+- **`formula_03_fg.png`** — The field-goal make model, every covariate labeled — elevation included since v1.4.
 - **`formula_04_betabinomial.png`** — The beta-binomial hierarchy that shrinks a unit's rate.
 - **`formula_05_trust.png`** — The trust dial, and what sets it.
