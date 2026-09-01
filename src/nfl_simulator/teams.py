@@ -145,7 +145,7 @@ def load_team_table(*, path: Path | None = None, refresh: bool = False) -> pl.Da
     once, and a parquet on disk survives between them. 36 rows is small enough
     that re-reading it per lookup costs nothing worth caching in process.
     """
-    path = paths.TEAMS_PATH if path is None else Path(path)
+    path = paths.teams_path() if path is None else Path(path)
     if refresh or not path.exists():
         table = _pull_teams()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -374,7 +374,7 @@ def team_logo(
     from PIL import Image
 
     code = era_code(team_abbr, season)
-    cache_dir = paths.LOGO_DIR if cache_dir is None else Path(cache_dir)
+    cache_dir = paths.logo_dir() if cache_dir is None else Path(cache_dir)
     cached = cache_dir / f"{code}.png"
 
     if not cached.exists():

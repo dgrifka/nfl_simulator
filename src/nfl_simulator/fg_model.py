@@ -51,6 +51,7 @@ endpoint an unknown kicker gets, and prices the kick at the fitted centre.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -364,6 +365,35 @@ class FieldGoalModel:
             beta_elev=beta_elev,
             elevation_centre=0.0 if elevation_centre is None else elevation_centre,
         )
+
+
+def load_fitted_model(trace: str, summary: str) -> tuple[FieldGoalModel, dict]:
+    """A fitted posterior plus the centring constants it was fitted at.
+
+    Both files are read from `paths.artifact_dir()` — the repo's
+    `research/outputs/` in a checkout, and whatever `NFL_SIM_ARTIFACT_DIR` names
+    in an installed one. Round E moved this out of
+    `research/44_read_side_fix.py`, which imports it back under its old name:
+    every production read of a posterior goes through this one function, so
+    document 30's correction has exactly one home.
+
+    `centres["elevation"]` is v1.4's and is passed only when the summary has
+    it, so a v1.1/v1.2/v1.3 summary loads through this same call unchanged. The
+    read side refuses a trace that carries `beta_elev` without it, so the pair
+    cannot come apart silently: a v1.4 trace loaded against a v1.3 summary
+    raises here rather than pricing the league 569 feet too low.
+    """
+    from nfl_simulator import paths
+
+    directory = paths.artifact_dir()
+    with (directory / summary).open() as handle:
+        centres = json.load(handle)["centres"]
+    return FieldGoalModel.from_posterior(
+        directory / trace,
+        wind_centre=centres["wind"],
+        temp_centre=centres["temp"],
+        elevation_centre=centres.get("elevation"),
+    ), centres
 
 
 def _indexed_effects(posterior, variable: str, dimension: str) -> dict[str, np.ndarray]:

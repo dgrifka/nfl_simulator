@@ -122,6 +122,51 @@ version; re-running it is a no-op, and `--force` re-downloads. The three
 research scripts fit posteriors and write to the gitignored `research/outputs/`,
 so they take a while and only need running once per checkout.
 
+### Adjudicating a game that has just gone final
+
+`render_game` reads a game's numbers from the shipped 2016–2025 artifacts, so it
+cannot be pointed at a game that has no row in them. `adjudicate_live_game` is
+the other door: it pulls that game's play-by-play, adjudicates it with the same
+fitted pieces, and writes the same four PNGs — without consulting the shipped
+summary for the game it is deciding.
+
+```python
+from pathlib import Path
+
+from nfl_simulator import adjudicate_live_game
+
+result = adjudicate_live_game("2026_01_DAL_PHI", out_dir=Path("out"))
+
+result.figures  # list[Path] — the four PNGs, in render.SUFFIXES order
+result.edition  # "strict" or "full"; "strict" when FTN charting is missing
+result.edition_note  # why, in one sentence, when the edition was reduced
+result.dtw_home  # deserve-to-win share for the home team
+result.dtw_low  # the 89% interval on it
+result.dtw_high
+result.deserved_margin  # home perspective, in points
+result.actual_margin
+result.home_team  # season-correct club codes
+result.away_team
+result.home_points  # the scoreboard, or None when the game is in no schedule
+result.away_points
+result.headline  # the biggest single luck event in words, or None
+result.game_id
+```
+
+It needs two directories, and an installed package that has neither says which
+one is missing:
+
+| Variable | What goes in it | Default |
+|---|---|---|
+| `NFL_SIM_DATA_DIR` | the cached nflverse pulls — `pbp/`, `ftn/`, schedules, logos, manifest | the repo's `data/` |
+| `NFL_SIM_ARTIFACT_DIR` | the fitted artifacts — posteriors, their summaries, the shipped parquets | the repo's `research/outputs/` |
+
+The 2016–2025 play-by-play cache has to be present either way: the fumble,
+field-goal and extra-point baselines are fit on that whole window, so a 2026
+game still needs it. One game takes about 2.4 s once the baselines are fit
+(~1.3 s, cached for the life of the process), and the call is deterministic —
+same seed, same draw counts, same pixels.
+
 ## The pipeline
 
 ```mermaid

@@ -2214,11 +2214,11 @@ def kicker_prior_posterior() -> dict:
     """
     import arviz as az
 
-    from nfl_simulator.fg_model import _sigmoid
-    from nfl_simulator.render import _read_side
+    from nfl_simulator.fg_model import _sigmoid, load_fitted_model
+    from nfl_simulator.render import FG_SUMMARY, FG_TRACE
     from nfl_simulator.teams import team_colors, team_logo
 
-    model, _ = _read_side().load_model("trace_fg_v14.nc", "fg_v14_summary.json")
+    model, _ = load_fitted_model(FG_TRACE, FG_SUMMARY)
     posterior = az.from_netcdf(OUTPUTS / "trace_fg_v14.nc")["posterior"]
     sigma = posterior["sigma_kicker"].values.ravel()
 

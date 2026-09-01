@@ -85,9 +85,17 @@ def synthetic_ftn():
 
 @pytest.fixture
 def temp_data_dir(tmp_path, monkeypatch):
-    """Point every cache path at a tmpdir so tests never touch real ``data/``."""
+    """Point every cache path at a tmpdir so tests never touch real ``data/``.
+
+    Both environment overrides are cleared first. `paths.data_dir` prefers the
+    variable over the constant this fixture patches, so a developer who has
+    `NFL_SIM_DATA_DIR` exported for a live run would otherwise have the suite
+    write into their real cache.
+    """
     from nfl_simulator import paths
 
+    monkeypatch.delenv(paths.DATA_DIR_ENV, raising=False)
+    monkeypatch.delenv(paths.ARTIFACT_DIR_ENV, raising=False)
     monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(paths, "PBP_DIR", tmp_path / "data" / "pbp")

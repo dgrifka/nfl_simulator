@@ -72,6 +72,38 @@ ANALYSIS_COLUMNS: list[str] = [
 ]
 
 
+# The play-by-play columns a **replay** needs: the analysis frame plus the
+# kicking, weather, drive and stadium fields the simulator prices or labels on.
+# Lifted out of `research/44_read_side_fix.py` in Round E so an installed wheel,
+# which has no `research/` directory, can still assemble a replay's frame. That
+# script imports it back from here — document 30's correction exists once.
+SIM_COLUMNS = [
+    *ANALYSIS_COLUMNS,
+    "kicker_player_id",
+    # Presentation only, added in figure round 4 so a ledger row can name the
+    # kicker. Nothing prices on it — the pricing uses `kicker_player_id` — and
+    # the five example games still replay to 0.00e+00 with it loaded.
+    "kicker_player_name",
+    "extra_point_attempt",
+    "extra_point_result",
+    "roof",
+    "temp",
+    "wind",
+    # Round 9, so document 61's possession cap has possessions to group by, and
+    # `qtr` so a cap row can name one the way a reader does: "Q3 drive 7".
+    # Presentation and grouping only — nothing prices on either — and V-1 is
+    # still 0.00e+00 over 2,761 games with both loaded (`research/78`).
+    "fixed_drive",
+    "qtr",
+    # v1.4, and unlike every column above it this one **prices**: it is where
+    # the elevation term reads a kick's altitude (documents 66-68). It is still
+    # inert under a v1.3 posterior, which carries no `beta_elev` to apply it
+    # with, and `research/83` re-proves that at 0.00e+00 over 2,761 games rather
+    # than assuming it.
+    "stadium_id",
+]
+
+
 class IngestError(RuntimeError):
     """Raised when a pull fails validation badly enough to refuse the cache."""
 
@@ -116,16 +148,16 @@ def _manifest_path(path: Path) -> str:
 
 
 def read_manifest() -> dict:
-    if not paths.MANIFEST_PATH.exists():
+    if not paths.manifest_path().exists():
         return {"manifest_version": MANIFEST_VERSION, "datasets": {}}
-    with paths.MANIFEST_PATH.open() as handle:
+    with paths.manifest_path().open() as handle:
         return json.load(handle)
 
 
 def write_manifest(manifest: dict) -> None:
     paths.ensure_data_dirs()
     manifest["updated_at"] = datetime.now(UTC).isoformat(timespec="seconds")
-    with paths.MANIFEST_PATH.open("w") as handle:
+    with paths.manifest_path().open("w") as handle:
         json.dump(manifest, handle, indent=2, sort_keys=True)
         handle.write("\n")
 
@@ -206,12 +238,12 @@ def ingest_ftn_season(season: int, *, force: bool = False) -> SeasonResult:
 
 def ingest_schedules(seasons: Iterable[int], *, force: bool = False) -> Path:
     """Cache the schedule table — one row per game, carries the final score."""
-    if paths.SCHEDULE_PATH.exists() and not force:
-        return paths.SCHEDULE_PATH
+    if paths.schedule_path().exists() and not force:
+        return paths.schedule_path()
     frame = nfl.load_schedules(list(seasons))
     paths.ensure_data_dirs()
-    frame.write_parquet(paths.SCHEDULE_PATH, compression="zstd")
-    return paths.SCHEDULE_PATH
+    frame.write_parquet(paths.schedule_path(), compression="zstd")
+    return paths.schedule_path()
 
 
 # --------------------------------------------------------------------------
@@ -288,12 +320,12 @@ def refresh_schedules(seasons: Iterable[int]) -> Path:
     fresh = nfl.load_schedules(seasons)
     paths.ensure_data_dirs()
 
-    if paths.SCHEDULE_PATH.exists():
-        kept = pl.read_parquet(paths.SCHEDULE_PATH).filter(~pl.col("season").is_in(seasons))
+    if paths.schedule_path().exists():
+        kept = pl.read_parquet(paths.schedule_path()).filter(~pl.col("season").is_in(seasons))
         fresh = pl.concat([kept, fresh], how="diagonal_relaxed")
 
-    fresh.write_parquet(paths.SCHEDULE_PATH, compression="zstd")
-    return paths.SCHEDULE_PATH
+    fresh.write_parquet(paths.schedule_path(), compression="zstd")
+    return paths.schedule_path()
 
 
 def schedule_row(game_id: str) -> dict:
@@ -304,7 +336,7 @@ def schedule_row(game_id: str) -> dict:
     presentation facts only, so its absence costs a figure its scoreline and
     never its adjudication.
     """
-    if not paths.SCHEDULE_PATH.exists():
+    if not paths.schedule_path().exists():
         return {}
     rows = load_schedules().filter(pl.col("game_id") == game_id).to_dicts()
     return rows[0] if rows else {}
@@ -405,11 +437,11 @@ def load_ftn(
 
 
 def load_schedules() -> pl.DataFrame:
-    if not paths.SCHEDULE_PATH.exists():
+    if not paths.schedule_path().exists():
         raise FileNotFoundError(
-            f"schedules not cached at {paths.SCHEDULE_PATH} — run `python -m nfl_simulator.ingest`"
+            f"schedules not cached at {paths.schedule_path()} — run `python -m nfl_simulator.ingest`"
         )
-    return pl.read_parquet(paths.SCHEDULE_PATH)
+    return pl.read_parquet(paths.schedule_path())
 
 
 # --------------------------------------------------------------------------
@@ -443,7 +475,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     downloaded = sum(1 for result in results if result.downloaded)
-    print(f"\ndone: {downloaded} season-file(s) downloaded, manifest at {paths.MANIFEST_PATH}")
+    print(f"\ndone: {downloaded} season-file(s) downloaded, manifest at {paths.manifest_path()}")
     return 0
 
 
