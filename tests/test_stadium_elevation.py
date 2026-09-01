@@ -69,10 +69,23 @@ def test_only_denver_and_mexico_city_clear_three_thousand_feet():
 
 @pytest.mark.slow
 def test_every_stadium_in_the_pbp_resolves():
-    """Completeness against the real cache — the check a typo in an id survives."""
+    """Completeness against the real cache — the check a typo in an id survives.
+
+    The cache is gitignored and regenerable, so a fresh clone has no `data/`
+    yet. Skip rather than fail there: the check is a data-entry guard for the
+    machine that holds the pulls, not a claim the repo carries them.
+    """
     import polars as pl
 
+    from nfl_simulator import paths
     from nfl_simulator.ingest import PBP_SEASONS, load_pbp
+
+    uncached = [s for s in PBP_SEASONS if not paths.pbp_path(s).exists()]
+    if uncached:
+        pytest.skip(
+            f"play-by-play cache absent for {uncached[0]}-{uncached[-1]} — run "
+            "`uv run python -m nfl_simulator.ingest` to enable this check"
+        )
 
     pbp = load_pbp(PBP_SEASONS, columns=["stadium_id"])
     seen = set(pbp["stadium_id"].unique().drop_nulls().to_list())
