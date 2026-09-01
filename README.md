@@ -3,6 +3,10 @@
 **Re-adjudicate one NFL game by neutralizing luck, not by replaying plays** — a
 *deserve-to-win* simulator for a single game that already happened.
 
+All data comes from the [nflverse](https://github.com/nflverse) project via
+[`nflreadpy`](https://github.com/nflverse/nflreadpy) — full credit below in
+[Data and credit](#data-and-credit).
+
 ## The idea
 
 Most single-game outcomes mix two things: what a team *did* (skill, and the
