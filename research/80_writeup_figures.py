@@ -2830,7 +2830,7 @@ def corps_prior_posterior() -> dict:
         f"{team}'s {season} drop rate vs the league",
         [
             f"{team}'s {season} receiving corps dropped {drops} of {n} balls the charters "
-            f"called catchable — {raw_pct:.2f}%, raw and unshrunk.",
+            "called catchable.",
             "Grey is the league's rate on those same targets; the colored curve is where "
             "the model puts this corps.",
         ],
@@ -2880,7 +2880,7 @@ def corps_prior_posterior() -> dict:
         fontweight="bold",
         color=primary,
     )
-    _draw_logo(ax, team_logo(team, int(season)), 0.80, 0.30)
+    _draw_logo(ax, team_logo(team, int(season)), 0.80, 0.30, width_in=0.62)
 
     ax.set_xlabel("drop rate on catchable targets (%)", fontsize=9, color=PALETTE["text_muted"])
     ax.set_ylim(0, 1.18)
