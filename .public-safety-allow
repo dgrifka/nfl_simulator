@@ -1,0 +1,27 @@
+# Public-safety gate allow list -- read by scripts/check_public_safe.sh.
+#
+# One `path:line` per allowed occurrence, with a `#` reason above it. Only
+# documentation OF the gate belongs here: a research record that quotes the
+# patterns it searched for is evidence, not a leak. Never add a line that
+# carries a real credential, path or identity string -- fix that line instead.
+#
+# `--all` mode reports an entry that no longer matches anything as stale and
+# fails, so a doc edit that moves one of these lines is caught rather than
+# silently widening the list.
+
+# Finding register F-5: the token and key markers the scrub searched for.
+docs/research/69-scrub-record.md:45
+# Finding register F-6: the address marker, and the author's public byline.
+docs/research/69-scrub-record.md:46
+
+# This round's own handoff, section 5 Part 1 step 2: the built-in pattern list.
+docs/research/handoff-2026-09-01-gate.md:74
+docs/research/handoff-2026-09-01-gate.md:75
+# The same handoff's Part 1 verification 2: the canary command.
+docs/research/handoff-2026-09-01-gate.md:100
+
+# The scrub handoff's section 3.3: the patterns that round was told to search.
+docs/research/handoff-2026-09-01-scrub-and-push.md:35
+
+# The scrub log's findings pass: the grep command it ran, quoted verbatim.
+docs/research/log-2026-09-01-scrub.md:20
