@@ -29,7 +29,7 @@ a "deserve-to-win" probability for the game that actually got played.
 
 ## One example
 
-Denver at Washington, week 13 of 2025 — the Full edition's adjudication.
+Denver at Washington, week 13 of 2025.
 
 ![Deserved margin across re-simulations of DEN at WAS, week 13 of 2025, with the actual margin and the expected margin marked](docs/writeup/figures/05_den_was_2025_wk13_dtw_full.png)
 
@@ -66,24 +66,27 @@ coin in the game at the drawn rates. The result is a distribution over deserved
 margins, and the deserve-to-win probability is the share of it on one side of
 zero — so the number carries both kinds of uncertainty, not just the coins.
 
-## The two editions
+## What the meter includes
 
-| Edition | Seasons | In the ledger |
-|---|---|---|
-| **Strict** | 2016–2025 | fumbles, field goals, extra points |
-| **Full** | 2022–2025 | Strict **plus** dropped interceptions and receiver drops |
+Every game gets **one** deserve-to-win verdict. Which luck components feed it
+depends on the season, because the data does:
 
-The seasons differ because the data does. The two extra components need FTN
-charting's `is_interception_worthy` and `is_catchable_ball` fields, which begin
-in 2022 — so the Full edition simply does not exist before then, and Strict is
-what a 2016 game gets. Full also carries a **possession cap**: two luck events on
-the same drive are not independent, so a possession books at most its largest
-single swing rather than the sum. See
-[59 — the two editions](docs/research/59-a3-enacted.md) and
+| Seasons | In the ledger |
+|---|---|
+| 2016–2025 | fumbles, field goals, extra points |
+| 2022–2025 | the above **plus** dropped interceptions and receiver drops |
+
+The two extra components need FTN charting's `is_interception_worthy` and
+`is_catchable_ball` fields, which begin in 2022 — earlier seasons simply have
+no charting to read. Where they are included, a **possession cap** applies:
+two luck events on the same drive are not independent, so a possession books
+at most its largest single swing rather than the sum. Internally — filenames
+and the API's `edition` field — the two coverage levels are labeled `strict`
+and `full`. See [59 — the two editions](docs/research/59-a3-enacted.md) and
 [62 — the possession cap](docs/research/62-possession-cap.md).
 
-Across 1,139 games in the Full edition's seasons, the deserved winner differs
-from the scoreboard in **168 of them (14.75%)** — about one game in seven
+Across the 1,139 games of 2022–2025, the deserved winner differs from the
+scoreboard in **168 of them (14.75%)** — about one game in seven
 ([68 §6](docs/research/68-simulator-v14.md)).
 
 ## What is deliberately out of scope
@@ -110,8 +113,8 @@ Pull the data, build the artifacts, then render a game:
 ```bash
 uv run python -m nfl_simulator.ingest      # ten seasons of play-by-play; cached
 uv run python research/82_fg_v14_refit.py  # the make-probability posterior
-uv run python research/83_simulator_v14.py # Strict, 2016–2025
-uv run python research/84_full_edition_v14.py  # Full, 2022–2025
+uv run python research/83_simulator_v14.py # adjudications, 2016–2025
+uv run python research/84_full_edition_v14.py  # adds the charted components, 2022–2025
 ```
 
 ```python
@@ -244,7 +247,7 @@ A reader who wants the argument rather than the archive should start with these:
 | [05b — FG model foundations](docs/research/05b-fg-model-foundations.md) | The kicker-hierarchical make model and its pre-registered gates |
 | [09 — Coin-flip candidates](docs/research/09-coinflip-candidates.md) | Every candidate component, and why most were refused |
 | [33 — Magnitude audit](docs/research/33-magnitude-audit.md) | Does a small luck share ever actually change a verdict? |
-| [59 — The two editions](docs/research/59-a3-enacted.md) | Strict and Full, enacted |
+| [59 — The two editions](docs/research/59-a3-enacted.md) | the second coverage level, enacted |
 | [68 — Simulator v1.4](docs/research/68-simulator-v14.md) | The current release, its gates, and what moved |
 
 ## The process rules
