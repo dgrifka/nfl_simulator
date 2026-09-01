@@ -595,10 +595,13 @@ def stamp_box(
     else:
         title_top, foreign = anchor
         block_h = mark_h + gap + text_h + gap
-        if any(title_top - 4 <= r <= title_top + block_h + 4 for r in foreign):
-            # A wide title reaches into the stamp's own rows: stack the block
-            # above the title instead of into it.
-            text_top = title_top - gap - text_h
+        blocking = [r for r in foreign if title_top - 4 <= r <= title_top + block_h + 4]
+        if blocking:
+            # Ink in the stamp's own columns (a wide title, a verdict pill):
+            # sit the block just above the first blocking row rather than
+            # above the whole title band, so the mark stays as close to the
+            # title's line as the figure allows.
+            text_top = min(blocking) - gap - text_h
             block_top = text_top - gap - mark_h
         else:
             block_top = title_top
