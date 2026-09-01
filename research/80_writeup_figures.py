@@ -1226,6 +1226,9 @@ def interceptable_context_bars() -> str:
         ("a short throw (0-9 yd)", *depth["a short throw (0-9 yd)"]),
         ("behind the line", *depth["behind the line"]),
     ]
+    # Descending by rate (the maintainer 2026-08-31): the eye reads the ladder, the
+    # labels say which rung is which.
+    rows.sort(key=lambda row: -row[2])
     check("worthy_behind_pct", round(depth["behind the line"][1], 1))
     check("worthy_short_pct", round(depth["a short throw (0-9 yd)"][1], 1))
     check("worthy_medium_pct", round(depth["a medium throw (10-19 yd)"][1], 1))
