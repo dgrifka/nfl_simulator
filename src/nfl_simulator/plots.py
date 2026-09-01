@@ -75,6 +75,8 @@ OVERTIME_FOOTER = "Went to overtime; the coin toss is reported, not neutralized.
 # (LAC)` names a club and a count and leaves the reader to guess at the noun;
 # document 63 found the un-teamed version of that row third-largest on a game
 # whose reader had no way to learn what was in it.
+CHARTED_FOOTER = "* a throw FTN's charters graded catchable or interception-worthy."
+
 SMALL_EVENTS_FOOTER = (
     "Small events: rows too small to draw at this scale, folded into one bar per team."
 )
@@ -1582,14 +1584,14 @@ VARIANT_COMPONENTS = ("dropped_pick", "receiver_drop")
 # it was. Keyed on the **good** branch for the charged team, which is what
 # ``actual`` records: an escaped throw, a caught ball.
 VARIANT_NOUNS = {
-    ("dropped_pick", True): "dropped pick",
+    ("dropped_pick", True): "dropped pick*",
     # "interception" alone claims a population this component does not price:
     # every row in it is a throw FTN charted as *pick-able*, and a ledger that
     # said "interception" would read as though it re-prices every interception
     # in the game. Document 05 §3 explicitly refuses to.
-    ("dropped_pick", False): "interception (pick-able throw)",
-    ("receiver_drop", True): "catch",
-    ("receiver_drop", False): "drop",
+    ("dropped_pick", False): "interception*",
+    ("receiver_drop", True): "catch*",
+    ("receiver_drop", False): "drop*",
 }
 
 # What a row is called when the ledger does not record which branch it took, and
@@ -2327,7 +2329,7 @@ def _left_align_row_labels(ax) -> None:
         label.set_horizontalalignment("left")
 
 
-def _stamp_row_logos(ax, bars, rows_y, logos) -> None:
+def _stamp_row_logos(ax, bars, rows_y, logos, verdict) -> None:
     """A club's mark on every row, all of them in one straight column.
 
     Round 6 hung each mark off its own label's left edge. The labels are right
@@ -2343,13 +2345,26 @@ def _stamp_row_logos(ax, bars, rows_y, logos) -> None:
     renderer = _renderer(ax.figure)
     box = ax.get_window_extent()
     labels = ax.get_yticklabels()
-    drawn = [(y, bar) for y, bar in zip(rows_y[1:-1], bars, strict=True) if bar.team in logos]
+
+    def beneficiary(bar):
+        """the maintainer 2026-09-01: the mark matches the bar's colour — the club the
+        break helped — not the charged club. Zero-point rows keep the charged
+        club, having helped nobody."""
+        if bar.points < 0:
+            return verdict.home_team
+        if bar.points > 0:
+            return verdict.away_team
+        return bar.team
+
+    drawn = [
+        (y, bar) for y, bar in zip(rows_y[1:-1], bars, strict=True) if beneficiary(bar) in logos
+    ]
     if not drawn:
         return
     left = min(labels[int(round(y))].get_window_extent(renderer).x0 for y, _bar in drawn)
     column = (left - box.x0) / box.width - ROW_MARK_GAP
     for y, bar in drawn:
-        logo = logos[bar.team]
+        logo = logos[beneficiary(bar)]
         ax.add_artist(
             AnnotationBbox(
                 OffsetImage(
@@ -2911,7 +2926,7 @@ def plot_luck_ledger(
             # Before the marks: they take their column from where the labels
             # start, and until this runs every label starts somewhere else.
             _left_align_row_labels(ax)
-            _stamp_row_logos(ax, bars, rows_y, logos)
+            _stamp_row_logos(ax, bars, rows_y, logos, verdict)
 
         # A waterfall's height grows with its row count, so anything placed in
         # axes fractions drifts further from the plot the more events a game had.
@@ -2920,9 +2935,11 @@ def plot_luck_ledger(
             ax, verdict, "Luck Waterfall", caption=HOW_TO_READ, left_points=_left_edge_points(ax)
         )
 
+        charted = any(bar.component in ("dropped_pick", "receiver_drop") for bar in bars)
         footer = [
             "The bars are a sum, not a sequence: their order does not change where the "
             "waterfall lands.",
+            *([CHARTED_FOOTER] if charted else []),
             # Round 10 gave the remainder a club and a count — `46 small events
             # (LAC)` — which says whose afternoon it was but still not what is
             # inside it. Here rather than beside the bar because it is true of

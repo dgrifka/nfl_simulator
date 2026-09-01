@@ -3274,9 +3274,9 @@ def test_a_dropped_pick_names_the_thrower_and_what_the_ball_did():
         "expected": 0.52,
         "passer": "Goff",
     }
-    assert event_phrase(row) == "dropped pick · thrown by Goff"
+    assert event_phrase(row) == "dropped pick* · thrown by Goff"
     assert outcome_phrase(row) == "escaped (48% catch)"
-    assert plain_label(row) == "GB dropped pick · thrown by Goff (48% catch)"
+    assert plain_label(row) == "GB dropped pick* · thrown by Goff (48% catch)"
 
 
 def test_a_pick_that_was_caught_says_so_at_the_same_probability():
@@ -3300,9 +3300,9 @@ def test_a_receiver_drop_names_the_receiver_and_the_catch_probability():
         "expected": 0.96,
         "receiver": "Watson",
     }
-    assert event_phrase(row) == "drop · Watson"
+    assert event_phrase(row) == "drop* · Watson"
     assert outcome_phrase(row) == "dropped (96% catch)"
-    assert plain_label(row) == "GB drop · Watson (96% catch)"
+    assert plain_label(row) == "GB drop* · Watson (96% catch)"
 
 
 def test_a_catch_is_said_the_same_way_the_drop_is():
@@ -3318,7 +3318,7 @@ def test_a_catch_is_said_the_same_way_the_drop_is():
 
 
 @pytest.mark.parametrize(
-    ("component", "noun"), [("dropped_pick", "dropped pick"), ("receiver_drop", "catch")]
+    ("component", "noun"), [("dropped_pick", "dropped pick*"), ("receiver_drop", "catch*")]
 )
 def test_a_play_with_no_name_on_file_is_not_given_one(component, noun):
     row = {
@@ -3673,37 +3673,67 @@ def catchable_row(actual: float = 0.0, **kwargs) -> dict:
 def test_a_dropped_pick_names_the_defence_that_dropped_it():
     """The mark is Los Angeles's — it is Los Angeles's luck — and the sentence
     is Houston's, because Houston is who did the thing."""
-    assert event_phrase(pick_row()) == "dropped pick · thrown by Herbert"
-    assert plain_label(pick_row()) == "HOU dropped pick · thrown by Herbert (58% catch)"
+    assert event_phrase(pick_row()) == "dropped pick* · thrown by Herbert"
+    assert plain_label(pick_row()) == "HOU dropped pick* · thrown by Herbert (58% catch)"
 
 
-def test_a_throw_that_was_picked_says_it_was_a_pick_able_one():
-    """the maintainer 2026-08-30: "interception" alone claimed a population this row is not.
+def test_a_throw_that_was_picked_wears_the_charted_asterisk():
+    """the maintainer 2026-09-01: the population parenthesis becomes an asterisk.
 
-    Every row in this component is a throw FTN charted as *pick-able* — the
-    defender had it in their hands. A row that says only "interception" reads
-    as though the ledger prices every interception in the game, which it does
-    not and which document 05 §3 explicitly refuses to do. The parenthesis is
-    the population; the percentage after it is still the probability.
+    "(pick-able throw)" on every row was heavy; the asterisk points at one
+    footer line naming the charted population for picks and drops alike.
     """
-    assert (
-        event_phrase(pick_row(actual=0.0)) == "interception (pick-able throw) · thrown by Herbert"
-    )
+    assert event_phrase(pick_row(actual=0.0)) == "interception* · thrown by Herbert"
     assert plain_label(pick_row(actual=0.0)) == (
-        "HOU interception (pick-able throw) · thrown by Herbert (58% catch)"
+        "HOU interception* · thrown by Herbert (58% catch)"
     )
+
+
+def test_the_waterfall_explains_the_asterisk_when_a_charted_row_is_drawn():
+    from dataclasses import replace as _replace
+
+    from nfl_simulator.plots import CHARTED_FOOTER
+
+    pick = pick_row(play_id=1.0, luck_epa=1.5)
+    game = _replace(branded(), deserved_margin=8.0 - 1.5 * PPE)
+    _fig, ax = plot_luck_ledger(branded() and game, [pick], points_per_epa=PPE)
+    text = figure_text(_fig).replace("\n", " ")
+    assert CHARTED_FOOTER in text
+
+    _fig2, ax2 = waterfall()
+    assert CHARTED_FOOTER not in figure_text(_fig2).replace("\n", " ")
+
+
+def test_a_row_mark_is_the_club_the_luck_helped():
+    """the maintainer 2026-09-01: the logo matches the bar's colour — the beneficiary,
+    not the charged club."""
+    from nfl_simulator.plots import luck_bars
+
+    logos = {"GB": synthetic_mark(), "DET": synthetic_mark((200, 30, 30))}
+    game = branded()
+    luck_epa = (game.actual_margin - game.deserved_margin) / PPE
+    rows = [ledger_row(luck_epa, charged_team="GB", play_id=1.0)]
+    (bar,) = luck_bars(rows, points_per_epa=PPE)
+    expected = game.home_team if bar.points < 0 else game.away_team
+
+    _fig, ax = plot_luck_ledger(game, rows, points_per_epa=PPE, logos=logos)
+    marks = [m.offsetbox.get_data() for m in _row_marks(ax)]
+    assert len(marks) == 3
+    hits = sum((mark == logos[expected]).all() for mark in marks)
+    # The event row plus the anchor that names the same club.
+    assert hits == 2, f"the event row does not wear {expected}'s mark"
 
 
 def test_a_receiver_drop_is_its_own_team_s_sentence():
     """Here the actor and the charged team are the same club, and the row says
     so twice over — its mark and its first word."""
-    assert event_phrase(catchable_row()) == "drop · Dissly"
-    assert plain_label(catchable_row()) == "LAC drop · Dissly (95% catch)"
+    assert event_phrase(catchable_row()) == "drop* · Dissly"
+    assert plain_label(catchable_row()) == "LAC drop* · Dissly (95% catch)"
 
 
 def test_a_ball_that_was_caught_is_called_a_catch():
-    assert event_phrase(catchable_row(actual=1.0)) == "catch · Dissly"
-    assert plain_label(catchable_row(actual=1.0)) == "LAC catch · Dissly (95% catch)"
+    assert event_phrase(catchable_row(actual=1.0)) == "catch* · Dissly"
+    assert plain_label(catchable_row(actual=1.0)) == "LAC catch* · Dissly (95% catch)"
 
 
 def test_a_variant_row_states_its_probability_without_repeating_the_verb():
@@ -3717,14 +3747,14 @@ def test_a_variant_row_states_its_probability_without_repeating_the_verb():
 def test_a_variant_row_can_still_carry_its_interval():
     row = pick_row(expected_low=0.45, expected_high=0.60)
     assert plain_label(row, interval=True) == (
-        "HOU dropped pick · thrown by Herbert (58% catch, 40–55)"
+        "HOU dropped pick* · thrown by Herbert (58% catch, 40–55)"
     )
 
 
 def test_a_row_with_no_probability_on_file_says_nothing_about_one():
     row = pick_row()
     del row["expected"]
-    assert plain_label(row) == "HOU dropped pick · thrown by Herbert"
+    assert plain_label(row) == "HOU dropped pick* · thrown by Herbert"
 
 
 def test_a_dropped_pick_with_no_opponent_on_file_is_charged_where_it_is_known():
@@ -3732,7 +3762,7 @@ def test_a_dropped_pick_with_no_opponent_on_file_is_charged_where_it_is_known():
     A row drawn without it names the club it can name rather than `None`."""
     row = pick_row()
     del row["opponent"]
-    assert plain_label(row) == "LAC dropped pick · thrown by Herbert (58% catch)"
+    assert plain_label(row) == "LAC dropped pick* · thrown by Herbert (58% catch)"
 
 
 def test_a_fumble_and_a_kick_keep_the_wording_round_6_gave_them():
@@ -3891,8 +3921,8 @@ def test_every_event_and_outcome_cell_opens_with_a_capital_or_a_digit():
 def test_the_card_prints_the_wordings_round_7_settled_on():
     fig, _ax = variant_card()
     cells = card_cells(fig)
-    assert "Drop · Dissly" in cells
-    assert "Dropped pick · thrown by Herbert" in cells
+    assert "Drop* · Dissly" in cells
+    assert "Dropped pick* · thrown by Herbert" in cells
     assert "Escaped (58% catch)" in cells
     assert "Fumble on a pass" in cells
     assert "Recovered by GB" in cells
@@ -3913,7 +3943,7 @@ def test_the_waterfall_keeps_its_lower_case_grammar_after_a_mark():
     rows = variant_card_rows()
     _fig, ax = plot_luck_ledger(reconciling(rows), rows, points_per_epa=PPE)
     labels = [label.get_text() for label in ax.get_yticklabels()]
-    assert "GB drop · Dissly (95% catch)" in labels
+    assert "GB drop* · Dissly (95% catch)" in labels
 
 
 # --------------------------------------------------------------------------

@@ -608,8 +608,8 @@ def test_a_prepared_variant_row_carries_the_thrower_and_the_receiver(game):
     # Detroit is the club that dropped Green Bay's interceptable throw, and
     # `opponent` — which `prepare_rows` is what adds — is how the label knows.
     assert [plain_label(row) for row in rows] == [
-        "DET dropped pick · thrown by Goff (48% catch)",
-        "GB drop · Watson (96% catch)",
+        "DET dropped pick* · thrown by Goff (48% catch)",
+        "GB drop* · Watson (96% catch)",
     ]
 
 
@@ -630,7 +630,7 @@ def test_a_variant_row_with_nobody_on_file_keeps_its_bare_label(game):
     )
     (row,) = prepare_rows(frame, game)
     assert row["receiver"] is None
-    assert event_phrase(row) == "drop"
+    assert event_phrase(row) == "drop*"
 
 
 def test_the_simulation_frame_carries_the_two_names_those_rows_are_read_by():

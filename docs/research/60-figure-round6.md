@@ -1117,3 +1117,11 @@ other-edition line leave all four per-game figures (the article carries both
 in prose). The distribution's interval footnote rises to close the gap.
 Reverses §15's narrow reading and document 16's on-figure reporting; the
 prose is the report now.
+
+## §19 — beneficiary marks and the charted asterisk (2026-09-01, the maintainer)
+
+The waterfall's row mark is the club the break *helped* — matching the bar's
+colour — not the charged club; zero-point rows keep the charged club. The
+charted nouns lose their parenthetical: `interception*`, `dropped pick*`,
+`drop*`, `catch*`, with one footer line (`CHARTED_FOOTER`) whenever a charted
+row is drawn.
