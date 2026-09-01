@@ -329,7 +329,7 @@ removes a luck row must leave the play's EPA somewhere, and `core` is a residual
   that a blocked kick is `core`.
 - v1.2 artifacts are left untouched and v1.3 writes alongside, as v1.2 did.
 - The rematch validation is **not** re-run, for document 18 §6's reason.
-- **the maintainer approves before any of this lands.**
+- **The maintainer approves before any of this lands.**
 
 ### 5i. Kill and rollback
 

@@ -1293,7 +1293,7 @@ def interceptable_context_bars() -> str:
 def denver_2025_followup() -> dict:
     """Denver the year after: the shrunk 55.2% beat the raw 76.5% as a forecast.
 
-    the maintainer 2026-08-31. Raw 2025 rate on interception-worthy throws against the
+    The maintainer 2026-08-31. Raw 2025 rate on interception-worthy throws against the
     Denver defense, from the same charting join every drop figure uses. The
     check pins the counts so the article's sentence cannot drift from the data.
     """
@@ -2384,7 +2384,7 @@ def denver_prior_posterior() -> dict:
     posterior_pct = check("denver_posterior_pct", round(float(with_denver.mean() * 100), 1))
     league_pct = check("denver_league_pct", round(float(league.mean() * 100), 1))
 
-    # the maintainer 2026-08-31: navy reads like the league grey — use the orange.
+    # The maintainer 2026-08-31: navy reads like the league grey — use the orange.
     _navy, primary = team_colors("DEN", 2024)
     fig, ax = _prior_posterior_axes(
         "Modeling Denver's interception catch rate",

@@ -396,7 +396,7 @@ encoding on the anchor bars. The anchors remain 1.4× the bar height and labelle
 
 ## 9. Round 8 — the annotation band, and the cap on the page
 
-the maintainer's notes on `LAC_HOU_12-32--52-48_full_dtw.png`, executed on
+The maintainer's notes on `LAC_HOU_12-32--52-48_full_dtw.png`, executed on
 `fix/figure-round-8` from handoff `handoff-2026-08-28-figures-r8.md`. Two
 things: the nine renders move onto document 62's capped Full summary and the
 waterfall learns to draw the cap, and the Deserve-to-Win figure's crowded strip
@@ -537,7 +537,7 @@ lower-case rows. Parked.
 
 ## 10. Round 9 — the arrow floor, the cap's case, and the 3,900-game read
 
-the maintainer's notes after the round-8 renders, executed on `fix/figure-round-9` from
+The maintainer's notes after the round-8 renders, executed on `fix/figure-round-9` from
 `handoff-2026-08-28-figures-r9.md`. Two one-line rule changes, both of them
 §9e's parked items, and one measurement round that rendered every game in both
 editions for the first time. Presentation only — hard constraint 1 was again
@@ -612,7 +612,7 @@ has: its own zero rule.
 
 ## 11. Round 10 — the name, the corner, the band, the shield and the heap
 
-the maintainer's five settled fixes after reading document 63, executed on
+The maintainer's five settled fixes after reading document 63, executed on
 `fix/figure-round-10` from `handoff-2026-08-28-figures-r10.md`, with the
 whole-corpus re-run as the verification against eight pre-registered numbers.
 Presentation only — hard constraint 1 was again that no statistic move, and all
@@ -957,7 +957,7 @@ zero-anchor tick reading as a segment of the dashed zero rule on one game.
 
 ## 14. The brand mark in the corner stamp (2026-08-30)
 
-the maintainer supplied the NFL Simulator badge and asked for it on every figure, so
+The maintainer supplied the NFL Simulator badge and asked for it on every figure, so
 `finalize` now stamps `BRAND_LOGO` — a 47 KB RGBA PNG packaged at
 `src/nfl_simulator/assets/logo.png` — unless it is handed `logo_path=False`.
 The mark sits to the **left** of the credit line at 1.6 line heights, centred on

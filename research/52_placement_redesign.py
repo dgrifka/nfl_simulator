@@ -1,7 +1,7 @@
 """Product layer, task 2 redesign — the redesigned placement meter's six gates.
 
 Document 36 pre-registers this script's construction, its thresholds and its
-order of operations, and was committed before this file existed. the maintainer chose
+order of operations, and was committed before this file existed. The maintainer chose
 §8's fork option **(i)** on 2026-08-20: the full meter ships, gated on M-1, M-2
 (carried forward), M-3 and M-6, with **M-4 descriptive** and its measured ceiling
 printed in the same breath. Rung 3's disclosed inconsistency stays recorded, not

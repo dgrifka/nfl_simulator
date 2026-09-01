@@ -85,7 +85,7 @@ SMALL_EVENTS_FOOTER = (
 def footer_lines(verdict, *, overtime: bool = True) -> list[str]:
     """The muted asides a per-game figure carries. Empty since 2026-09-01.
 
-    the maintainer's ruling (document 60 §18): the toss line and the other-edition line
+    The maintainer's ruling (document 60 §18): the toss line and the other-edition line
     leave every figure — the article carries both caveats in prose, and on the
     images they read as clutter. The helper stays so the four call sites keep
     one place to grow a line back from, and so the waterfall's
@@ -2347,7 +2347,7 @@ def _stamp_row_logos(ax, bars, rows_y, logos, verdict) -> None:
     labels = ax.get_yticklabels()
 
     def beneficiary(bar):
-        """the maintainer 2026-09-01: the mark matches the bar's colour — the club the
+        """The maintainer 2026-09-01: the mark matches the bar's colour — the club the
         break helped — not the charged club. Zero-point rows keep the charged
         club, having helped nobody."""
         if bar.points < 0:
@@ -2952,7 +2952,7 @@ def plot_luck_ledger(
         ax.annotate(
             "\n".join(footer),
             xy=(0, 0),
-            # the maintainer 2026-08-30: the figure's left edge, not the axes' — the
+            # The maintainer 2026-08-30: the figure's left edge, not the axes' — the
             # row labels live left of the axes, so anchoring there gives the
             # footer the full width instead of the plot's column.
             xycoords=("figure fraction", "axes fraction"),

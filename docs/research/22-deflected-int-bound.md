@@ -19,7 +19,7 @@ identity needs `p(intercepted | deflected)`, and **the denominator is
 invisible**: a deflection that falls harmlessly to the turf is recorded as a pass
 defensed, indistinguishable from a cornerback swatting a ball down cleanly.
 
-the maintainer's proposal is to stop treating the denominator as unavailable and start
+The maintainer's proposal is to stop treating the denominator as unavailable and start
 treating it as **bounded**. Pass-defensed credits on non-interception passes are
 observable: 18,777 of them, 2016–2025. If a fraction `f` of those were live tips
 rather than deliberate swat-downs, then

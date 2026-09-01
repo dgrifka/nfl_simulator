@@ -480,11 +480,11 @@ STAMP_FONT_SCALE = 0.0095
 STAMP_LOGO_RATIO = 2.5
 STAMP_GAP_RATIO = 0.25
 
-# the maintainer 2026-08-30, second pass: 2.5 credit lines still read as a thumbnail,
+# The maintainer 2026-08-30, second pass: 2.5 credit lines still read as a thumbnail,
 # because the credit line itself is small. The mark scales with the image —
 # this share of its width — and the credit-line ratio above becomes the floor.
 #
-# the maintainer 2026-08-31, round 5: 0.045 put the mark *over* the title band instead of
+# The maintainer 2026-08-31, round 5: 0.045 put the mark *over* the title band instead of
 # in it. 0.035 is the share at which the stamp slots into the band the way
 # `15_defense_shrinkage.png` already did, on every figure rather than on the one
 # whose proportions happened to suit it.

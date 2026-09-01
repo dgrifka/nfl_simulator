@@ -339,7 +339,7 @@ anywhere, at power 0.177. When nothing is measured, everything is gated.
   fixed for onside.
 - v1.2 artifacts untouched; v1.3 writes alongside. The rematch validation is not
   re-run, for document 18 §6's reason.
-- **the maintainer approves before any of this lands.**
+- **The maintainer approves before any of this lands.**
 
 ### 5j. Kill and rollback
 

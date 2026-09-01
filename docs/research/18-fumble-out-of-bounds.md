@@ -282,7 +282,7 @@ carelessly. §3's eleven conflicted plays are the ones that would do it.
 - v1.1 artefacts are left untouched and v1.2 writes alongside, exactly as
   document 15's Phase 3 rebuild did, because document 07's rematch validation was
   run against v1.1.
-- **the maintainer approves before any of this lands.** The round stops at the Gate F-2
+- **The maintainer approves before any of this lands.** The round stops at the Gate F-2
   report.
 
 ---

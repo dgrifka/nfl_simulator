@@ -1,7 +1,7 @@
 # 52 — Amendment A-3: the hands-on-the-ball class, pre-registered
 
 *Written 2026-08-27 in a Fable 5 brainstorm after document 50, **before any
-further fit**. the maintainer's decision: keep the dropped-pick variant and make it a
+further fit**. The maintainer's decision: keep the dropped-pick variant and make it a
 ledger row, on the terms below. This document is the amendment's text, the
 gates it must clear, and what it costs. It is written the way document 21
 wrote A-2 — so that a reader can see exactly what rule changed and why —
@@ -36,7 +36,7 @@ arithmetic attached (§6).
 The variant changes the verdict bucket on 12.03% of 2022–2025 games
 (document 50). Its persistent-skill share is ~1.4% per throw (document 48).
 Both are true: a near-coin, three times a game, at ~2 EPA a flip, is a lot of
-luck. the maintainer's judgement is that this is what most readers mean by luck, and
+luck. The maintainer's judgement is that this is what most readers mean by luck, and
 that a simulator which leaves it in is answering a narrower question than
 the one fans ask. This document does not pretend the effect size is
 evidence; it records that the *definition* was chosen, and that the size is
@@ -45,7 +45,7 @@ what the definition implies.
 ## 3. The amendment text
 
 **Amended 2026-08-28 by ruling R-4 (document 58 §1).** The preamble below no
-longer says "near-random". the maintainer's ruling, quoted:
+longer says "near-random". The maintainer's ruling, quoted:
 
 > **The gates govern.** Document 52 §3's preamble — "whose finish is
 > near-random" — is rewritten to: *"whose outcome the entity's persistent

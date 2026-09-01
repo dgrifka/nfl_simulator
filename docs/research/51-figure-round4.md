@@ -209,7 +209,7 @@ the maintainer's decision, not settled by the round.
 
 ## Round 5 — the margin plot returns, with a "wins by" axis (2026-08-27)
 
-the maintainer's decisions in a Fable 5 chat after reading this document and the round-4
+The maintainer's decisions in a Fable 5 chat after reading this document and the round-4
 PNGs. Handoff: `handoff-2026-08-27-figures-r5.md`. Results:
 `results-2026-08-27-exp6-figures.md`. One commit for the figure, one for this record.
 Nothing is fitted, no published number moves, and the five example games still

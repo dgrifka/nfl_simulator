@@ -1158,7 +1158,7 @@ def test_the_two_ends_are_told_apart_from_every_event_bar(colors):
     assert all(colour_distance(colour, ends) >= CLASH_DISTANCE for colour in faces - {ends})
 
 
-def test_the_waterfall_names_its_ends_in_derek_s_wording():
+def test_the_waterfall_names_its_ends_in_the_ruled_wording():
     fig, ax = waterfall()
     labels = [t.get_text() for t in ax.get_yticklabels()]
     assert labels[0].startswith("Actual")
@@ -1166,7 +1166,7 @@ def test_the_waterfall_names_its_ends_in_derek_s_wording():
 
 
 def test_footer_lines_are_empty_by_ruling():
-    """the maintainer 2026-09-01 (doc 60 §18): the toss line and the other-edition line
+    """The maintainer 2026-09-01 (doc 60 §18): the toss line and the other-edition line
     leave every figure — the article carries both caveats in prose."""
     from nfl_simulator.plots import footer_lines
 
@@ -1219,7 +1219,7 @@ def test_the_waterfall_footer_explains_what_a_small_events_row_is():
 def test_the_waterfall_footer_is_left_aligned_on_the_axes_left_edge():
     """A centred footer under a waterfall floats away from the column it explains.
 
-    the maintainer 2026-08-30: anchored at the figure's left edge — the row labels
+    The maintainer 2026-08-30: anchored at the figure's left edge — the row labels
     live left of the axes, so the footer gets the full width, not the plot's.
     """
     fig, ax = waterfall()
@@ -1267,7 +1267,7 @@ def test_the_card_draws_no_axes_because_it_is_not_a_plot():
 
 # --- the share footer, figure round 4 Part A ------------------------------
 
-# The whole footer, and nothing else on it. the maintainer's round-4 call: the card is
+# The whole footer, and nothing else on it. The maintainer's round-4 call: the card is
 # the figure for somebody who will not open the other two, and a measured
 # coverage figure is a methodological aside they cannot act on. It stays on the
 # article figure, where a reader has already asked for the methodology.
@@ -2882,7 +2882,7 @@ def edition_figures(game):
 
 @pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
 def test_no_figure_carries_the_other_edition_line(suffix):
-    """the maintainer 2026-09-01 (doc 60 §18): the cross-edition footer is gone."""
+    """The maintainer 2026-09-01 (doc 60 §18): the cross-edition footer is gone."""
     _strict, full = strict_and_full()
     assert "Strict edition:" not in flat_text(edition_figures(full)[suffix])
 
@@ -3678,7 +3678,7 @@ def test_a_dropped_pick_names_the_defence_that_dropped_it():
 
 
 def test_a_throw_that_was_picked_wears_the_charted_asterisk():
-    """the maintainer 2026-09-01: the population parenthesis becomes an asterisk.
+    """The maintainer 2026-09-01: the population parenthesis becomes an asterisk.
 
     "(pick-able throw)" on every row was heavy; the asterisk points at one
     footer line naming the charted population for picks and drops alike.
@@ -3705,7 +3705,7 @@ def test_the_waterfall_explains_the_asterisk_when_a_charted_row_is_drawn():
 
 
 def test_a_row_mark_is_the_club_the_luck_helped():
-    """the maintainer 2026-09-01: the logo matches the bar's colour — the beneficiary,
+    """The maintainer 2026-09-01: the logo matches the bar's colour — the beneficiary,
     not the charged club."""
     from nfl_simulator.plots import luck_bars
 

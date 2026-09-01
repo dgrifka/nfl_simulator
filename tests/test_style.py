@@ -146,7 +146,7 @@ def test_the_stamp_is_painted_into_the_top_right_corner(blank, tmp_path):
 
     Round 10 conceded the top-right because document 63 measured the title
     running under the stamp there on 2,325 of 2,759 Strict distribution
-    figures. the maintainer reversed that on 2026-08-30: the corner is the one the
+    figures. The maintainer reversed that on 2026-08-30: the corner is the one the
     sibling product uses, and the collision is bought off with
     `reserve_stamp_strip` — which now grows the canvas at the *top* — rather
     than by moving the stamp somewhere no reader looks first.
@@ -187,7 +187,7 @@ def test_the_mark_is_anchored_to_the_top_right_corner_itself(blank, tmp_path):
 
     assert rows.size and columns.size, "the badge was not drawn at all"
     assert rows.min() <= height * 0.02, "the badge's top edge is not at the top"
-    # the maintainer 2026-08-31: the badge is centred over the credit's text, so its
+    # The maintainer 2026-08-31: the badge is centred over the credit's text, so its
     # column centre matches the credit box's centre rather than its right edge.
     from nfl_simulator.style import stamp_box as _sb
 
@@ -197,12 +197,12 @@ def test_the_mark_is_anchored_to_the_top_right_corner_itself(blank, tmp_path):
 
 
 def test_the_mark_is_a_share_of_the_image_width(blank, tmp_path):
-    """the maintainer 2026-08-30 (second pass): 2.5 credit lines still read as a
+    """The maintainer 2026-08-30 (second pass): 2.5 credit lines still read as a
     thumbnail, because the credit line itself is small. The mark now scales
     with the image — `STAMP_LOGO_WIDTH_SHARE` of its width — with the credit
     lines as a floor so a tiny image never loses the mark entirely.
 
-    the maintainer 2026-08-31 (round 5): 0.045 of the width made the mark sit *over* the
+    The maintainer 2026-08-31 (round 5): 0.045 of the width made the mark sit *over* the
     title band rather than in it. The share drops to 0.035 so the stamp slots
     into the band the way `15_defense_shrinkage.png` already did — smaller, and
     the same block on every figure. The credit-line floor is untouched, so a
@@ -450,7 +450,7 @@ def test_the_mark_and_the_credit_line_do_not_touch(blank, tmp_path):
 
 
 def test_the_stamp_sits_beside_a_title_not_above_it(blank, tmp_path):
-    """the maintainer 2026-08-31 round 6: the mark's top aligns with the title band's
+    """The maintainer 2026-08-31 round 6: the mark's top aligns with the title band's
     top, and the divider rule is cut where the block crosses it."""
     from nfl_simulator.style import BRAND_LOGO, apply_watermark, reserve_stamp_strip
 

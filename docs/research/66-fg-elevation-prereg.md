@@ -70,7 +70,7 @@ not "zero".
 5. **Nothing ships on this document.** If the gates pass, the refit is a
    v1.4-class change with its own round, its own round-trip check and its own
    ledger-impact report. This round's output is a coefficient, a materiality
-   count and a verdict. the maintainer decides what happens to it.
+   count and a verdict. The maintainer decides what happens to it.
 
 ### Statistic convention
 

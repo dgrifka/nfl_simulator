@@ -291,7 +291,7 @@ all three values of `w`.
   naming §4a as the reason.
 - v1.2 artifacts are left untouched and v1.3 writes alongside, as v1.2 did.
 - The rematch validation is **not** re-run, for document 18 §6's reason.
-- **the maintainer approves before any of this lands.** The round stops at the report.
+- **The maintainer approves before any of this lands.** The round stops at the report.
 
 ---
 

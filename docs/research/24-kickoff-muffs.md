@@ -448,7 +448,7 @@ preference:
 - v1.2 artifacts are left untouched and v1.3 writes alongside, as v1.2 did.
 - The rematch validation is **not** re-run, for document 18 §6's reason: document
   12 measured it as nearly blind below ~20% damage.
-- **the maintainer approves before any of this lands.** Only Phase 5's fumble widening was
+- **The maintainer approves before any of this lands.** Only Phase 5's fumble widening was
   pre-approved; this one is not. The round stops at the gate report.
 
 ### 5j. Kill and rollback

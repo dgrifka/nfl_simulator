@@ -21,7 +21,7 @@ exactly as they happened.
 
 ## Who is the audience?
 
-the maintainer first — he has to believe the classification before building on it. Then a
+The maintainer first — he has to believe the classification before building on it. Then a
 general sports-analytics readership when the repo goes public. Both want the
 number *and* the reason, so every claim here needs a figure or a table behind it.
 

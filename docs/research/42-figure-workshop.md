@@ -20,7 +20,7 @@ a pixel is drawn: all five example games replay at **0.00e+00**.
 
 ## 1. The distribution — four variants, and why V4 ships
 
-the maintainer's round-1 verdict: the figure "makes sense the more you read it" but is not
+The maintainer's round-1 verdict: the figure "makes sense the more you read it" but is not
 intuitive at first glance. That is a presentation problem, and the way to settle
 a presentation problem is to render the candidates and look at them.
 `research/59_dtw_variants.py` renders four cumulative variants for two games —
@@ -85,7 +85,7 @@ tallest bar.
 
 ## 2. The luck ledger card, and its sign convention
 
-Round 1 shipped the waterfall under the `luck_ledger` name. the maintainer needed help
+Round 1 shipped the waterfall under the `luck_ledger` name. The maintainer needed help
 reading it, which is a fair verdict on a chart type most people have not been
 taught. A waterfall answers *how did the margin get from there to here* — an
 article's question. The person scrolling past asks *who got the breaks, and on
@@ -296,7 +296,7 @@ column got +2.3 against a −2.3 headline. Round 2 labelled the two quantities;
 round 3 made them one. The headline is now `TeamLuck.own_points` — the sum of
 the table under it, including the folded row, to 1e-9 — and the game's net luck
 moved to the lane between the boxes as `Net luck: WAS +2.3`, where it is a fact
-about the matchup rather than about a club. the maintainer's call was the third option:
+about the matchup rather than about a club. The maintainer's call was the third option:
 neither a subtotal row nor a further label, but a different quantity in the
 headline. See §7.
 
@@ -355,7 +355,7 @@ simulations. It is not the estimator's fault — the modal *joint* bin pair is t
 same 23-23 on that game, and agrees with the marginal modes on all five example
 games — it is what a three-point bin does to a one-point game. Disclosed rather
 than fixed: naming a tie is honest about two distributions that genuinely
-overlap, and narrowing the bin would comb the histogram. the maintainer's call.
+overlap, and narrowing the bin would comb the histogram. The maintainer's call.
 
 **Open after round 4:** D-5 and D-6, both cosmetic-to-semantic. D-1, D-2, D-3
 and D-4 are closed above.

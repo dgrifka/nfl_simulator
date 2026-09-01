@@ -385,7 +385,9 @@ def gate_m2() -> dict:
     print(f"\n  adoption rule — the least-constrained qualifying rung, ladder order {LADDER}")
     print(f"  ADOPTED: {adopted if adopted else 'NONE — the meter ships without a band'}")
     if disagreements:
-        print(f"  coverage and KS disagree on: {disagreements} — forks to the maintainer (document 35 §6)")
+        print(
+            f"  coverage and KS disagree on: {disagreements} — forks to the maintainer (document 35 §6)"
+        )
 
     return {
         "tolerance": [COVERAGE_LOW, COVERAGE_HIGH],

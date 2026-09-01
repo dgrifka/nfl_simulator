@@ -1,6 +1,6 @@
 # 30 — The two corrections v1.3 carries, pre-registered
 
-*Written 2026-08-18, **before either correction has been measured**. the maintainer
+*Written 2026-08-18, **before either correction has been measured**. The maintainer
 approved four things on this date: amendment C-1 (document 28), the
 make-probability refit (document 27), the fix to the read-side defect (document
 27 §14f) and a re-measurement of document 26's blocked-kick exclusion under C-1

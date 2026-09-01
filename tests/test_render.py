@@ -323,7 +323,7 @@ def share_figures(game):
 
 @pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card"])
 def test_no_share_figure_carries_the_toss_line(game, suffix):
-    """the maintainer 2026-09-01 (doc 60 §18): the toss caveat lives in prose now."""
+    """The maintainer 2026-09-01 (doc 60 §18): the toss caveat lives in prose now."""
     fig = share_figures(overtime(game))[suffix]
     text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
     assert OVERTIME_FOOTER not in text.replace("\n", " ")

@@ -1,7 +1,7 @@
 # 61 — Possession-level luck cap, pre-registered
 
 *Written 2026-08-28 in a Fable 5 brainstorm after figure round 6, **before
-any measurement**. the maintainer raised it from the LAC @ HOU waterfall: two
+any measurement**. The maintainer raised it from the LAC @ HOU waterfall: two
 would-be-touchdown drops on one possession book about −7 points each, ~−14
 in total, though the drive could have produced one touchdown. This document
 is the change proposal (model change: it edits the bootstrap) and the gate.

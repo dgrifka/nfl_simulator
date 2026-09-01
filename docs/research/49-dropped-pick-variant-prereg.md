@@ -1,6 +1,6 @@
 # 49 — The dropped-pick variant ledger, pre-registered
 
-*Written 2026-08-27 in a Fable 5 brainstorm, **before any code**. the maintainer's
+*Written 2026-08-27 in a Fable 5 brainstorm, **before any code**. The maintainer's
 decision after reading the dropped-pick docx and documents 43–48: build a
 **labelled variant** of the adjudication that neutralizes interceptable
 throws at the throwing defence's posterior-sampled catch probability, beside

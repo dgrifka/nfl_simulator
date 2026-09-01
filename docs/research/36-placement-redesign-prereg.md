@@ -630,7 +630,7 @@ decided. Everything above this line was committed before it existed —
 ## 11. Results
 
 *Run 2026-08-20 by `research/52_placement_redesign.py`, against the thresholds
-§§4–7 committed above and nothing else. the maintainer chose §8's fork option **(i)** on
+§§4–7 committed above and nothing else. The maintainer chose §8's fork option **(i)** on
 2026-08-20 — the full meter, M-4 demoted to descriptive, rung 3 left recorded
 rather than fixed. Gates ran in §8's order and each was reported before the next
 started.*
