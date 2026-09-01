@@ -1,7 +1,7 @@
 # 40 — The overtime-toss sidebar: reported, not neutralized
 
-*Written 2026-08-24. Product-layer round 2, item 4 of the queue in
-`handoff-2026-08-23.md` §3. Production code: `src/nfl_simulator/plots.py`,
+*Written 2026-08-24. Product-layer round 2, item 4. Production code:
+`src/nfl_simulator/plots.py`,
 tests `tests/test_plots.py` (17 new, written first — 94 in the file, 309 in the
 suite). Driver: `research/57_overtime_sidebar.py`, outputs
 `research/outputs/57_overtime_<game_id>_{bootstrap,waterfall}.png` and

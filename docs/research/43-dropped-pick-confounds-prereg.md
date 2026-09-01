@@ -329,9 +329,8 @@ the A-2 clause 3 kind and must not be described as one.
 ## 11. Outcome
 
 Appended 2026-08-27, after the run. §6–7 were not edited beyond the Part A
-fill. Full record: `docs/research/44-dropped-pick-confounds.md`; results file
-`docs/research/results-2026-08-27-exp1.md`; log
-`docs/research/log-2026-08-27-dropped-picks.md`.
+fill. Full record: `docs/research/44-dropped-pick-confounds.md`; the round's
+results file and session log are not part of the public record.
 
 | Gate | Statistic | Verdict |
 |---|---|---|

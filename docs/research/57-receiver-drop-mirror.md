@@ -453,7 +453,7 @@ both audit runs.
 | C — the component, TDD | `receiver_drops.py`, the switch, composable `variant`. V-2..V-5, V-7 as tests, plus the defence-exclusion pin and the swing-sign guard | `109799f` |
 | D — G-4b, G-4d, G-5 | **G-4b PASS**, **G-4d PASS** (2.32 pp vs 0.56 pp). Handoff constraint 1 discharged: `+dp` alone reproduces document 55 at 136 / 1.59 pp exactly | `e88a42f` |
 | D — G-4c | **PASS.** 19/19 folds clear C-1; agreement 0.996, 0.04 pp | `e774547` |
-| E — the record | This document, document 52 §8, document 05 §3, the queue, `results-2026-08-27-exp7.md` | this commit |
+| E — the record | This document, document 52 §8, document 05 §3, and the queue | this commit |
 
 **The round's deliverable is a decision for the maintainer, not a verdict.** Every
 computed gate A-3 has ever set now passes. What stands between the amendment

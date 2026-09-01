@@ -1,7 +1,7 @@
 # 38 — The luck-ledger waterfall
 
-*Written 2026-08-23. Product-layer round 2, avenue 2 of the queue in
-`handoff-2026-08-23.md` §3. Production code: `src/nfl_simulator/plots.py`,
+*Written 2026-08-23. Product-layer round 2, avenue 2. Production code:
+`src/nfl_simulator/plots.py`,
 tests `tests/test_plots.py` (22 new, written first — 59 in the file, 274 in the
 suite). Figure driver: `research/55_ledger_waterfall.py`, outputs
 `research/outputs/55_waterfall_<game_id>.png` and

@@ -183,7 +183,7 @@ Round 7 ran 2026-08-27 on `feat/dropped-pick-variant`. Full record: **document
 | C — the component, TDD | `receiver_drops.py`, the default-off switch, composable `variant`. The defence-effect-excluded-on-read pin and the swing-sign guard are tests, as §2 and handoff constraint 3 asked | `109799f` |
 | D — G-4b, G-4d, G-5 | **G-4b PASS**, **G-4d PASS** (2.32 pp vs 0.56 pp). V-1 0.00e+00 twice; read-side round trip 0.00e+00 over 54,160 rows | `e88a42f` |
 | D — G-4c | **PASS.** 19/19 folds clear C-1; agreement 0.996, median \|ΔDTW\| 0.04 pp | `e774547` |
-| E — the record | Document 57, this section, document 52 §8, document 05 §3's two rows, the queue, `results-2026-08-27-exp7.md` | this commit |
+| E — the record | Document 57, this section, document 52 §8, document 05 §3's two rows, and the queue | this commit |
 
 **§3's enactment rule is half satisfied.** G-4a–d all pass, so the computed
 half is done; the other half is the maintainer's ruling on §0's wording, and no round

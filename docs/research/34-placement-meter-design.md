@@ -1,8 +1,8 @@
 # 34 — The placement meter: a per-game sequencing-luck design
 
-*Written 2026-08-19, from the brainstorm session briefed in
-`handoff-2026-08-19-sequencing.md`. This is a **design document, not a
-pre-registration**: no fit has run, no threshold is committed here. The
+*Written 2026-08-19, from a brainstorm session on sequencing luck. This is a
+**design document, not a pre-registration**: no fit has run, no threshold is
+committed here. The
 implementation round commits its own pre-registration — thresholds with
 power measured first — before any statistic is computed, per the standing
 process laws. Every decision below was made explicitly by the maintainer in the

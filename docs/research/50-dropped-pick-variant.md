@@ -319,4 +319,4 @@ the maintainer merges.**
 | A | `795f07b` | `research/67_dropped_pick_model.py`, the fit; V-6 PASS, V-8 FAIL; `build_swing_table` and its tests |
 | B | `7ad17be` | `dropped_picks.py`, `simulator.dropped_pick_events`, the switch, `render._simulation_context`; 502 → 525 tests |
 | C | `2cf395b` | `research/68_dropped_pick_variant_audit.py`; V-1 0.00e+00, V-2 0.00e+00, the read-side round trip, the audit |
-| D | this commit | This document, document 05 §3's row, document 49 §10, `results-2026-08-27-exp4.md`, the queue |
+| D | this commit | This document, document 05 §3's row, document 49 §10, and the queue |

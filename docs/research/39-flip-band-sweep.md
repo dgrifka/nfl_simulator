@@ -1,7 +1,7 @@
 # 39 — The flip-band sweep: is 0.40–0.60 load-bearing?
 
-*Written 2026-08-24. Product-layer round 2, item 3 of the queue in
-`handoff-2026-08-23.md` §3. Production code: `src/nfl_simulator/plots.py`,
+*Written 2026-08-24. Product-layer round 2, item 3. Production code:
+`src/nfl_simulator/plots.py`,
 tests `tests/test_plots.py` (18 new, written first — 77 in the file, 292 in the
 suite). Driver: `research/56_flip_band_sweep.py`, outputs
 `research/outputs/56_flip_band_sweep.png` and `56_flip_band_sweep.json` —
