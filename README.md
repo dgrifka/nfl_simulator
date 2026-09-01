@@ -1,7 +1,7 @@
 # nfl_simulator
 
-An NFL **deserve-to-win** simulator: re-adjudicate a single game by neutralizing
-luck rather than replaying plays.
+**Re-adjudicate one NFL game by neutralizing luck, not by replaying plays** — a
+*deserve-to-win* simulator for a single game that already happened.
 
 ## The idea
 
@@ -18,242 +18,81 @@ Expected Points Added with its expectation:
   branches rather than the branch that actually happened,
 - a field-goal attempt becomes make-probability-weighted points rather than
   3 or 0,
-- and so on for the other components the EDA classifies as luck.
+- and so on for the other components the research classifies as luck.
 
 Re-bootstrapping those coin flips many times gives a distribution over margins —
 a "deserve-to-win" probability for the game that actually got played.
 
-Full play-level re-simulation (modeling play calling, drive continuation, clock
-management) is explicitly **out of scope**.
+## One example
 
-## Status
+Denver at Washington, week 13 of 2025 — the Full edition's adjudication.
 
-**Shipped: simulator v1.3** (2026-08-18) — the field-goal model refitted without
-blocked kicks, a read side that applies every parameter the model fits, and 302
-blocked kicks out of the ledger under the correctness gate added in the same
-release. Documents 15–31 cover Phases 5 to 8; the ship record is
-[31 — Simulator v1.3](docs/research/31-simulator-v13.md).
+![Deserved margin across re-simulations of DEN at WAS, week 13 of 2025, with the actual margin and the expected margin marked](docs/writeup/figures/05_den_was_2025_wk13_dtw_full.png)
 
-**Phase 4 — the research program is closed.** Phase 1 classified the components;
-Phase 2 turned that classification into a working simulator under a single rule;
-Phase 3 tested every remaining candidate and closed the two defects a public
-product would have exposed; Phase 4 finished the sequencing research and ran the
-special-teams round.
+**How to read it.** The histogram is the deserved margin across every
+re-simulation of the game's luck events; the deserve-to-win percentage is the
+share of that mass on one side of zero. The actual margin is marked separately —
+where it sits relative to the mass is the whole claim. A distribution straddling
+zero means the game was genuinely close on the merits, however the scoreboard
+read.
 
-**Every candidate is neutralized, kept, or marked unresolvable with the power
-table that says why. There are no pending rows left, and Phase 4 added no new
-ones** — the branch-point gate denied every component it examined, which is what
-a settled treatment table looks like.
+![The same game's luck ledger, row by row](docs/writeup/figures/06_den_was_2025_wk13_ledger_full.png)
 
-```python
-result = simulate_game(
-    plays, fumble_baseline=..., fg_baseline=..., fg_model=..., points_per_epa=0.62
-)
-result.dtw_home  # 0.551  — deserve-to-win probability
-result.dtw_interval  # (0.460, 0.631)
-result.deserved_margin  # -0.37  (the team actually lost by 7)
-result.ledger  # itemized: which fumble, which kick, how much
-```
+The ledger is the audit trail: one row per luck event, each showing what
+happened, what was expected, and the difference in points. The rows sum to the
+gap between the actual margin and the deserved one — nothing is neutralized
+without appearing here.
 
-Working notes live in [`docs/research/`](docs/research/):
+## Method, in brief
 
-| Doc | What's in it |
-|---|---|
-| [00 — Business context](docs/research/00-business-context.md) | The decision this informs, and why fumble recovery is the calibration case |
-| [01 — Descriptive EDA](docs/research/01-descriptive-eda.md) | Data audit, the EPA component decomposition, variance shares, bias assessment |
-| [02 — Skill vs luck](docs/research/02-skill-vs-luck.md) | Split-half persistence per component; out-of-sample prediction test |
-| [03 — Model foundations](docs/research/03-model-foundations.md) | The hierarchical models and their **pre-registered** gates, committed before any fit |
-| [04 — Bayesian results](docs/research/04-bayesian-results.md) | Gate report (including two failures), population spreads, shrinkage |
-| [05 — Neutralization principle](docs/research/05-neutralization-principle.md) | **The one rule**, the two gates, the per-component treatment table, and the attribution round |
-| [05b — FG model foundations](docs/research/05b-fg-model-foundations.md) | The kicker-hierarchical make model, its pre-registered gates and its results |
-| [06 — Rematch validation](docs/research/06-rematch-validation.md) | The validation design and its **power calculation**, committed before any result |
-| [07 — Validation results](docs/research/07-validation-results.md) | Gate outcomes: non-inferiority passes |
-| [08 — Sequencing luck](docs/research/08-sequencing-luck.md) | Is *where* production lands a team property? Plus the drive-outcome resampling that failed its gate |
-| [09 — Coin-flip candidates](docs/research/09-coinflip-candidates.md) | Drops, fourth down, two-point, onside kicks, extra points — Gate A first, then the arithmetic |
-| [10 — Interval coverage](docs/research/10-interval-coverage.md) | Does the 89% DTW interval mean 89%? It did not, and why |
-| [11 — Drive anatomy](docs/research/11-drive-anatomy.md) | What a drive summary can and cannot see, and which scoring channel the leftover persists in |
-| [12 — The DQW% successor](docs/research/12-dq-successor.md) | Sufficiency criteria committed **before** the validation gate — and why the gate could not have carried it |
-| [13 — Leverage-timing attribution](docs/research/13-s3-attribution.md) | Does clutch conversion follow the quarterback or the scheme? |
-| [14 — Special teams](docs/research/14-special-teams.md) | Punting with weather, the punt bounce, kick and punt returns |
+**One rule governs every component.** Luck is the realized outcome minus its
+expectation at the responsible entity's *shrunk* rate. Full and partial
+neutralization are not two policies — they are the same expression read at two
+values of `w = n/(n+κ)`, and `w` is measured from the data, never chosen. A
+component must first pass a mechanism gate: if there is no branch point, no
+statistic can neutralize it. See
+[05 — the neutralization principle](docs/research/05-neutralization-principle.md)
+and [09 — the coin-flip candidates](docs/research/09-coinflip-candidates.md) for
+what was admitted and what was refused.
 
-### Headline findings
+**Then a two-layer bootstrap.** The outer layer draws from the posterior over
+the rates themselves (how often a team recovers its own fumble, how often a
+kicker makes a 45-yarder in these conditions); the inner layer re-flips every
+coin in the game at the drawn rates. The result is a distribution over deserved
+margins, and the deserve-to-win probability is the share of it on one side of
+zero — so the number carries both kinds of uncertainty, not just the coins.
 
-**Phase 1 — what is luck**
+## The two editions
 
-- The team with the higher game EPA differential wins **95.9%** of decided games.
-  Of that differential's variance, **70%** is ordinary offense and defense and
-  **19%** is interceptions; fumble recovery and field goals together are under 7%.
-- **Fumble recovery is the only component with no detectable team skill.**
-  Split-half correlation +0.055; the hierarchical model shrinks every team-season
-  to within 45.6–48.3% regardless of whether it recovered 11% or 83% that year.
-- The fumble coin is **class-specific**, not 50/50 — 40% on run plays, 76% on
-  botched snaps. A flat coin would be wrong by up to 26 points.
-- **Luck-stripping does not improve forward-looking prediction.** The simulator is
-  a retrospective fairness measure, not a forecasting edge.
+| Edition | Seasons | In the ledger |
+|---|---|---|
+| **Strict** | 2016–2025 | fumbles, field goals, extra points |
+| **Full** | 2022–2025 | Strict **plus** dropped interceptions and receiver drops |
 
-**Phase 2 — one rule, and what it does**
+The seasons differ because the data does. The two extra components need FTN
+charting's `is_interception_worthy` and `is_catchable_ball` fields, which begin
+in 2022 — so the Full edition simply does not exist before then, and Strict is
+what a 2016 game gets. Full also carries a **possession cap**: two luck events on
+the same drive are not independent, so a possession books at most its largest
+single swing rather than the sum. See
+[59 — the two editions](docs/research/59-a3-enacted.md) and
+[62 — the possession cap](docs/research/62-possession-cap.md).
 
-- **Luck is the realized outcome minus its expectation at the entity's shrunk
-  posterior rate.** Full and partial neutralization are not two policies — they
-  are the same expression read at two values of `w = n/(n+κ)`, and `w` is
-  measured, not chosen.
-- A component must pass a **branch-point gate** before that arithmetic runs.
-  Penalties compute to `w ≈ 0.42–0.46`, which would neutralize half of every
-  game's penalty EPA; only a mechanism story rules that out.
-- **Offensive holding is not random.** The hypothesis that it is got a properly
-  powered test (99.3% power on 916,700 plays) and failed decisively.
-- **The interception spread cannot be attributed.** Quarterbacks (12.6%) and
-  defenses (12.3%) come out indistinguishable, so interceptions stay untouched
-  in v1 rather than being neutralized against a grain the data cannot support.
-- **Kicker skill is real and sized**: a one-SD kicker makes **5.35 pp** more of
-  their 45-yard attempts, giving field goals a genuinely entity-specific `w`
-  from 0.064 to 0.377 depending on how much the kicker has kicked.
-- Over ten seasons the simulator moves the mean margin by **2.80 points** and
-  **disagrees with the actual result in 11.1% of games**.
-- **Validation passes.** Neutralization does not degrade a game's predictive
-  content (95% CI upper bound +0.0038 against a +0.010 margin) — and the
-  observed statistic landed within a few percent of what the pre-registered
-  power simulation predicted.
+Across 1,139 games in the Full edition's seasons, the deserved winner differs
+from the scoreboard in **168 of them (14.75%)** — about one game in seven
+([68 §6](docs/research/68-simulator-v14.md)).
 
-**Phase 3 — completing the accounting**
+## What is deliberately out of scope
 
-- **Where a team's production lands is luck; when it lands is skill.** Red-zone
-  placement (r = −0.034) and third/fourth-down placement (r = +0.000) do not
-  persist across the halves of a team's own season, on a test with **87–92%
-  power** — so these are evidence of *absence*, not absence of evidence. But the
-  gap between win-probability and expected-points value of the same plays does
-  persist (**r = +0.180**), and survives a control for playing close games
-  (+0.144). Teams differ, repeatably, in how much winning they extract from a
-  fixed amount of production.
-- **None of it becomes a ledger row.** Sequencing has no branch point, so
-  Gate A rules it out at any value of `w` — a rule committed before the results
-  existed, and it held in both directions.
-- **Drops are not random.** Teams differ by **14.4% relative** on catchable-ball
-  drop rate (86.5% power), against the folk claim. Also not a ledger row: a drop
-  is a receiver's hands, not a coin.
-- **Extra points join the ledger.** A branch point, and kickers genuinely differ
-  (2.42 pp spread against a 1.84 pp null bound) — so they are partially
-  neutralized at the kicker's shrunk rate, folded into the same kicker model.
-- **Onside kicks are the honest denial.** A genuine branch point whose power is
-  flat at **0.115** across a tenfold range of true spread. `w` cannot be
-  measured, so it is not chosen.
-- **Weather closed the FG model's largest defect.** A 15 mph wind costs **5.50
-  pp** at 45 yards; a dome adds **4.53 pp**. 7,507 of 10,731 field-goal ledger
-  entries were repriced — systematically, by roof. Kicker skill barely moved
-  (σ 0.360 → 0.342), so the old model was not smuggling conditions into kickers.
-- **The 89% interval was not an 89% interval.** It covered ~97% of informative
-  games. The two-layer design was correct; the *coin-draw count* was too low, so
-  a third of the reported width was Monte Carlo noise. Fixed by raising a
-  constant — intervals are now 24.9% narrower and no verdict changed.
+This is not a replay engine and it is not a ranking. Nothing here re-runs a game
+play by play, models play calling, drive continuation or clock management, or
+claims which of two teams is better — a deserve-to-win figure is a retrospective
+statement about *one game's* luck, and luck-stripping was tested and found not to
+improve forward-looking prediction. Neither does the simulator neutralize
+everything it can see: components that pass the mechanism gate but fall under a
+pre-registered materiality floor are reported and left alone.
 
-**Phase 4 — finishing the sequencing question, and special teams**
-
-- **A richer drive summary was necessary and not sufficient.** Conditioning a
-  drive's points on explosive plays, first downs and starting field position
-  rather than on depth alone lifts between-team spread retention from **70.5% to
-  94.8%** and cuts the leftover's persistence by two-thirds. The leftover still
-  persists, so the successor Phase 3 sketched was refuted by its own
-  pre-registered rule before it was built.
-- **Reaching the end zone is luck; kicking a field goal is not.** Valuing the
-  same drives three ways separates the channels: touchdown points leave a
-  leftover that does not persist (r = +0.042 against a 0.056 noise floor, 89%
-  power), field-goal points leave one that persists strongly (+0.229). The
-  finishing residual was the kicking channel all along — which DTW% already
-  neutralizes.
-- **The validation gate is blind to the failure it exists to catch.** A
-  purpose-built instrument shows the rematch non-inferiority test has **zero
-  power** against a measure that erases a tenth of the difference between NFL
-  offenses, and reaches 80% only between 20% and 29%. It caught Phase 3's
-  measure because that measure erased 29.4%.
-- **So the successor was stopped by sufficiency criteria, not by the gate.** It
-  passed the rematch test. It failed two of four criteria committed beforehand:
-  its excess quality correlation was no better than its predecessor's (+0.071 vs
-  +0.075, once the mechanical floor is subtracted), and it changed the named
-  winner in 4.6% of games against a 5% floor — near-vacuous, because holding
-  field-goal drives out leaves a nearly separable universe.
-- **Leverage timing cannot be attributed.** A one-SD quarterback and a one-SD
-  head coach each carry about **2.5 percentage points** of win probability per
-  game beyond what their production implied — the same number, with
-  `P(quarterback > coach) = 0.41`. Neither interval clears the design's null
-  bound, so the honest verdict is *5,522 team-games cannot tell them apart*. Both
-  point estimates sit **above** the bound, so this is "cannot confirm", not "no
-  effect" — a distinction committed in writing before the fit, at a design known
-  in advance to reach only 63–67% power against the reference effect.
-- **Punter skill is real and now sized: 1.27 net yards** of true spread between
-  punter-seasons, about 83 yards of field position a year, and stable across
-  three specifications sharing neither likelihood nor estimator. The punter
-  carries **1.45×** the spread of the opposing return unit. The model that
-  measured it fails its own calibration gates by about a yard in the
-  highest-volume bins, and that is reported rather than tuned.
-- **Weather barely touches punting.** 0.31 net yards at 15 mph, against 5.50
-  percentage points of make probability for a 45-yard field goal.
-- **The punt bounce is unresolvable by construction.** The play-by-play records
-  one spot per punt — where the ball stopped — never where it landed. Not one
-  description in 22,519 punt rows mentions a bounce. More seasons cannot fix a
-  field that does not exist.
-- **Return yardage is a large, repeatable skill** at both the returner and team
-  grains (+0.35 for kickoff teams), which leaves Phase 2's interception-return
-  null intact because that was a different play. Kickoff eras are never pooled:
-  the return rate went 0.25 → 0.33 → 0.74 across two rule changes in two years.
-
-### Four process laws
-
-Phase 1's Gate 2 failed because a threshold was set from a football-effect-size
-argument with no power calculation behind it. Each phase since has treated the
-rules below as binding, and every one of them changed a real decision:
-
-1. **Pre-register before fitting.** Every gate doc lands in git before the
-   script that fits its models — checkable with `git log --diff-filter=A`.
-2. **Power-check every threshold before committing it.** This caught a
-   field-goal calibration gate that would have failed 36% of the time on a
-   correct model, and it converted the rematch validation from a superiority
-   test the design could never pass into a non-inferiority test it can.
-3. **Gate A before Gate B — mechanism before arithmetic.** No statistic can
-   detect the *absence* of a branch point. In Phase 3 this disqualified six
-   candidates before a model was fit, and the drops result shows why it matters
-   in both directions: a 14.4% spread would have looked like an obvious skill
-   finding, but had drops come back near zero the arithmetic would have said
-   "neutralize" and the simulator would have started crediting teams for their
-   receivers' hands.
-4. **Characterize an instrument before writing its gate.** Phase 3 added this
-   after a coverage check turned out to be measuring Monte Carlo noise. Phase 4
-   is the case for it: measuring what the rematch gate could *see* revealed it
-   had zero power against a tenth of the between-team spread, which is why the
-   successor measure was judged on sufficiency criteria instead of on a test it
-   went on to pass.
-
-Phase 3 produced **four pre-registered failures** — a drive-outcome resampling
-that degraded the game's predictive content, a distance gate that a defect
-register had already flagged, a convergence tolerance set by bad analogy, and an
-interval that did not cover what it claimed. Phase 4 produced five more: a
-successor measure refuted by its own premise test, two sufficiency criteria
-failed, a punting model that fails its calibration gates with the named fallback
-applied and no third curve attempted, and an attribution round that could not
-separate its two candidates. Each was reported rather than tuned — along with two
-gaps in Phase 4's own decision rules and one commit that landed before the
-pre-registration it was meant to obey, all three recorded in the defect
-registers rather than tidied away.
-
-## Data
-
-Everything comes free via [`nflreadpy`](https://github.com/nflverse/nflreadpy):
-play-by-play 2016–2025 and FTN charting 2022–2025. Pulls are cached to a
-gitignored `data/` directory alongside a manifest recording seasons, pull date
-and library version.
-
-```bash
-uv run python -m nfl_simulator.ingest          # cached; re-running is a no-op
-uv run python -m nfl_simulator.ingest --force  # re-download
-```
-
-**Credit.** The play-by-play, schedules, team colours and club marks all come
-from the [nflverse](https://github.com/nflverse) project — `nflreadpy` on top of
-the `nflfastR` play-by-play data — whose licence asks that its data be credited
-wherever it is used. Every figure this repo renders carries `Data: nflverse` in
-its watermark for that reason. Club logos are the clubs' own marks, cached under
-the gitignored `data/` directory for rendering and never redistributed here.
-
-## Setup
+## Install and quickstart
 
 ```bash
 uv venv
@@ -262,16 +101,152 @@ uv run pytest
 uv run ruff check .
 ```
 
+Pull the data, build the artifacts, then render a game:
+
+```bash
+uv run python -m nfl_simulator.ingest      # ten seasons of play-by-play; cached
+uv run python research/82_fg_v14_refit.py  # the make-probability posterior
+uv run python research/83_simulator_v14.py # Strict, 2016–2025
+uv run python research/84_full_edition_v14.py  # Full, 2022–2025
+```
+
+```python
+from nfl_simulator.render import render_game
+
+render_game("2025_13_DEN_WAS")  # four PNGs into research/outputs/
+```
+
+The first ingest downloads ten seasons and caches them to a **gitignored**
+`data/` directory alongside a manifest recording seasons, pull date and library
+version; re-running it is a no-op, and `--force` re-downloads. The three
+research scripts fit posteriors and write to the gitignored `research/outputs/`,
+so they take a while and only need running once per checkout.
+
+## The pipeline
+
+```mermaid
+flowchart TD
+  A["nflverse via nflreadpy<br/>play-by-play 2016-2025<br/>FTN charting 2022-2025, schedules"] --> B["ingest.py<br/>parquet cache + manifest.json"]
+  B --> C["validate.py<br/>ingest-time checks, pure functions"]
+
+  C --> D["components.py<br/>home-perspective EPA split"]
+  D --> E["Luck-event classification<br/>doc 05 gates, doc 09 candidate table"]
+
+  C --> F["rates.py<br/>team-season successes and opportunities"]
+  F --> G["research/03_bayesian_rates.py<br/>beta-binomial shrinkage, PyMC"]
+  G --> H["Fumble retention baseline"]
+
+  C --> I["research/82_fg_v14_refit.py<br/>make-probability fit, PyMC"]
+  I --> J["fg_model.py<br/>read side: distance, roof, wind,<br/>temperature, kicker, elevation"]
+  K["data/stadium_elevation.py<br/>stadium_id to feet"] --> J
+
+  C --> L["dropped_picks.py<br/>defence catch probability<br/>on interceptable throws"]
+  C --> M["receiver_drops.py<br/>offence catch probability<br/>on catchable balls"]
+
+  E --> N["simulator.py neutralization<br/>fumble_events, field_goal_events,<br/>extra_point_events, dropped_pick_events,<br/>receiver_drop_events"]
+  H --> N
+  J --> N
+  L --> N
+  M --> N
+
+  N --> O{"edition"}
+  O -->|strict| P["_bootstrap, drive_of=None"]
+  O -->|full| Q["_possession_cap_handles<br/>doc 61"]
+  Q --> R["_bootstrap, cap armed"]
+
+  P --> S["_replayed_adjustment<br/>200 posterior draws x 800 coin replays"]
+  R --> S
+  S --> T["_apply_possession_cap<br/>after the replay, no draws of its own"]
+  T --> U["ledger.py<br/>one row per branch: actual, expected, swing<br/>plus cap rows"]
+  S --> V["margins and DTW per posterior draw"]
+  U --> V
+  V --> W["SimulationResult<br/>dtw_home, dtw_interval, deserved_margin"]
+  W --> X["plots.py + style.py + teams.py<br/>verdict bucket, DTW distribution, luck ledger"]
+  X --> Y["render.render_game<br/>one game in, four PNGs out"]
+```
+
+Two modules are deliberately absent from it: `placement.py`, a reported
+diagnostic that never enters an adjudication, and `paths.py`, which is
+filesystem layout rather than a pipeline stage.
+
 ## Layout
 
 | Path | What's in it |
 |---|---|
-| `src/nfl_simulator/` | Importable package: ingest, validation, EPA decomposition, FG model, ledger, simulator |
-| `research/` | Exploratory scripts — EDA, skill-vs-luck tests, Bayesian models, power calculations, validation |
-| `docs/research/` | Written findings and working notes |
+| `src/nfl_simulator/` | Importable package: ingest, validation, EPA decomposition, FG model, ledger, simulator, product layer |
+| `research/` | Exploratory and build scripts — EDA, skill-vs-luck tests, Bayesian models, power calculations, validation |
+| `docs/research/` | The numbered record: pre-registrations, results, ship notes |
+| `docs/writeup/figures/` | Rendered figures and their caption sheet |
 | `tests/` | pytest suite (network-free by default) |
 | `data/` | Gitignored parquet cache + manifest |
 
-## License
+## The research record
 
-MIT
+[`docs/research/`](docs/research/) holds seventy numbered documents. They exist
+because of one rule: **every gate is written down before the model that has to
+pass it is fit**, so a document is a decision record, not a write-up of results
+that already happened. Several of them report failures for that reason.
+
+A reader who wants the argument rather than the archive should start with these:
+
+| Doc | What's in it |
+|---|---|
+| [05 — Neutralization principle](docs/research/05-neutralization-principle.md) | The one rule, the two gates, and the per-component treatment table |
+| [05b — FG model foundations](docs/research/05b-fg-model-foundations.md) | The kicker-hierarchical make model and its pre-registered gates |
+| [09 — Coin-flip candidates](docs/research/09-coinflip-candidates.md) | Every candidate component, and why most were refused |
+| [33 — Magnitude audit](docs/research/33-magnitude-audit.md) | Does a small luck share ever actually change a verdict? |
+| [59 — The two editions](docs/research/59-a3-enacted.md) | Strict and Full, enacted |
+| [68 — Simulator v1.4](docs/research/68-simulator-v14.md) | The current release, its gates, and what moved |
+
+## The process rules
+
+Four rules bind every round, each added after a failure that would have been
+avoided by it:
+
+1. **Pre-register before fitting** — the gate document lands in git before the
+   script that fits its models.
+2. **Power-check every threshold before committing to it** — a threshold with no
+   power calculation behind it is a coin flip about your own result.
+3. **Mechanism before arithmetic** — no statistic can detect the *absence* of a
+   branch point, so the mechanism gate runs first and can disqualify a component
+   before a model is fit.
+4. **Characterize an instrument before writing its gate** — measure what a test
+   can actually see before trusting what it says.
+
+## Status
+
+**Shipped: simulator v1.4** (2026-08-31) — stadium elevation joins the
+make-probability model, worth +4.09 percentage points of make probability on a 45-yard
+kick in Denver. The ship record, with every gate and what moved, is
+[68 — Simulator v1.4](docs/research/68-simulator-v14.md).
+
+The measurement program is closed: every candidate component is shipped, refused
+with the arithmetic attached, or marked unmeasurable. A longer write-up of the
+whole method for a general reader is forthcoming.
+
+## Wiki
+
+Explanatory pages — one rule, one component, one figure at a time, rewritten for
+a reader who wants the explanation rather than the dated record — live in this
+repo's [Wiki](../../wiki). The numbered documents stay here as the record.
+
+## Data and credit
+
+Everything comes free via [`nflreadpy`](https://github.com/nflverse/nflreadpy):
+play-by-play 2016–2025 and FTN charting 2022–2025.
+
+**Credit.** The play-by-play, schedules, team colours and club marks all come
+from the [nflverse](https://github.com/nflverse) project — `nflreadpy` on top of
+the `nflfastR` play-by-play data — whose licence asks that its data be credited
+wherever it is used. Every figure this repo renders carries `Data: nflverse` in
+its watermark for that reason. Club logos are the clubs' own marks, cached under
+the gitignored `data/` directory for rendering and never redistributed here.
+
+## Licence
+
+- **Code** — MIT, see [`LICENSE`](LICENSE).
+- **Documentation and figures** (`docs/`) — Creative Commons Attribution 4.0
+  International, see [`LICENSE-docs`](LICENSE-docs).
+
+Club marks are the clubs' own and are covered by neither: they are cached under
+the gitignored `data/` directory and never redistributed here.

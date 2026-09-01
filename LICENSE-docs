@@ -1,0 +1,40 @@
+This licence covers the documentation and figures in this repository: every
+file under `docs/`, including the numbered research documents and the rendered
+figures in `docs/writeup/figures/`. The source code is licensed separately
+under the MIT License — see `LICENSE`.
+
+Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Copyright (c) 2026 dgrifka
+
+This work is licensed under the Creative Commons Attribution 4.0 International
+License. You are free to:
+
+  Share — copy and redistribute the material in any medium or format
+  Adapt  — remix, transform, and build upon the material for any purpose,
+           even commercially
+
+under the following term:
+
+  Attribution — You must give appropriate credit, provide a link to the
+  licence, and indicate if changes were made. You may do so in any reasonable
+  manner, but not in any way that suggests the licensor endorses you or your
+  use.
+
+No warranties are given. The licence may not give you all of the permissions
+necessary for your intended use — for example, other rights such as publicity,
+privacy, or moral rights may limit how you use the material.
+
+Deed:      https://creativecommons.org/licenses/by/4.0/
+Legalcode: https://creativecommons.org/licenses/by/4.0/legalcode
+
+The full legal text at the Legalcode URL above governs; the summary above is
+not a substitute for it.
+
+NOT COVERED BY THIS LICENCE
+---------------------------
+Club marks and team logos are the clubs' own property. They are cached under
+the gitignored `data/` directory for local rendering and are not redistributed
+in this repository. The underlying play-by-play, schedule and colour data come
+from the nflverse project under its own licence; see the Data and credit
+section of `README.md`.
