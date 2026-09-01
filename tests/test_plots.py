@@ -1143,10 +1143,11 @@ def test_the_two_ends_are_told_apart_from_every_event_bar(colors):
     matchups, so the assertion is on the outcome rather than on the colour:
     whatever :func:`anchor_colour` returns has to stand off every event bar.
 
-    Not `separated` here, and knowingly. The neutral is 4.3 from Kansas City's
-    #E31837 for a protan reader, well under that rule's 6.0 floor — a real gap,
-    logged in `results-2026-08-28-exp11.md`, and one that predates this round
-    and cannot be closed by choosing between two existing colours.
+    Not `separated` here, and knowingly. The neutral #5E5B55 is 4.3 from Kansas
+    City's #E31837 for a protan reader, against `style.CVD_FLOOR = 6.0` — a real
+    gap, recorded in document 60 §8d, and one that predates this round. It
+    cannot be closed by choosing between the two colours `anchor_colour` already
+    owns: it needs a third colour or a non-colour encoding.
     """
     from nfl_simulator.plots import anchor_colour
 
