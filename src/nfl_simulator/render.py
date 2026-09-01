@@ -22,7 +22,6 @@ and whether the game went to overtime. None of them can move the adjudication.
 from __future__ import annotations
 
 import json
-import sys
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -31,7 +30,8 @@ import numpy as np
 import polars as pl
 
 from nfl_simulator import paths
-from nfl_simulator.ingest import FTN_SEASONS
+from nfl_simulator.fg_model import load_fitted_model
+from nfl_simulator.ingest import FTN_SEASONS, SIM_COLUMNS
 from nfl_simulator.ledger import with_actual
 from nfl_simulator.plots import (
     GameVerdict,
@@ -58,6 +58,13 @@ METADATA = "model_metadata_v14.json"
 # when it is asked for Full, rather than quietly checking a Full render against
 # Strict's published numbers.
 FULL_ARTIFACT = "full_summary_v14.parquet"
+
+# v1.4's field-goal posterior and the summary carrying the centring constants it
+# was fitted at. Document 68 §8 moved this module's four artifact pointers to the
+# v1.4 files and left the posterior behind; naming it here beside them is so a
+# fifth pointer cannot be missed the same way.
+FG_TRACE = "trace_fg_v14.nc"
+FG_SUMMARY = "fg_v14_summary.json"
 
 # The first season FTN charting reaches, which is the first season the Full
 # edition exists at all. Read from `ingest` rather than written as 2022 so the
@@ -329,35 +336,20 @@ class Sources:
 @cache
 def load_sources() -> Sources:
     """Read the committed artifacts and the schedule. Cached for a batch render."""
-    output = paths.RESEARCH_OUTPUT_DIR
+    output = paths.artifact_dir()
     with (output / METADATA).open() as handle:
         slope = float(json.load(handle)["points_per_epa"])
     full = output / FULL_ARTIFACT
     return Sources(
         games=pl.read_parquet(output / GAMES_ARTIFACT),
         ledger=pl.read_parquet(output / LEDGER_ARTIFACT),
-        schedule=pl.read_parquet(paths.SCHEDULE_PATH),
+        schedule=pl.read_parquet(paths.schedule_path()),
         overtime=pl.read_parquet(output / OVERTIME_ARTIFACT),
         slope=slope,
         # Absence is not an error, for the reason on the field itself: every
         # Strict figure still draws on a checkout that has not run the Full pass.
         full=pl.read_parquet(full) if full.exists() else _empty_summary(),
     )
-
-
-def _read_side():
-    """`research/44_read_side_fix.py`, imported off the research path.
-
-    That is where the read-side fix and the refitted field-goal model live, and
-    re-implementing either here would be a second copy of the thing document 30
-    corrected.
-    """
-    research = Path(__file__).resolve().parents[2] / "research"
-    if str(research) not in sys.path:
-        sys.path.insert(0, str(research))
-    from importlib import import_module
-
-    return import_module("44_read_side_fix")
 
 
 def simulation_columns() -> list[str]:
@@ -378,7 +370,7 @@ def simulation_columns() -> list[str]:
     return list(
         dict.fromkeys(
             [
-                *_read_side().SIM_COLUMNS,
+                *SIM_COLUMNS,
                 # The defence the dropped pick is charged against; v1.3 never
                 # needed it, because a fumble is charged to whoever fumbled.
                 "defteam",
@@ -411,7 +403,6 @@ def _simulation_context():
     from nfl_simulator.ingest import PBP_SEASONS, load_pbp
     from nfl_simulator.simulator import points_per_epa
 
-    read_side = _read_side()
     pbp = load_pbp(PBP_SEASONS, columns=simulation_columns())
     # v1.4's posterior, not v1.3's. Document 68 §8 moved this module's four
     # artifact pointers to the v1.4 files and left the posterior behind, which
@@ -419,7 +410,7 @@ def _simulation_context():
     # `replay` catches it the moment one is drawn: a v1.3 `p_make` replayed
     # against a v1.4 summary row misses `2025_13_DEN_WAS` by 0.0048 of DTW%,
     # and the guard refuses to draw rather than shipping the gap.
-    fg_model, _ = read_side.load_model("trace_fg_v14.nc", "fg_v14_summary.json")
+    fg_model, _ = load_fitted_model(FG_TRACE, FG_SUMMARY)
     dropped_pick_model, ftn = _dropped_pick_pieces()
     receiver_drop_model = _receiver_drop_pieces()
     return {
@@ -485,8 +476,8 @@ def _dropped_pick_pieces():
 
     try:
         model = DroppedPickModel.from_posterior(
-            paths.RESEARCH_OUTPUT_DIR / "trace_dropped_pick.nc",
-            paths.RESEARCH_OUTPUT_DIR / "dropped_pick_summary.json",
+            paths.artifact_dir() / "trace_dropped_pick.nc",
+            paths.artifact_dir() / "dropped_pick_summary.json",
         )
         return model, load_ftn(FTN_SEASONS)
     except FileNotFoundError as error:
@@ -504,8 +495,8 @@ def _receiver_drop_pieces():
 
     try:
         return ReceiverDropModel.from_posterior(
-            paths.RESEARCH_OUTPUT_DIR / "trace_receiver_drop.nc",
-            paths.RESEARCH_OUTPUT_DIR / "receiver_drop_summary.json",
+            paths.artifact_dir() / "trace_receiver_drop.nc",
+            paths.artifact_dir() / "receiver_drop_summary.json",
         )
     except FileNotFoundError as error:
         print(f"Note: the receiver-drop component is unavailable ({error}).")
@@ -607,14 +598,26 @@ def replay(game_id: str, row: dict, schedule: dict | None = None, *, edition: st
     return result, gaps
 
 
-def kick_distances(game_id: str) -> dict:
+def game_plays(game_id: str, plays: pl.DataFrame | None = None) -> pl.DataFrame:
+    """This game's rows — from ``plays`` when a caller has them, else the cache.
+
+    The batch renderer's frame is the 2016-2025 cache the baselines were fit on,
+    and every game it draws is in it. The live path's game may be a 2026 one that
+    is in no such frame, so it hands its own rows over rather than asking a
+    context built on the frozen window for a game the window does not contain.
+    """
+    frame = _simulation_context()["pbp"] if plays is None else plays
+    return frame.filter(pl.col("game_id") == game_id)
+
+
+def kick_distances(game_id: str, plays: pl.DataFrame | None = None) -> dict:
     """`play_id -> kick_distance` for the game, from the cached play-by-play.
 
     Failure is quiet and total: without it the labels fall back to the ledger's
     five-yard class, which is correct, just less specific.
     """
     try:
-        plays = _simulation_context()["pbp"].filter(pl.col("game_id") == game_id)
+        plays = game_plays(game_id, plays)
         if "kick_distance" not in plays.columns:
             return {}
         kicks = plays.select("play_id", "kick_distance").drop_nulls("kick_distance")
@@ -624,14 +627,14 @@ def kick_distances(game_id: str) -> dict:
         return {}
 
 
-def kicker_names(game_id: str) -> dict:
+def kicker_names(game_id: str, plays: pl.DataFrame | None = None) -> dict:
     """`play_id -> surname` for the game's kicks, from the cached play-by-play.
 
     Degrades exactly as :func:`kick_distances` does: no name is a label without
     a name on it, never a render that stops.
     """
     try:
-        plays = _simulation_context()["pbp"].filter(pl.col("game_id") == game_id)
+        plays = game_plays(game_id, plays)
         if "kicker_player_name" not in plays.columns:
             return {}
         kicks = plays.select("play_id", "kicker_player_name").drop_nulls("kicker_player_name")
@@ -641,14 +644,14 @@ def kicker_names(game_id: str) -> dict:
         return {}
 
 
-def _player_names(game_id: str, column: str) -> dict:
+def _player_names(game_id: str, column: str, plays: pl.DataFrame | None = None) -> dict:
     """`play_id -> surname` for one play-by-play name column.
 
     Degrades exactly as :func:`kick_distances` does — a missing column or an
     unreadable cache costs the labels their names, never the render.
     """
     try:
-        plays = _simulation_context()["pbp"].filter(pl.col("game_id") == game_id)
+        plays = game_plays(game_id, plays)
         if column not in plays.columns:
             return {}
         named = plays.select("play_id", column).drop_nulls(column)
@@ -658,14 +661,14 @@ def _player_names(game_id: str, column: str) -> dict:
         return {}
 
 
-def passer_names(game_id: str) -> dict:
+def passer_names(game_id: str, plays: pl.DataFrame | None = None) -> dict:
     """`play_id -> the quarterback's surname`, for the dropped-pick rows."""
-    return _player_names(game_id, "passer_player_name")
+    return _player_names(game_id, "passer_player_name", plays)
 
 
-def receiver_names(game_id: str) -> dict:
+def receiver_names(game_id: str, plays: pl.DataFrame | None = None) -> dict:
     """`play_id -> the target's surname`, for the receiver-drop rows."""
-    return _player_names(game_id, "receiver_player_name")
+    return _player_names(game_id, "receiver_player_name", plays)
 
 
 # --------------------------------------------------------------------------
@@ -743,13 +746,50 @@ def render_game(
         if edition == "full"
         else sources.ledger.filter(pl.col("game_id") == game_id).drop("game_id")
     )
+    toss = sources.toss(verdict) if verdict.went_to_overtime else None
+    return write_figures(
+        verdict,
+        result,
+        ledger=ledger,
+        points_per_epa=sources.slope,
+        out_dir=out_dir,
+        toss=toss,
+        article=article,
+    )
+
+
+def write_figures(
+    verdict: GameVerdict,
+    result,
+    *,
+    ledger: pl.DataFrame,
+    points_per_epa: float,
+    out_dir: Path,
+    plays: pl.DataFrame | None = None,
+    toss: OvertimeToss | None = None,
+    article: bool = False,
+) -> list[Path]:
+    """The four PNGs, from a verdict and the replay its distribution came from.
+
+    Split out of :func:`render_game` in Round E so the live path draws the same
+    four figures without going through the shipped artifacts. Everything that
+    varies between the two callers is an argument: ``ledger`` is the rows to
+    itemise, ``points_per_epa`` the slope they are stated on, ``plays`` the
+    frame the labels read their kick distances and names from, and ``toss`` the
+    overtime note — which a live game, being in no overtime artifact, does not
+    have.
+
+    Nothing here decides anything. Both callers have already settled the
+    edition and checked their numbers; this writes them out.
+    """
+    game_id = verdict.game_id
     rows = prepare_rows(
         ledger,
         verdict,
-        kick_distances(game_id),
-        kicker_names(game_id),
-        passer_names(game_id),
-        receiver_names(game_id),
+        kick_distances(game_id, plays),
+        kicker_names(game_id, plays),
+        passer_names(game_id, plays),
+        receiver_names(game_id, plays),
         expected_intervals(result),
     )
     # The verdict's two codes are already the season's (see `plots.verdict_from_row`),
@@ -760,7 +800,7 @@ def render_game(
     sides = (verdict.home_team, verdict.away_team)
     logos = {team: team_logo(team, season) for team in sides}
     names = {team: team_name(team, season) for team in sides}
-    toss = sources.toss(verdict) if verdict.went_to_overtime else None
+    edition = verdict.edition
 
     written = []
     for suffix in SUFFIXES:
@@ -778,14 +818,14 @@ def render_game(
             fig, _ax = plot_luck_ledger_card(
                 verdict,
                 rows,
-                points_per_epa=sources.slope,
+                points_per_epa=points_per_epa,
                 colors=colours,
                 logos=logos,
                 names=names,
             )
         elif suffix == "waterfall":
             fig, _ax = plot_luck_ledger(
-                verdict, rows, points_per_epa=sources.slope, colors=colours, logos=logos
+                verdict, rows, points_per_epa=points_per_epa, colors=colours, logos=logos
             )
         else:
             fig, _ax = plot_game_card(verdict, colors=colours, logos=logos)

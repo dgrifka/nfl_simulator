@@ -128,8 +128,21 @@ def _missing_columns(df: pl.DataFrame, required: tuple[str, ...]) -> list[str]:
     return [column for column in required if column not in df.columns]
 
 
-def validate_pbp_season(df: pl.DataFrame, season: int) -> ValidationReport:
-    """Validate one season of play-by-play."""
+def validate_pbp_season(
+    df: pl.DataFrame, season: int, *, partial: bool = False
+) -> ValidationReport:
+    """Validate one season of play-by-play.
+
+    ``partial`` is the live season's posture. Two of the checks below are
+    completeness checks — the game count and the plays-per-game floor — and a
+    season three weeks old fails both for the same reason it is three weeks
+    old, not because the pull is truncated. Under ``partial`` those two are
+    demoted to warnings **in the shortfall direction only**: more games than a
+    season holds is duplicate game ids whatever the date, and a game with 300+
+    rows is duplicated whatever the date, so both stay errors. Nothing else
+    moves — a wrong season, a missing column and null EPA are as fatal in week
+    three as in February.
+    """
     report = ValidationReport(dataset="pbp", season=season, n_rows=df.height)
 
     missing = _missing_columns(df, PBP_REQUIRED_COLUMNS)
@@ -155,14 +168,18 @@ def validate_pbp_season(df: pl.DataFrame, season: int) -> ValidationReport:
         message = f"{report.n_games} games, expected {expected}"
         # Fewer games than expected means a truncated pull. More means
         # duplicate game_ids, which silently double-counts every team stat.
-        report.errors.append(message)
+        if partial and report.n_games < expected:
+            report.warnings.append(f"{report.n_games} games so far, {expected} in a full season")
+        else:
+            report.errors.append(message)
 
     short = per_game.filter(pl.col("n_plays") < MIN_PLAYS_PER_GAME)
     if short.height:
         worst = short.sort("n_plays").head(3).to_dicts()
-        report.errors.append(
-            f"{short.height} game(s) under {MIN_PLAYS_PER_GAME} plays, e.g. {worst}"
-        )
+        message = f"{short.height} game(s) under {MIN_PLAYS_PER_GAME} plays, e.g. {worst}"
+        # A live pull can catch a game while it is still being played, and a
+        # game at half time is short for a reason that is not a bad pull.
+        (report.warnings if partial else report.errors).append(message)
 
     long = per_game.filter(pl.col("n_plays") > MAX_PLAYS_PER_GAME)
     if long.height:

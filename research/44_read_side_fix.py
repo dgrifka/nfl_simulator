@@ -48,8 +48,18 @@ from nfl_simulator.components import (  # noqa: E402
     fit_xp_baseline,
     xp_attempt_mask,
 )
+
+# `SIM_COLUMNS` and `load_model` moved into the package in Round E so the
+# installed wheel can read them; they are re-exported here under the names ten
+# research scripts already import, so the correction has one home.
 from nfl_simulator.fg_model import FieldGoalModel, sanitize_weather  # noqa: E402
-from nfl_simulator.ingest import ANALYSIS_COLUMNS, PBP_SEASONS, load_pbp  # noqa: E402
+from nfl_simulator.fg_model import load_fitted_model as load_model  # noqa: E402,F401
+from nfl_simulator.ingest import (  # noqa: E402
+    ANALYSIS_COLUMNS,  # noqa: F401
+    PBP_SEASONS,
+    SIM_COLUMNS,  # noqa: F401
+    load_pbp,
+)
 from nfl_simulator.simulator import points_per_epa, simulate_game  # noqa: E402
 
 RANDOM_SEED = 20260817  # v1.2's build seed, so the arms differ by the fix alone
@@ -57,32 +67,6 @@ POSTERIOR_DRAWS = 200
 COIN_DRAWS = 800
 ROUND_TRIP_TOLERANCE = 1e-9  # document 30 §5a
 LONG_ATTEMPT_YARDS = 50.0  # where document 27 §14f localizes the error
-
-SIM_COLUMNS = [
-    *ANALYSIS_COLUMNS,
-    "kicker_player_id",
-    # Presentation only, added in figure round 4 so a ledger row can name the
-    # kicker. Nothing prices on it — the pricing uses `kicker_player_id` — and
-    # the five example games still replay to 0.00e+00 with it loaded.
-    "kicker_player_name",
-    "extra_point_attempt",
-    "extra_point_result",
-    "roof",
-    "temp",
-    "wind",
-    # Round 9, so document 61's possession cap has possessions to group by, and
-    # `qtr` so a cap row can name one the way a reader does: "Q3 drive 7".
-    # Presentation and grouping only — nothing prices on either — and V-1 is
-    # still 0.00e+00 over 2,761 games with both loaded (`research/78`).
-    "fixed_drive",
-    "qtr",
-    # v1.4, and unlike every column above it this one **prices**: it is where
-    # the elevation term reads a kick's altitude (documents 66-68). It is still
-    # inert under a v1.3 posterior, which carries no `beta_elev` to apply it
-    # with, and `research/83` re-proves that at 0.00e+00 over 2,761 games rather
-    # than assuming it.
-    "stadium_id",
-]
 
 # Document 27 §14f, on the shipped population and the incumbent posterior: the
 # mean absolute luck the pricing error misbooks, per row. Stated as a mean
@@ -94,25 +78,6 @@ DOCUMENT_27_MEAN_ABS_LUCK_ERROR = {"field_goal": 0.0446, "extra_point": 0.0100}
 def shipped_read_side(model: FieldGoalModel) -> FieldGoalModel:
     """The v1.1/v1.2 read side: the same posterior, minus the terms it never read."""
     return dataclasses.replace(model, delta_cubic=None, delta_xp=None, lambda_xp=None)
-
-
-def load_model(trace: str, summary: str) -> FieldGoalModel:
-    """The posterior plus the centring constants it was fitted at.
-
-    `centres["elevation"]` is v1.4's and is passed only when the summary has
-    it, so a v1.1/v1.2/v1.3 summary loads through this same call unchanged. The
-    read side refuses a trace that carries `beta_elev` without it, so the pair
-    cannot come apart silently: a v1.4 trace loaded against a v1.3 summary
-    raises here rather than pricing the league 569 feet too low.
-    """
-    with (paths.RESEARCH_OUTPUT_DIR / summary).open() as handle:
-        centres = json.load(handle)["centres"]
-    return FieldGoalModel.from_posterior(
-        paths.RESEARCH_OUTPUT_DIR / trace,
-        wind_centre=centres["wind"],
-        temp_centre=centres["temp"],
-        elevation_centre=centres.get("elevation"),
-    ), centres
 
 
 # --------------------------------------------------------------------------

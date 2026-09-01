@@ -9,6 +9,7 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
+from nfl_simulator import ingest
 from nfl_simulator.validate import expected_game_count
 
 
@@ -80,3 +81,50 @@ def synthetic_ftn():
         return pl.DataFrame(rows)
 
     return _build
+
+
+@pytest.fixture
+def temp_data_dir(tmp_path, monkeypatch):
+    """Point every cache path at a tmpdir so tests never touch real ``data/``.
+
+    Both environment overrides are cleared first. `paths.data_dir` prefers the
+    variable over the constant this fixture patches, so a developer who has
+    `NFL_SIM_DATA_DIR` exported for a live run would otherwise have the suite
+    write into their real cache.
+    """
+    from nfl_simulator import paths
+
+    monkeypatch.delenv(paths.DATA_DIR_ENV, raising=False)
+    monkeypatch.delenv(paths.ARTIFACT_DIR_ENV, raising=False)
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(paths, "PBP_DIR", tmp_path / "data" / "pbp")
+    monkeypatch.setattr(paths, "FTN_DIR", tmp_path / "data" / "ftn")
+    monkeypatch.setattr(paths, "SCHEDULE_PATH", tmp_path / "data" / "schedules.parquet")
+    monkeypatch.setattr(paths, "MANIFEST_PATH", tmp_path / "data" / "manifest.json")
+    monkeypatch.setattr(paths, "RESEARCH_OUTPUT_DIR", tmp_path / "research" / "outputs")
+    paths.ensure_data_dirs()
+    return tmp_path
+
+
+@pytest.fixture
+def stub_network(monkeypatch, synthetic_pbp, synthetic_ftn):
+    """Replace nflreadpy loaders with counters over synthetic frames."""
+    calls = {"pbp": 0, "ftn": 0, "schedules": 0}
+
+    def fake_pbp(season):
+        calls["pbp"] += 1
+        return synthetic_pbp(season)
+
+    def fake_ftn(season):
+        calls["ftn"] += 1
+        return synthetic_ftn(season)
+
+    def fake_schedules(seasons):
+        calls["schedules"] += 1
+        return pl.DataFrame({"game_id": ["2024_0000"], "season": [2024]})
+
+    monkeypatch.setattr(ingest.nfl, "load_pbp", fake_pbp)
+    monkeypatch.setattr(ingest.nfl, "load_ftn_charting", fake_ftn)
+    monkeypatch.setattr(ingest.nfl, "load_schedules", fake_schedules)
+    return calls

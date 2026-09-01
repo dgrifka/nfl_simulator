@@ -72,6 +72,38 @@ ANALYSIS_COLUMNS: list[str] = [
 ]
 
 
+# The play-by-play columns a **replay** needs: the analysis frame plus the
+# kicking, weather, drive and stadium fields the simulator prices or labels on.
+# Lifted out of `research/44_read_side_fix.py` in Round E so an installed wheel,
+# which has no `research/` directory, can still assemble a replay's frame. That
+# script imports it back from here — document 30's correction exists once.
+SIM_COLUMNS = [
+    *ANALYSIS_COLUMNS,
+    "kicker_player_id",
+    # Presentation only, added in figure round 4 so a ledger row can name the
+    # kicker. Nothing prices on it — the pricing uses `kicker_player_id` — and
+    # the five example games still replay to 0.00e+00 with it loaded.
+    "kicker_player_name",
+    "extra_point_attempt",
+    "extra_point_result",
+    "roof",
+    "temp",
+    "wind",
+    # Round 9, so document 61's possession cap has possessions to group by, and
+    # `qtr` so a cap row can name one the way a reader does: "Q3 drive 7".
+    # Presentation and grouping only — nothing prices on either — and V-1 is
+    # still 0.00e+00 over 2,761 games with both loaded (`research/78`).
+    "fixed_drive",
+    "qtr",
+    # v1.4, and unlike every column above it this one **prices**: it is where
+    # the elevation term reads a kick's altitude (documents 66-68). It is still
+    # inert under a v1.3 posterior, which carries no `beta_elev` to apply it
+    # with, and `research/83` re-proves that at 0.00e+00 over 2,761 games rather
+    # than assuming it.
+    "stadium_id",
+]
+
+
 class IngestError(RuntimeError):
     """Raised when a pull fails validation badly enough to refuse the cache."""
 
@@ -83,14 +115,31 @@ class SeasonResult:
     path: Path
     report: ValidationReport
     downloaded: bool
+    # True when the season was pulled mid-flight, so the manifest says which
+    # rows are a finished record and which are a snapshot that will grow.
+    partial: bool = False
 
     def to_manifest_entry(self) -> dict:
         return {
-            "path": str(self.path.relative_to(paths.REPO_ROOT)),
+            "path": _manifest_path(self.path),
             "pulled_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "nflreadpy_version": nfl.__version__,
+            "partial": self.partial,
             "validation": self.report.to_dict(),
         }
+
+
+def _manifest_path(path: Path) -> str:
+    """The cache file as the manifest records it.
+
+    Relative to the repo when the cache is inside it — which is every checkout
+    — and absolute when `NFL_SIM_DATA_DIR` has moved it somewhere else, because
+    a path relative to a root it does not live under cannot be written at all.
+    """
+    try:
+        return str(path.relative_to(paths.REPO_ROOT))
+    except ValueError:
+        return str(path)
 
 
 # --------------------------------------------------------------------------
@@ -99,16 +148,16 @@ class SeasonResult:
 
 
 def read_manifest() -> dict:
-    if not paths.MANIFEST_PATH.exists():
+    if not paths.manifest_path().exists():
         return {"manifest_version": MANIFEST_VERSION, "datasets": {}}
-    with paths.MANIFEST_PATH.open() as handle:
+    with paths.manifest_path().open() as handle:
         return json.load(handle)
 
 
 def write_manifest(manifest: dict) -> None:
     paths.ensure_data_dirs()
     manifest["updated_at"] = datetime.now(UTC).isoformat(timespec="seconds")
-    with paths.MANIFEST_PATH.open("w") as handle:
+    with paths.manifest_path().open("w") as handle:
         json.dump(manifest, handle, indent=2, sort_keys=True)
         handle.write("\n")
 
@@ -122,6 +171,8 @@ def is_cached(manifest: dict, dataset: str, season: int) -> bool:
     entry = manifest.get("datasets", {}).get(dataset, {}).get(str(season))
     if entry is None:
         return False
+    # `REPO_ROOT / "/abs/path"` is `/abs/path`, so one expression covers both
+    # of the forms `_manifest_path` writes.
     return (paths.REPO_ROOT / entry["path"]).exists()
 
 
@@ -187,12 +238,123 @@ def ingest_ftn_season(season: int, *, force: bool = False) -> SeasonResult:
 
 def ingest_schedules(seasons: Iterable[int], *, force: bool = False) -> Path:
     """Cache the schedule table — one row per game, carries the final score."""
-    if paths.SCHEDULE_PATH.exists() and not force:
-        return paths.SCHEDULE_PATH
+    if paths.schedule_path().exists() and not force:
+        return paths.schedule_path()
     frame = nfl.load_schedules(list(seasons))
     paths.ensure_data_dirs()
-    frame.write_parquet(paths.SCHEDULE_PATH, compression="zstd")
-    return paths.SCHEDULE_PATH
+    frame.write_parquet(paths.schedule_path(), compression="zstd")
+    return paths.schedule_path()
+
+
+# --------------------------------------------------------------------------
+# the live season
+# --------------------------------------------------------------------------
+
+
+def ingest_live_season(season: int, *, refresh_schedule: bool = True) -> SeasonResult:
+    """Pull and cache one season that the frozen research window does not cover.
+
+    `PBP_SEASONS` is 2016-2025 and stays there: every shipped artifact is fit
+    on that window, and widening the constant would quietly re-scope the fits.
+    This is the other job — the current season's plays, pulled so a game that
+    went final tonight can be adjudicated — and it differs from
+    :func:`ingest_pbp_season` in three ways.
+
+    It **always re-downloads**. A finished season is frozen and a cached copy
+    of it is the whole point of the cache; a live season gains a week every
+    week, so a cache hit on it is a stale answer wearing a fresh one's clothes.
+
+    It validates **partially** (:func:`validate.validate_pbp_season`), so the
+    season's incompleteness is a warning rather than the refusal it correctly
+    is in February.
+
+    And it refuses an unstarted season with one sentence rather than letting
+    the validator report a missing-column list from an empty frame.
+
+    FTN charting is not pulled here. It lags the play-by-play by design and the
+    live path degrades to the Strict edition without it — see
+    :func:`load_ftn_if_cached`.
+    """
+    frame = nfl.load_pbp(season)
+    if frame.height == 0:
+        raise IngestError(
+            f"no play-by-play for {season} yet — the season has not started, "
+            "or nflverse has not published its first week."
+        )
+
+    report = validate_pbp_season(frame, season, partial=True)
+    if not report.ok:
+        raise IngestError(f"pbp {season} failed validation:\n{report.summary()}")
+
+    paths.ensure_data_dirs()
+    destination = paths.pbp_path(season)
+    frame.write_parquet(destination, compression="zstd")
+
+    result = SeasonResult(
+        dataset="pbp",
+        season=season,
+        path=destination,
+        report=report,
+        downloaded=True,
+        partial=True,
+    )
+    manifest = read_manifest()
+    record(manifest, result)
+    write_manifest(manifest)
+
+    if refresh_schedule:
+        refresh_schedules([season])
+    return result
+
+
+def refresh_schedules(seasons: Iterable[int]) -> Path:
+    """Re-pull these seasons' schedule rows into the cached schedule table.
+
+    :func:`ingest_schedules` writes the table once and then leaves it alone,
+    which is right for a frozen window and wrong for a season that gains a
+    scoreline every Sunday. This one replaces exactly the seasons asked for and
+    leaves every other season's rows as they were, so a live refresh cannot
+    lose the ten seasons the research record is built on.
+    """
+    seasons = list(seasons)
+    fresh = nfl.load_schedules(seasons)
+    paths.ensure_data_dirs()
+
+    if paths.schedule_path().exists():
+        kept = pl.read_parquet(paths.schedule_path()).filter(~pl.col("season").is_in(seasons))
+        fresh = pl.concat([kept, fresh], how="diagonal_relaxed")
+
+    fresh.write_parquet(paths.schedule_path(), compression="zstd")
+    return paths.schedule_path()
+
+
+def schedule_row(game_id: str) -> dict:
+    """This game's schedule row — the two clubs, the two scores, the date.
+
+    An empty dict when the game is not on file, which is the same degradation
+    `render.Sources.schedule_row` already makes: the schedule contributes
+    presentation facts only, so its absence costs a figure its scoreline and
+    never its adjudication.
+    """
+    if not paths.schedule_path().exists():
+        return {}
+    rows = load_schedules().filter(pl.col("game_id") == game_id).to_dicts()
+    return rows[0] if rows else {}
+
+
+def load_ftn_if_cached(seasons: Iterable[int]) -> pl.DataFrame | None:
+    """The charting for these seasons, or ``None`` when it is not on disk.
+
+    FTN charting starts in 2022 and lags the play-by-play within a season, so
+    "absent" is the normal state for a game that went final tonight rather than
+    an error. The live path reads ``None`` as "adjudicate this game Strict and
+    say so", which is amendment A-3's own rule: the Full edition exists where
+    the charting reaches and nowhere else.
+    """
+    seasons = [season for season in seasons if paths.ftn_path(season).exists()]
+    if not seasons:
+        return None
+    return load_ftn(seasons)
 
 
 def ingest_all(
@@ -227,7 +389,7 @@ def ingest_all(
 
     schedule_path = ingest_schedules(pbp_seasons, force=force)
     manifest["schedules"] = {
-        "path": str(schedule_path.relative_to(paths.REPO_ROOT)),
+        "path": _manifest_path(schedule_path),
         "seasons": list(pbp_seasons),
     }
 
@@ -275,11 +437,11 @@ def load_ftn(
 
 
 def load_schedules() -> pl.DataFrame:
-    if not paths.SCHEDULE_PATH.exists():
+    if not paths.schedule_path().exists():
         raise FileNotFoundError(
-            f"schedules not cached at {paths.SCHEDULE_PATH} — run `python -m nfl_simulator.ingest`"
+            f"schedules not cached at {paths.schedule_path()} — run `python -m nfl_simulator.ingest`"
         )
-    return pl.read_parquet(paths.SCHEDULE_PATH)
+    return pl.read_parquet(paths.schedule_path())
 
 
 # --------------------------------------------------------------------------
@@ -313,7 +475,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     downloaded = sum(1 for result in results if result.downloaded)
-    print(f"\ndone: {downloaded} season-file(s) downloaded, manifest at {paths.MANIFEST_PATH}")
+    print(f"\ndone: {downloaded} season-file(s) downloaded, manifest at {paths.manifest_path()}")
     return 0
 
 
