@@ -1,12 +1,15 @@
 # 45 — Dropped-pick study, round 2: pooling redesign, pre-registered
 
-*Written 2026-08-27 in a Fable 5 brainstorm after reading
-`results-2026-08-27-exp1.md` and document 44, **before any fit**. This is an
-amendment to document 43, not a replacement: the question, the DAG, the
-covariates, the gate form and the readings in 43 §0 all stand. Three things
-change, each because round 1 showed it had to, and each is written down here
-so that goalpost integrity is checkable by commit archaeology. Document 32's
-closure is untouched by any outcome.*
+*Written 2026-08-27 in a Fable 5 brainstorm after reading round 1's results
+and document 44, and **before any fit** — both orderings checkable in
+`git log --diff-filter=A`, which has document 44 landing before this document
+and this document before `research/63_dropped_pick_power_r2.py`, the first of
+round 2's fitting scripts. This is an amendment to document 43, not a
+replacement: the question, the DAG, the covariates, the gate form and the
+readings in 43 §0 all stand. Three things change, each because round 1 showed
+it had to, and each is written down here so that goalpost integrity is
+checkable by commit archaeology. Document 32's closure is untouched by any
+outcome.*
 
 *Inputs: documents 43 (the pre-registration), 44 (round 1's record), 17 §3
 (the deflection cross-tab this round's hindsight probe extends).*
@@ -155,9 +158,8 @@ diagnostic beside the red-zone and late-down gaps, never a ledger row.
 
 Appended 2026-08-27, after the run. §§1–3 and §5–6 were not edited; §4 carries
 only the Part A fill this section's own instruction required. Full record:
-`docs/research/46-dropped-pick-round2.md`; results file
-`docs/research/results-2026-08-27-exp2.md`; log
-`docs/research/log-2026-08-27-dropped-picks.md` under "Round 2".
+`docs/research/46-dropped-pick-round2.md`; the round's results file and
+session log are not part of the public record.
 
 | Gate | Statistic | Verdict |
 |---|---|---|
