@@ -25,3 +25,4 @@ research/outputs/
 # Local session state
 .remember/
 CLAUDE.local.md
+.claude/
