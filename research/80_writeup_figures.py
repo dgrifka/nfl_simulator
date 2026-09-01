@@ -2414,10 +2414,10 @@ def persistent_share() -> dict:
     fig, ax = new_figure(
         8.2,
         5.6,
-        title="The finish is the coin, the pressure is the skill",
+        title="Finishing the play is mostly random",
         subtitle=[
-            "The skill that forced the throw is kept exactly as earned. Only the catch-"
-            "or-drop of it is re-flipped,",
+            "The skill that forced the play is kept exactly as earned. Only its finish "
+            "is re-flipped,",
             "and this is how little of that finish is the unit — on two measurements the "
             "labels tell apart.",
         ],
@@ -2483,6 +2483,7 @@ def persistent_share() -> dict:
         fontsize=8,
         color=PALETTE["text_muted"],
     )
+    _align_title_with_ticks(fig, ax)
     name = finalize(fig, FIGURE_DIR / "20_persistent_share.png").name
     return {"file": name, "rows": rows}
 
