@@ -37,3 +37,29 @@ jobs:
       - name: Test
         # Network-dependent tests are marked `slow` and skipped in CI.
         run: uv run pytest -q -m "not slow"
+
+  safety:
+    # Public-safety gate. Mirrors .pre-commit-config.yaml so a clone that never
+    # ran `pre-commit install` is still caught here.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks scans history, not just the checked-out tree.
+          fetch-depth: 0
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # `if: always()` so a gitleaks finding does not hide a public-safety one;
+      # both reports are wanted in the same run.
+      - name: Public-safety gate
+        if: always()
+        # Identity patterns are untracked and absent in CI, so this is the
+        # generic pass only: credential markers and absolute home paths.
+        run: bash scripts/check_public_safe.sh --all
