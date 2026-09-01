@@ -81,24 +81,17 @@ SMALL_EVENTS_FOOTER = (
 
 
 def footer_lines(verdict, *, overtime: bool = True) -> list[str]:
-    """The muted asides every per-game figure carries, in one order everywhere.
+    """The muted asides a per-game figure carries. Empty since 2026-09-01.
 
-    Both are statements about what the figure is *not*: the overtime toss is in
-    this game and not in this ledger, and the other edition is an adjudication
-    of this game that this image is not showing. Built here rather than in each
-    figure so the four never drift into three different orders.
-
-    ``overtime=False`` drops the toss line for one caller. **The waterfall is
-    the only one that passes it** (the maintainer, 2026-08-30, document 60 §15): its
-    footer gained :data:`SMALL_EVENTS_FOOTER` this round, and a waterfall is
-    the one figure of the four that shows the ledger's rows themselves — a
-    reader looking at every priced event can see the toss is not among them.
-    The three share images keep the line, because document 16's rule is about
-    an image travelling on its own with no rows and no interval to read.
+    the maintainer's ruling (document 60 §18): the toss line and the other-edition line
+    leave every figure — the article carries both caveats in prose, and on the
+    images they read as clutter. The helper stays so the four call sites keep
+    one place to grow a line back from, and so the waterfall's
+    :data:`SMALL_EVENTS_FOOTER` — which is not this helper's — is unaffected.
+    ``overtime`` is kept for call-site compatibility and ignored.
     """
-    lines = [OVERTIME_FOOTER] if overtime and verdict.went_to_overtime else []
-    note = verdict.edition_note()
-    return lines + [note] if note else lines
+    del verdict, overtime
+    return []
 
 
 NOMINAL_COVERAGE = "89%"
@@ -1248,7 +1241,7 @@ def plot_bootstrap_distribution(
 
         caveat = ax.text(
             0,
-            -0.42,
+            -0.34,
             verdict.interval_note(coverage=coverage),
             # Down by the arrow band, exactly as the direction labels above it
             # are. Borrowing the room instead of making it lands the footnote on

@@ -1109,3 +1109,11 @@ grows only the deficit. `apply_watermark` returns the painted box.
 **Caveat:** `research/79_render_all.py`'s foreign-ink check still computes
 `stamp_box` without `image=` and must pass the pre-stamp image before the
 next corpus run, or it will measure the wrong corner.
+
+## §18 — the footer lines leave the figures (2026-09-01, the maintainer)
+
+`footer_lines` returns nothing: the overtime-toss caveat and the
+other-edition line leave all four per-game figures (the article carries both
+in prose). The distribution's interval footnote rises to close the gap.
+Reverses §15's narrow reading and document 16's on-figure reporting; the
+prose is the report now.

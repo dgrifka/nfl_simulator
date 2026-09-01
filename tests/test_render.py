@@ -322,10 +322,11 @@ def share_figures(game):
 
 
 @pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card"])
-def test_every_share_figure_says_the_toss_is_reported_not_neutralized(game, suffix):
+def test_no_share_figure_carries_the_toss_line(game, suffix):
+    """the maintainer 2026-09-01 (doc 60 §18): the toss caveat lives in prose now."""
     fig = share_figures(overtime(game))[suffix]
     text = " ".join(t.get_text() for t in fig.findobj(matplotlib.text.Text))
-    assert OVERTIME_FOOTER in text.replace("\n", " ")
+    assert OVERTIME_FOOTER not in text.replace("\n", " ")
 
 
 @pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card"])
@@ -350,14 +351,11 @@ def test_an_overtime_share_figure_is_the_size_a_regulation_one_is(game, suffix):
     assert list(share_figures(overtime(game))[suffix].get_size_inches()) == list(regulation)
 
 
-def test_the_card_puts_the_overtime_line_under_the_interval_line(game):
-    """The card's layout is frozen; this is the one line added to it."""
+def test_the_card_carries_no_overtime_line(game):
+    """Doc 60 §18: the card's footer is the interval line alone."""
     fig = share_figures(overtime(game))["card"]
     ax = fig.axes[0]
-    footer = next(t for t in ax.texts if t.get_text() == OVERTIME_FOOTER)
-    interval = next(t for t in ax.texts if "interval on" in t.get_text())
-    assert footer.get_position()[1] < interval.get_position()[1]
-    assert footer.get_fontsize() == interval.get_fontsize()
+    assert not [t for t in ax.texts if t.get_text() == OVERTIME_FOOTER]
 
 
 def test_the_article_file_is_named_for_the_figure_it_is_a_version_of(game):

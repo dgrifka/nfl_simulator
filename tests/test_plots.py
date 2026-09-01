@@ -1165,20 +1165,14 @@ def test_the_waterfall_names_its_ends_in_derek_s_wording():
     assert labels[-1].startswith("Expected")
 
 
-def test_footer_lines_can_be_asked_to_leave_the_overtime_toss_out():
-    """the maintainer 2026-08-30: the waterfall drops the toss line. Only the waterfall.
-
-    The three share images keep it — document 16's rule is about an image
-    travelling on its own with no rows and no interval beside it — so the
-    exclusion is a flag one caller passes rather than a line deleted from the
-    helper. `test_every_share_figure_says_the_toss_is_reported_not_neutralized`
-    in `test_render.py` is the other half of this.
-    """
+def test_footer_lines_are_empty_by_ruling():
+    """the maintainer 2026-09-01 (doc 60 §18): the toss line and the other-edition line
+    leave every figure — the article carries both caveats in prose."""
     from nfl_simulator.plots import footer_lines
 
     game = branded(went_to_overtime=True)
-    assert any("Went to overtime" in line for line in footer_lines(game))
-    assert not any("Went to overtime" in line for line in footer_lines(game, overtime=False))
+    assert footer_lines(game) == []
+    assert footer_lines(game, overtime=False) == []
 
 
 def test_an_overtime_waterfall_carries_no_overtime_footer():
@@ -2887,17 +2881,18 @@ def edition_figures(game):
 
 
 @pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
-def test_every_figure_carries_the_other_edition_as_one_muted_line(suffix):
+def test_no_figure_carries_the_other_edition_line(suffix):
+    """the maintainer 2026-09-01 (doc 60 §18): the cross-edition footer is gone."""
     _strict, full = strict_and_full()
-    assert "Strict edition:" in flat_text(edition_figures(full)[suffix])
+    assert "Strict edition:" not in flat_text(edition_figures(full)[suffix])
 
 
 @pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
-def test_every_figure_of_an_uncharted_game_says_there_is_only_one_edition(suffix):
+def test_no_figure_of_an_uncharted_game_carries_the_charting_note(suffix):
     from nfl_simulator.plots import CHARTING_NOTE
 
     early = verdict(game_id="2018_05_GB_DET", home_team="DET", away_team="GB", dtw_home=0.05)
-    assert CHARTING_NOTE in flat_text(edition_figures(early)[suffix])
+    assert CHARTING_NOTE not in flat_text(edition_figures(early)[suffix])
 
 
 @pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
