@@ -61,3 +61,120 @@ pointed at, never quoted**; everything else quotes freely.*
 | `research/` prose, throughout | T | low | Real NFL players are named in ~40 places — play descriptions, figure labels, worked examples. All are public play-by-play. Flagged only because checklist §5 reads literally as *"no personal names beyond the author's own handle"*, and a literal reading forbids them. The maintainer should either narrow §5's wording to coworkers and private individuals, or accept the names explicitly. |
 
 ---
+
+## Part 2 — the surviving documents
+
+The 71 KEEP/WIKI documents, `README.md` and the two licence files. Documents are
+where the P and T flags were expected to live: the research record was written
+for an audience of one, and this is the first read that asks whether every
+sentence works for an audience of everyone.
+
+### P — private or identifying
+
+| file:line | cat | sev | what and why |
+|---|---|---|---|
+| `docs/research/65-article-audit.md:500` | P | **high** | The line carries a full external URL whose **account segment is a personal handle of the maintainer's**, of the same form as an identifier checklist §1 forbids outright ("no usernames, emails …"). It is the **only** such URL in the surviving set — the other eight are nflverse, gitleaks, Creative Commons and an ESPN CDN path. `scripts/check_public_safe.sh --all` **exits 0 on this tree**, verified by running it, and the pre-commit hook passed on this document's own Part 1 commit: the built-in patterns match an e-mail address but not a bare handle. This is precisely the finding a regex cannot make and a reader can. |
+| `docs/research/65-article-audit.md:537` | P | med | Names a live public web domain belonging to the maintainer's sibling project, and confirms in the same row what that site is. Together with the 32 in-code references above it makes the link between this repo and the private sibling explicit and followable, which is the connection `CLAUDE.md`'s alias convention exists to prevent. |
+| docs 00:24, 05:197, 26:515, 28:301, 31:281, 51:154, 56:36, 57:53, 57:460 | P | med | Nine sites refer to the maintainer with a gendered pronoun. The name itself was scrubbed to "the maintainer" everywhere; the pronouns were not, so the substitution still discloses something about a specific person on every one of these lines. Nine sites, one substitution each. |
+| docs 03:203, 05b:181, 43:187, 57:130, 65:519 | P | low | "on this laptop", "on the laptop", "on this machine" as the unit of a runtime claim. Same class as `live.py:33` in Part 1, and worth one ruling covering both halves. |
+| `docs/research/05b-fg-model-foundations.md:547`, `41` (six sites), `42` (three), `60:982`, `60:1006` | P | med | The private sibling project again, in prose. `60:982` is the sharpest of these: it names the sibling **and** the file, function and argument value inside it that a decision was copied from. |
+
+### C — wrong or stale claims
+
+| file:line | cat | sev | what and why |
+|---|---|---|---|
+| 61 files, 112 citation lines, 65 distinct SHAs | C | **high** | Every pre-registration in the record cites the commit it was fixed at. **Not one of the 65 resolves** — checked with `git cat-file -e` against all 374 commits of this history. All 65 appear in the untracked backup commit map (337 rows), so they are pre-rewrite hashes the history rewrite left behind. That matters more than a broken link: nine documents explicitly invite the reader to *audit goalpost integrity by commit archaeology* (03:5, 06:6, 08:7, 11:8, 13:378, 14:459, 16:7, 35:7, 36:7, 45:5 and 45:11, 47:5), and doc 13 §7 discloses a commit-ordering blemish specifically so an auditor running `git log --diff-filter=A` would find it. In the public repo none of that is checkable, and the project's central claim about its own honesty is the thing that stops being verifiable. The fix is mechanical — the map is a complete old→new translation — but nothing has applied it. |
+| docs 08:641, 11:380, 17:208, 22:249, 58:72, 58:96, 59:51 | C | med | Seven references to `CLAUDE.md`, which drops at the rewrite. Two are load-bearing rather than incidental: 58:96 and 59:51 cite it as *the* place both editions are named, so a reader chasing the edition definitions is sent to a file that is not there. |
+| `docs/research/52-amendment-a3-prereg.md:96` | C | med | §4's edition table names the second edition **"Hands-on-the-ball (v2.0)"** with product label `v2.0`. Ruling R-4 named it **Full** with the string `"full"`, which is what the code, the figures and docs 58–68 carry. §4 sits *above* line 189's "everything below this line was written before the ruling", so nothing marks it as superseded — it reads as current and is wrong. |
+| docs 28:174, 35:9, 41:282, 51:102, 52:172 | C | med | Five sentences begin with a lower-case "the maintainer" immediately after a full stop or a bold marker. Each is a visible seam left by the substitution that replaced a personal name, and each points a reader at exactly where the name used to be. |
+| `docs/research/14-special-teams.md:186-187` vs `:654` | C | med | §4 states that **not one** punt description in the sample mentions a bounce, and builds the "unresolvable by construction" verdict partly on it. §10(b) states that **exactly one** does. Both are in the same document and only one can be right. |
+| `docs/research/08-sequencing-luck.md:788` | C | med | "Document 09's sequencing finding is untouched" — the S1/S2 sequencing finding is document **08 §9**'s own. Line 779, nine lines earlier, cites it correctly. |
+| docs 41:27, 41:282, 42:445, 51:201, 51:347, 60:17 | C | med | Six sites state that the brand handle on shipped images is an unassigned placeholder; 41:282 asserts it "on all fifteen images". The code has stamped a real handle since `style.py:64`, pinned by a test. These are claims about what the published PNGs say, and they are false. |
+| `docs/writeup/figures/CAPTIONS.md` (the `13_epa_to_points.png` line) | C | med | Prints r² = 0.991 where the figure itself prints 0.992 and doc 64 §10 records 0.991 as a rounding error. Doc 65 §8 raised this as A-1 and it is still open. `CAPTIONS.md` is generated, so the fix belongs in `research/80_writeup_figures.py`. |
+| `docs/research/64-one-simulator-summary.md:348` | C | low | Spells a kicker's surname without its diacritic where 64:474, 64:498 and `CAPTIONS.md:16` all carry it, and where `research/80_writeup_figures.py:75` records a deliberate decision to spell it as he does. One of the four is wrong. |
+| `docs/research/42-figure-workshop.md:445` | C | low | "All four remain out by decision" introduces a list of five items. |
+
+### T — tone and content
+
+| file:line | cat | sev | what and why |
+|---|---|---|---|
+| `docs/research/65-article-audit.md`, whole file | T | med | 651 lines whose subject is a document that does not survive (see R-1). Its method is adversarial by design and it works — but read without the article, the long verbatim quotations of the article's eight WRONG and ten MISLEADING claims are the only version of those sentences a public reader ever sees, attributed to this project and with no corrected text beside them. |
+| `docs/research/09-coinflip-candidates.md:410` | T | low | "every football-analytics writer has said so at some point" — a broad claim about a named professional community, made in passing and without a citation, in a document that cites everything else. |
+| `docs/research/60-figure-round6.md`, whole file | T | low | 1,124 lines of figure-round minutiae, twelve rounds deep, including pixel measurements and label-collision arithmetic. Nothing in it is wrong or private. It is flagged only because it is the longest document in the record and the least likely to reward a public reader, and because §14–§19 are dated appendices in a document whose title says "round 6". |
+
+### R — files whose existence is worth reconsidering
+
+| file | cat | sev | the case, in two sentences |
+|---|---|---|---|
+| `docs/research/65-article-audit.md` | R | **med** | It is a 651-line adversarial audit of `docs/writeup/community-writeup.md`, which doc 70 §2 puts in the DROP set — so the public repo would ship the audit, and all 24 of the article's figures as KEEP files, but not the article. A reader finds a meticulous list of errors in a document they cannot read, quoting sentences that exist nowhere else in the repository; either the article should survive with it, or the audit should leave with the article, or it should be rewritten as a defect register that does not depend on quoting its subject. |
+| `docs/research/60-figure-round6.md` | R | low | Twelve figure rounds and six dated appendices in one 1,124-line file, most of it label geometry that no longer describes the shipped code. Worth considering whether the four rulings a reader would actually cite could be lifted into one short record and the rest dropped, in the way doc 71 already ruled the research scripts stay whole. |
+
+---
+
+## Closing
+
+### Flag counts
+
+| | high | med | low | **total** |
+|---|---:|---:|---:|---:|
+| **P** — private or identifying | 1 | 6 | 3 | **10** |
+| **C** — wrong or stale | 5 | 11 | 5 | **21** |
+| **T** — tone or content | 0 | 1 | 3 | **4** |
+| **R** — reconsider the file | 0 | 1 | 1 | **2** |
+| **total** | **6** | **19** | **12** | **37** |
+
+### The files carrying the most flags
+
+| file | flags | shape of them |
+|---|---:|---|
+| `src/nfl_simulator/style.py` | 6 | the sibling-project provenance, the handle that contradicts its own docstring twice, a citation to tooling outside the repo, a stale return annotation |
+| `docs/research/65-article-audit.md` | 4 | the only personal handle in the surviving set, a sibling-project domain, and the R-class question about the whole file |
+| `research/` scripts (7 files) | 7 | six `realized=` runtime breaks and one dead ledger column — one defect, seven sites |
+| `docs/research/41-brand-figures.md` | 4 | six sibling-project references, and two of the six stale `@[TBD]` claims |
+| `docs/research/52-amendment-a3-prereg.md` | 2 | the superseded edition names, and a lower-case substitution seam |
+
+Three findings are not really *file* flags at all, and they are the ones that
+matter most: the 65 unresolvable SHAs are spread across 61 files, the 1,277
+British spellings across 71, and the 54 dangling handoff references across 31.
+Each is one decision, applied everywhere.
+
+### Every HIGH flag
+
+1. **65 commit SHAs, none of which resolve** (61 files, 112 lines). The history
+   rewrite orphaned every pre-registration citation. Nine documents invite the
+   reader to check goalpost integrity by commit archaeology; in the public repo
+   they cannot. The old→new map exists and is untracked.
+2. **`LuckEvent(realized=…)` breaks six research scripts at runtime**, plus a
+   seventh selecting a ledger column that no longer exists. Verified by
+   execution. All 101 scripts ship, so seven of them fail on first run.
+3. **The README quickstart cannot be followed on a fresh clone.** Its second
+   command reads two artifacts no quickstart step produces; two later steps need
+   three more. This is checklist §6's fresh-clone gate, failing.
+4. **The public-safety CI job fails on the first push after the rewrite.** All
+   eight `.public-safety-allow` entries point at DROP-class files, and `--all`
+   treats an unmatched entry as stale and exits 1.
+5. **Checklist §5's American-English grep returns 1,277 hits, not nothing** —
+   352 of them code identifiers, including a public API parameter and a
+   coordinate name inside every saved trace. The record schedules this scrub as
+   outstanding; the only file that records it *failing* is DROP-class.
+6. **One line carries an external URL whose account segment is a personal handle
+   of the maintainer's** (`65-article-audit.md:500`). The only one in the
+   surviving set, and the automated gate passes on it — verified by running the
+   scanner and by this document's own Part 1 commit going through the hook
+   clean.
+
+### The overall read, in five sentences
+
+This record is publishable after the flags are fixed, and nothing structural
+bothers me: the reasoning is sound, the failures are reported as loudly as the
+successes, and the discipline the documents claim for themselves is visible on
+every page I read. What is not yet true is the repository's account of itself —
+five of the six high flags are places where a file states something about the
+project that stopped being so, and the checklist is one of them, asserting a
+spelling pass that has not run. The single genuinely private finding is one
+personal handle in one line, which the mechanical gate cannot see and which a
+reader would find in a minute. The one judgment call I would not make for the
+maintainer is doc 65: shipping a 651-line audit of a document that does not
+ship, alongside that document's figures, is the only choice here that a careful
+outside reader would find strange rather than merely stale. Fix the six, rule on
+doc 65, and the rest is a good day's tidying.
