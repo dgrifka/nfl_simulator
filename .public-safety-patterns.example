@@ -1,0 +1,19 @@
+# Extended patterns for scripts/check_public_safe.sh.
+#
+# One POSIX extended regex per line. Blank lines and lines starting with `#`
+# are skipped. Every tracked or staged file is searched for every pattern,
+# including the check script itself.
+#
+# This file is the tracked template and holds placeholders only. Copy it to
+# `.public-safety-patterns` -- gitignored, never committed -- and replace each
+# placeholder with the real string:
+#
+#     cp .public-safety-patterns.example .public-safety-patterns
+#
+# Keep the real values out of every tracked file, this template included.
+# Matching is case-sensitive; add a case-insensitive alternation, or a
+# character class such as [Nn]ame, where a document might vary the casing.
+
+<author-first-name>
+<private-sibling-repo-name>
+<personal-email-localpart>
