@@ -50,7 +50,7 @@ from nfl_simulator.components import (  # noqa: E402
 )
 
 # `SIM_COLUMNS` and `load_model` moved into the package in Round E so the
-# installed wheel can read them; they are re-exported here under the names ten
+# installed wheel can read them; they are re-exported here under the names six
 # research scripts already import, so the correction has one home.
 from nfl_simulator.fg_model import FieldGoalModel, sanitize_weather  # noqa: E402
 from nfl_simulator.fg_model import load_fitted_model as load_model  # noqa: E402,F401

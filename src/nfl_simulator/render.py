@@ -309,7 +309,7 @@ class Sources:
             raise SystemExit(
                 f"{game_id} is not in {artifact}."
                 + (
-                    "  Run `uv run python research/76_full_edition_summary.py` to build it."
+                    "  Run `uv run python research/84_full_edition_v14.py` to build it."
                     if edition == "full"
                     else ""
                 )

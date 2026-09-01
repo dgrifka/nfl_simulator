@@ -326,7 +326,7 @@ class FieldGoalModel:
         if not trace_path.exists():
             raise FileNotFoundError(
                 f"no fitted field-goal posterior at {trace_path} — "
-                "run `uv run python research/07_fg_model.py`"
+                "run `uv run python research/82_fg_v14_refit.py`"
             )
 
         posterior = az.from_netcdf(trace_path)["posterior"]

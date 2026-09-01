@@ -54,7 +54,7 @@ class TestSimulationColumns:
     def test_the_research_script_re_exports_the_same_object(self):
         """Move, not copy — `research/44` keeps its name and imports the list.
 
-        Ten research scripts read `44_read_side_fix.SIM_COLUMNS` and
+        Six research scripts read `44_read_side_fix.SIM_COLUMNS` and
         `.load_model`, and document 30's correction is allowed to exist exactly
         once. So the file stays where those scripts import it from and its two
         production names are now the package's own objects, not second copies.

@@ -112,6 +112,7 @@ Pull the data, build the artifacts, then render a game:
 
 ```bash
 uv run python -m nfl_simulator.ingest      # ten seasons of play-by-play; cached
+uv run python research/26_overtime.py      # the overtime-toss sidebar artifact
 uv run python research/82_fg_v14_refit.py  # the make-probability posterior
 uv run python research/83_simulator_v14.py # adjudications, 2016–2025
 uv run python research/84_full_edition_v14.py  # adds the charted components, 2022–2025
