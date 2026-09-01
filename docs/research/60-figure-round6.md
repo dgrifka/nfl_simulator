@@ -298,11 +298,10 @@ call*).
 
 ## 8. Round 7 — the maintainer's notes on these figures
 
-*Appended 2026-08-28, on `fix/figure-round-7` off `main` at `27d29e8`. Handoff
-`handoff-2026-08-28-figures-r7.md`, results `results-2026-08-28-exp11.md`, log
-`log-2026-08-28-figures-r7.md`. Five settled changes from a Fable 5 chat after
-the maintainer read the round-6 PNGs. No statistic moves: all nine renders replay at
-`0.00e+00` before and after. 751 → **784 tests**, ruff clean.*
+*Appended 2026-08-28, on `fix/figure-round-7` off `main` at `27d29e8`. Five
+settled changes from a Fable 5 chat after the maintainer read the round-6
+PNGs. No statistic moves: all nine renders replay at `0.00e+00` before and
+after. 751 → **784 tests**, ruff clean.*
 
 ### 8a. What a reader sees now
 
@@ -397,12 +396,11 @@ encoding on the anchor bars. The anchors remain 1.4× the bar height and labelle
 ## 9. Round 8 — the annotation band, and the cap on the page
 
 The maintainer's notes on `LAC_HOU_12-32--52-48_full_dtw.png`, executed on
-`fix/figure-round-8` from handoff `handoff-2026-08-28-figures-r8.md`. Two
-things: the nine renders move onto document 62's capped Full summary and the
-waterfall learns to draw the cap, and the Deserve-to-Win figure's crowded strip
-becomes one band. Presentation only — hard constraint 1 was again that no
-statistic move, and both editions replay at **0.00e+00** on all nine renders
-after every part.
+`fix/figure-round-8`. Two things: the nine renders move onto document 62's
+capped Full summary and the waterfall learns to draw the cap, and the
+Deserve-to-Win figure's crowded strip becomes one band. Presentation only —
+hard constraint 1 was again that no statistic move, and both editions replay
+at **0.00e+00** on all nine renders after every part.
 
 ### 9a. What a reader sees now
 
@@ -537,12 +535,12 @@ lower-case rows. Parked.
 
 ## 10. Round 9 — the arrow floor, the cap's case, and the 3,900-game read
 
-The maintainer's notes after the round-8 renders, executed on `fix/figure-round-9` from
-`handoff-2026-08-28-figures-r9.md`. Two one-line rule changes, both of them
-§9e's parked items, and one measurement round that rendered every game in both
-editions for the first time. Presentation only — hard constraint 1 was again
-that no statistic move, and both editions replay at **0.00e+00** on all nine
-renders after every part, and on all 3,900 game-editions in Part C.
+The maintainer's notes after the round-8 renders, executed on
+`fix/figure-round-9`. Two one-line rule changes, both of them §9e's parked
+items, and one measurement round that rendered every game in both editions for
+the first time. Presentation only — hard constraint 1 was again that no
+statistic move, and both editions replay at **0.00e+00** on all nine renders
+after every part, and on all 3,900 game-editions in Part C.
 
 ### 10a. What a reader sees now
 
@@ -613,10 +611,10 @@ has: its own zero rule.
 ## 11. Round 10 — the name, the corner, the band, the shield and the heap
 
 The maintainer's five settled fixes after reading document 63, executed on
-`fix/figure-round-10` from `handoff-2026-08-28-figures-r10.md`, with the
-whole-corpus re-run as the verification against eight pre-registered numbers.
-Presentation only — hard constraint 1 was again that no statistic move, and all
-**3,900 game-editions replay at 0.00e+00** after every part.
+`fix/figure-round-10`, with the whole-corpus re-run as the verification
+against eight pre-registered numbers. Presentation only — hard constraint 1
+was again that no statistic move, and all **3,900 game-editions replay at
+0.00e+00** after every part.
 
 ### 11a. What a reader sees now
 
@@ -764,9 +762,8 @@ three with their costs.
 
 ## 12. Round 11 — a floor the eye can see, and the whole tail read
 
-`fix/figure-round-11`, from `handoff-2026-08-29-figures-r11.md`. Two things: the
-draw floor became a share of the axis, and the tail pick list was opened in full
-rather than sampled.
+`fix/figure-round-11`. Two things: the draw floor became a share of the axis,
+and the tail pick list was opened in full rather than sampled.
 
 ### 12a. The rule
 
@@ -830,9 +827,9 @@ shades of one hue collapsing the side tints, the legend and the key.
 
 ## 13. Round 12 — the club a game was played by, and two floors on the axis
 
-`fix/figure-round-12`, from `handoff-2026-08-29-figures-r12.md`. The last figure
-round before the write-up. Four of document 63 §7d's six new classes are closed
-and two are parked; the corpus is the verification.
+`fix/figure-round-12`. The last figure round before the write-up. Four of
+document 63 §7d's six new classes are closed and two are parked; the corpus is
+the verification.
 
 ### 13a. N6 — the club a game was played by
 
