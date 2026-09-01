@@ -22,6 +22,18 @@ from nfl_simulator import fg_model, ingest, paths
 RESEARCH_DIR = pathlib.Path(__file__).resolve().parents[1] / "research"
 
 
+@pytest.fixture(autouse=True)
+def no_inherited_overrides(monkeypatch):
+    """Every test here sets its own artifact directory, or asserts there is none.
+
+    Without this, running the suite with `NFL_SIM_ARTIFACT_DIR` exported — which
+    is how the live path is exercised — hands the "no artifact directory" tests
+    a real one, and they pass by finding what they are asserting is absent.
+    """
+    monkeypatch.delenv(paths.DATA_DIR_ENV, raising=False)
+    monkeypatch.delenv(paths.ARTIFACT_DIR_ENV, raising=False)
+
+
 def _research_read_side():
     """`research/44_read_side_fix.py`, imported the way its callers import it."""
     if not (RESEARCH_DIR / "44_read_side_fix.py").exists():
