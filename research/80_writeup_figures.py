@@ -133,6 +133,12 @@ ARTICLE_DTW = ("05_den_was_2025_wk13_dtw_full", "2025_13_DEN_WAS", "full")
 # land on a number a numbered document already published. These are those
 # numbers, with their document, and `check` raises rather than warns.
 DOC_CHECKS = {
+    "worthy_behind_pct": (39.9, 0.05),
+    "worthy_short_pct": (41.7, 0.05),
+    "worthy_medium_pct": (49.7, 0.05),
+    "worthy_deep_pct": (56.6, 0.05),
+    "worthy_hit_pct": (53.0, 0.05),
+    "worthy_clean_pct": (47.6, 0.05),
     "den_2025_worthy": (21, 0.001),
     "den_2025_caught": (8, 0.001),
     # document 02 §1, the pooled recovery-rate split half
@@ -1174,6 +1180,111 @@ def refused_floors() -> dict:
 # median, with ties broken by the most interception-worthy throws faced. The
 # tie-break is what keeps a two-throw season out of the picture.
 SHRINKAGE_ROWS = 5
+
+
+def interceptable_context_bars() -> str:
+    """Figure 24 — pick rates on interceptable throws, by the throw's context.
+
+    The fumble chart's mirror (the maintainer 2026-08-31): the same raw-rate bars, on
+    the population the dropped-pick model prices, showing why the model
+    carries per-throw context covariates. Depth and a hit-as-thrown split are
+    the two legible ones; the model also reads rusher count, down-and-distance,
+    field position and win probability.
+    """
+    from nfl_simulator.dropped_picks import worthy_throw_frame
+    from nfl_simulator.render import _simulation_context
+
+    context = _simulation_context()
+    worthy = worthy_throw_frame(context["pbp"], context["ftn"])
+    worthy = worthy.with_columns(
+        pl.when(pl.col("air_yards") < 0)
+        .then(pl.lit("behind the line"))
+        .when(pl.col("air_yards") < 10)
+        .then(pl.lit("a short throw (0-9 yd)"))
+        .when(pl.col("air_yards") < 20)
+        .then(pl.lit("a medium throw (10-19 yd)"))
+        .otherwise(pl.lit("a deep throw (20+ yd)"))
+        .alias("bucket")
+    )
+    depth = {
+        row[0]: (row[1], row[2])
+        for row in worthy.group_by("bucket")
+        .agg(pl.len(), pl.col("interception").mean() * 100)
+        .iter_rows()
+    }
+    hit = {
+        bool(row[0]): (row[1], row[2])
+        for row in worthy.group_by("qb_hit")
+        .agg(pl.len(), pl.col("interception").mean() * 100)
+        .iter_rows()
+    }
+    rows = [
+        ("thrown as the QB is hit", *hit[True]),
+        ("a deep throw (20+ yd)", *depth["a deep throw (20+ yd)"]),
+        ("a medium throw (10-19 yd)", *depth["a medium throw (10-19 yd)"]),
+        ("a clean pocket", *hit[False]),
+        ("a short throw (0-9 yd)", *depth["a short throw (0-9 yd)"]),
+        ("behind the line", *depth["behind the line"]),
+    ]
+    check("worthy_behind_pct", round(depth["behind the line"][1], 1))
+    check("worthy_short_pct", round(depth["a short throw (0-9 yd)"][1], 1))
+    check("worthy_medium_pct", round(depth["a medium throw (10-19 yd)"][1], 1))
+    check("worthy_deep_pct", round(depth["a deep throw (20+ yd)"][1], 1))
+    check("worthy_hit_pct", round(hit[True][1], 1))
+    check("worthy_clean_pct", round(hit[False][1], 1))
+    league = float(worthy["interception"].mean()) * 100
+
+    fig, ax = new_figure(
+        9.4,
+        5.4,
+        title="Not all interceptable throws are the same",
+        subtitle=[
+            "How often an interceptable throw is actually picked, by what the throw was. "
+            "2022-2025 charted passes.",
+            "The model reads this context on every throw; the two overlapping splits here "
+            "are the legible ones.",
+        ],
+    )
+    positions = np.arange(len(rows))
+    ax.barh(positions, [r[2] for r in rows], height=0.62, color=PALETTE["anchor"], alpha=0.85)
+    ax.set_yticks(positions)
+    ax.set_yticklabels([r[0] for r in rows], fontsize=9.5)
+    ax.set_xlim(0, 68)
+    ax.set_xlabel("picked (%)", fontsize=9, color=PALETTE["text_muted"])
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _p: f"{v:g}%"))
+    ax.grid(axis="x", color=PALETTE["grid"], linestyle="--", alpha=0.6, linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.axvline(league, color=PALETTE["bad"], linewidth=1.4, linestyle="--", zorder=2)
+    ax.text(
+        league + 0.8,
+        -0.62,
+        f"all interceptable throws: {league:.0f}%",
+        fontsize=9,
+        color=PALETTE["bad"],
+    )
+    for position, row in zip(positions, rows, strict=True):
+        ax.text(
+            row[2] + 1.2,
+            position,
+            f"{row[2]:.0f}%",
+            va="center",
+            fontsize=10,
+            fontweight="bold",
+            color=PALETTE["text"],
+        )
+        ax.text(
+            2.0,
+            position,
+            f"{row[1]:,} throws",
+            va="center",
+            fontsize=8.5,
+            color="white",
+        )
+    ax.invert_yaxis()
+    for side in ("bottom", "left"):
+        ax.spines[side].set_visible(False)
+    _align_title_with_ticks(fig, ax)
+    return finalize(fig, FIGURE_DIR / "24_interceptable_context.png").name
 
 
 def denver_2025_followup() -> dict:
@@ -3089,6 +3200,11 @@ CAPTIONS = {
         "Where 160,000 comes from: one posterior draw's 800 replays, then ten draws each "
         "outlined separately, then all 200 — the histogram the product ships."
     ),
+    "24_interceptable_context.png": (
+        "Pick rates on interceptable throws rise from 40% behind the line to 57% deep, "
+        "and a throw made while the QB is hit is picked more often — the context the "
+        "model reads on every throw."
+    ),
     "22_defense_sampling.png": (
         "Two defense-seasons' catch-rate curves on one axis — Denver 2024's 13 of 17 and "
         "the Jets' 2025 none of 9 — with the draws a replay takes ticked beneath each. "
@@ -3228,6 +3344,7 @@ def main() -> None:
     print("  14 refused floors   ", refused_floors())
     print("  15 defense shrinkage", defence_shrinkage())
     print("  den 2025 follow-up  ", denver_2025_followup())
+    print("  24 interceptable ctx", interceptable_context_bars())
     print("  16 with and without ", den_was_with_without(computed["walkthrough"]))
     print("  17 fumble retention ", fumble_retention_bars())
     print("  18 kicker curves    ", kicker_prior_posterior())

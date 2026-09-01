@@ -19,6 +19,7 @@
 - **`21_bootstrap_buildup.png`** — Where 160,000 comes from: one posterior draw's 800 replays, then ten draws each outlined separately, then all 200 — the histogram the product ships.
 - **`22_defense_sampling.png`** — Two defense-seasons' catch-rate curves on one axis — Denver 2024's 13 of 17 and the Jets' 2025 none of 9 — with the draws a replay takes ticked beneath each. A strong unit keeps its edge in every re-run.
 - **`23_corps_prior_posterior.png`** — The offense's mirror of the kicker figure: Jacksonville's 2025 receiving corps dropped 40 of 420 catchable balls, 9.52%, and the model puts them at 6.34% against a league rate of 5.14% on those same targets.
+- **`24_interceptable_context.png`** — Pick rates on interceptable throws rise from 40% behind the line to 57% deep, and a throw made while the QB is hit is picked more often — the context the model reads on every throw.
 - **`formula_01_rule.png`** — The neutralization rule, term by term.
 - **`formula_02_points.png`** — EPA to points of margin, and the deserve-to-win share.
 - **`formula_03_fg.png`** — The field-goal make model, every covariate labeled — elevation included since v1.4.
