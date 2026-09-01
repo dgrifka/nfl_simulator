@@ -1,7 +1,6 @@
 # 37 — The bootstrap distribution figure
 
-*Written 2026-08-23. Product-layer round 2, avenue 1 of the queue in
-`handoff-2026-08-23.md` §3. Production code:
+*Written 2026-08-23. Product-layer round 2, avenue 1. Production code:
 `src/nfl_simulator/plots.py`, tests `tests/test_plots.py` (37 of them, written
 first). Figure driver: `research/54_bootstrap_figures.py`, outputs
 `research/outputs/54_bootstrap_<game_id>.png` and
@@ -87,11 +86,11 @@ contrast all PASS. Both fills carry a legend naming the team, so identity is
 never colour alone; every rule and label is ink rather than a series colour.
 PNG for print — no hover layer, no dark mode, matching document 04's precedent.
 
-## 5. Correction to the handoff's interval caveat
+## 5. Correction to the round's brief on the interval caveat
 
-`handoff-2026-08-23.md` §1 states the caveat as *"the bootstrap's nominal 97%
-interval is an 89% interval on non-degenerate games."* **That is backwards, and
-the 97% is superseded.** The committed record says:
+The maintainer's brief for this round stated the caveat as *"the bootstrap's
+nominal 97% interval is an 89% interval on non-degenerate games."* **That is
+backwards, and the 97% is superseded.** The committed record says:
 
 - The interval is **nominally 89%** (document 03's 5.5 / 94.5 convention;
   `ETI_LOW`, `ETI_HIGH` in `simulator.py`).
@@ -107,7 +106,7 @@ the 97% is superseded.** The committed record says:
   interval collapses to a point; those get a different sentence entirely, with
   no coverage figure in it.
 
-The module quotes the corrected pair. Nothing shipped on the handoff's wording.
+The module quotes the corrected pair. Nothing shipped on the brief's wording.
 
 ## 6. Reproduction of document 33's conventions
 

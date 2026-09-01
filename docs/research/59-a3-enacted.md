@@ -188,6 +188,7 @@ every run.
 
 **What this round deliberately did not do:** render anything (figure round 6),
 update the docx (rounds 4–8), draft the community write-up, or run the spelling
-and publication scrub (`docs/pre-publication-checklist.md` §5 — `defence_season`
-and similar identifiers are renamed there, not here, so the audit scripts keep
-reproducing).
+and publication scrub. That scrub's standing convention is American English
+throughout tracked files, **code identifiers included** — so `defence_season`
+and similar are renamed there and not here, which is what keeps the audit
+scripts reproducing until then.

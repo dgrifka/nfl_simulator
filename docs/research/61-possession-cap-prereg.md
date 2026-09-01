@@ -248,5 +248,5 @@ document 62 rather than smoothed over:
 
 §4's pre-registered M-2 statistic was kept and reported first; a second
 statistic was added beside it because the first is nearly blind to what the cap
-does inside the bootstrap, and the addition is named as an addition in §4, in
-document 62 §2, and in `log-2026-08-28-possession-cap.md`.
+does inside the bootstrap, and the addition is named as an addition in §4 and
+in document 62 §2.

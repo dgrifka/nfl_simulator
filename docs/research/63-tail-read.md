@@ -157,8 +157,7 @@ protan gap.
 
 ## 6. After round 10 (2026-08-29)
 
-`fix/figure-round-10`, from `handoff-2026-08-28-figures-r10.md`. The corpus was
-re-rendered on the round's code — 15,600 PNGs, 3,900 game-editions, 34.9 min on
+`fix/figure-round-10`. The corpus was re-rendered on the round's code — 15,600 PNGs, 3,900 game-editions, 34.9 min on
 12 workers, worst replay gap `0.00e+00`. Document 60 §11 is the round's record;
 this section is what §3's list looks like after it.
 
@@ -233,10 +232,10 @@ unread PNGs from round 9 are now superseded by this round's re-render.
 
 ## 7. The full tail read after round 11 (2026-08-29)
 
-`fix/figure-round-11`, from `handoff-2026-08-29-figures-r11.md`, after Part A
-made the draw floor a share of the axis. The corpus was re-rendered from an
-empty `research/outputs/all/` and an empty checkpoint: **15,600 PNGs in 34.7
-minutes on 12 workers, worst replay gap `0.00e+00`**.
+`fix/figure-round-11`, after Part A made the draw floor a share of the axis.
+The corpus was re-rendered from an empty `research/outputs/all/` and an empty
+checkpoint: **15,600 PNGs in 34.7 minutes on 12 workers, worst replay gap
+`0.00e+00`**.
 
 ### 7a. What was opened
 
@@ -339,8 +338,8 @@ else could we try" in a later round.
 
 ## 9. After round 12 (2026-08-29)
 
-`fix/figure-round-12`, from `handoff-2026-08-29-figures-r12.md`. The corpus was
-re-rendered from an empty `research/outputs/all/` and an empty checkpoint:
+`fix/figure-round-12`. The corpus was re-rendered from an empty
+`research/outputs/all/` and an empty checkpoint:
 **15,600 PNGs in 73.8 minutes on 12 workers, worst replay gap `0.00e+00`**.
 Document 60 §13 is the round's record; this section is what §7d's list looks
 like after it.

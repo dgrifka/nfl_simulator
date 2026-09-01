@@ -1,10 +1,13 @@
 # 47 — Dropped-pick study, round 3: rulings, game-clustering check, diagnostic
 
-*Written 2026-08-27 in a Fable 5 brainstorm after reading
-`results-2026-08-27-exp2.md` and document 46, **before any fit**. Two
-rulings by the maintainer on round 2's stop-and-ask items, one robustness check on
-the finding, and the reported diagnostic document 32 §4 sanctioned. Document
-32's closure is untouched; nothing enters the ledger.*
+*Written 2026-08-27 in a Fable 5 brainstorm after reading round 2's results
+and document 46, and **before any fit** — both orderings checkable in
+`git log --diff-filter=A`, which has document 46 landing before this document
+and this document before `research/66_dropped_pick_game_effect.py`, the first
+of round 3's fitting scripts. Two rulings by the maintainer on round 2's
+stop-and-ask items, one robustness check on the finding, and the reported
+diagnostic document 32 §4 sanctioned. Document 32's closure is untouched;
+nothing enters the ledger.*
 
 *Inputs: documents 43, 45, 46 (the study so far), 32 §4 (where the
 diagnostic lives), 05 §3 (reported separately, never as a ledger row).*
@@ -135,7 +138,7 @@ Round 3 ran 2026-08-27 on `docs/dropped-pick-confounds`. Full record: document
 | A — rulings recorded | R-1 and R-2 carried into documents 43 §7 and 46 §4/§7, and the two §8 register rows they close | `d9b098b` |
 | B — game-clustering check | **§2 row 1 landed.** `σ_d` 5.83 pp [1.99, 8.88], upper clears 5.920 pp; `σ_g` 8.53 pp [2.45, 13.22]; Gate C-1 PASS (0 divergences, 0 of 1,461 over a bar). R-2's wording stands | `410f588` |
 | C — the diagnostic | 2,278 game-team rows; all six bin cells above the 30-per-branch floor, every swing negative; median `fortune_epa` +0.00, 89% [−3.32, +3.70], 10.8% at or over one full pick | `4ee8c46` |
-| D — the record | Document 48, `results-2026-08-27-exp3b.md`, hypothesis queue | this commit |
+| D — the record | Document 48, and the hypothesis queue | this commit |
 
 **One deviation, disclosed in document 48 §6:** §3's imputation instruction
 assumed `pass_location` was the only null on the 28 dropped rows. It is not —

@@ -76,19 +76,19 @@ write-up.
 ## 5. Not in this round, deliberately
 
 Product rendering of the editions (figure round 6); the docx update
-(rounds 4–8); the community write-up; the spelling/publication scrub
-(`docs/pre-publication-checklist.md` §5 — note `defence_season` and
-similar identifiers are renamed then, not now, so the audit scripts keep
-reproducing).
+(rounds 4–8); the community write-up; the spelling/publication scrub. That
+scrub's standing convention is American English throughout tracked files,
+**code identifiers included** — so `defence_season` and similar are renamed
+there and not now, which is what keeps the audit scripts reproducing until
+then.
 
 ---
 
 ## 6. Outcome
 
 **Round 8 ran 2026-08-28 on `feat/dropped-pick-variant`, and everything §4
-listed shipped.** The record is **document 59**; the results file is
-`results-2026-08-28-exp8.md`; the log is `log-2026-08-27-dropped-picks.md`
-under "Round 8". Still **unmerged** — the maintainer merges.
+listed shipped.** The record is **document 59**. Still **unmerged** — the
+maintainer merges.
 
 - **The enactment.** Document 52 §3's preamble carries R-4's wording with the
   ruling quoted above it; §8 carries the enactment block and this round's

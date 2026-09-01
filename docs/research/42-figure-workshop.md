@@ -2,11 +2,9 @@
 
 **Date:** 2026-08-26
 **Branch:** `feat/product-bootstrap-plot`
-**Handoff:** `docs/research/handoff-2026-08-26-round2.md`
 **Scripts:** `research/59_dtw_variants.py`, `research/60_matchup_colours.py`,
 `research/58_brand_figures.py` (updated)
 **Code:** `src/nfl_simulator/plots.py`, `render.py`, `teams.py`, `style.py`
-**Log:** `docs/research/log-2026-08-26-round2.md`
 **Round 1's record is document 41 and stands.**
 
 **Nothing here is fitted and no number is new.** Every value on every figure is
@@ -386,8 +384,7 @@ not a fix.
 Three decisions the maintainer made after reading this document, implemented on the same
 branch with one commit each. Nothing was fitted, no statistic is new, and the
 replay stayed at 0.00e+00 for all five games. 502 tests pass, 22 written first
-and 3 replaced. Record: `docs/research/results-2026-08-27-exp3.md`, log
-`docs/research/log-2026-08-27-wording.md`.
+and 3 replaced.
 
 **V4 is confirmed** as the shipped distribution figure and the darkening rungs
 in the clash ladder are accepted as implemented. Neither needed work.

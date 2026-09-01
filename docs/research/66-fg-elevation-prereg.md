@@ -358,9 +358,8 @@ any of it mattered.
 Nothing runs in parallel. The expensive job of this round — the null bound and
 the power table — completed before this document was written, in 8 seconds. The
 twelve NUTS fits run in sequence in one process for about an hour; the human wait
-is filled by drafting document 67's results skeleton and the
-`results-2026-08-31-exp24.md` file, neither of which can contain a number until
-the fits land. **The article is frozen for the duration**, per the handoff.
+is filled by drafting document 67's results skeleton and the round's results
+file, neither of which can contain a number until the fits land. **The article is frozen for the duration**, per the handoff.
 
 ---
 
