@@ -294,3 +294,157 @@ The actual `import_module("44_read_side_fix")` count is **six**: 46, 54, 57, 68,
 prose only. `tests/test_artifact_reads.py` line 58 repeats the "ten" figure in a
 docstring. The correction changes no classification — the shim is a hard KEEP
 either way — but the number is quoted in three places and all three are wrong.
+
+---
+
+## 3. The full-DROP scenario, priced
+
+The handoff asks what the world looks like if `research/` goes except for what
+the stays-set functionally needs. That is **26 KEEP, 75 DROP**, and this section
+prices it before §4 turns it into one option among three.
+
+### 3a. What the 26 survivors are
+
+| Group | Files |
+|---|---|
+| The shipped pipeline the README names | `82_fg_v14_refit.py`, `83_simulator_v14.py`, `84_full_edition_v14.py` |
+| Their import chain | `81_fg_elevation.py`, `81a_fg_elevation_power.py`, `46_simulator_v13.py`, `44_read_side_fix.py`, `14_fg_weather_model.py`, `13_fg_weather_power.py`, `08_rematch_power.py` |
+| The two hands-on-the-ball fits and their chain | `67_dropped_pick_model.py`, `72_receiver_drop_confounds.py`, `68_dropped_pick_variant_audit.py`, `73_receiver_drop_variant_audit.py`, `65_dropped_pick_diagnostic.py`, `62_dropped_pick_confounds.py`, `61_dropped_pick_power.py`, `71_receiver_drop_power.py` |
+| The Full edition and the cap | `76_full_edition_summary.py`, `78_possession_cap_audit.py` |
+| The overtime sidebar artifact | `26_overtime.py`, `25_overtime_power.py` |
+| Required by `tests/test_weekout_folds.py` | `69_dropped_pick_weekout.py` |
+| Numeric helpers | `_betabinom_grid.py`, `_crossed_block_grid.py`, `_crossed_gaussian_grid.py` |
+
+Twenty-five of the 26 are required by production alone; the twenty-sixth,
+`69_dropped_pick_weekout.py`, is required only by the test suite. If the
+maintainer would rather rewrite `tests/test_weekout_folds.py` than ship it, the
+functional minimum is 25.
+
+### 3b. The README rewrite
+
+The quickstart's three-command block (lines 113–118) survives unchanged — all
+three scripts are in the 26. What has to change is smaller than the handoff
+feared, and one thing has to change that it did not anticipate:
+
+1. **Line 188 of the pipeline diagram** names `research/03_bayesian_rates.py`,
+   which is *not* in the 26. Nothing production reads its output — the fumble
+   retention baseline is fit in-process by `components.py` — so the node has to
+   be reworded to name the package function, or the node dropped.
+2. **A fourth command is missing today and stays missing.** `26_overtime.py`
+   must be run before `render_game` works, because of the unguarded read at
+   `render.py:347`. Under any package, the quickstart should gain that line.
+3. **Lines 128–129's sentence "The three research scripts…"** becomes "The four".
+
+That is three edits to `README.md`, not a rewrite.
+
+### 3c. The documents 45 and 47 anchor fix
+
+Both anchor scripts are outside the 26, so both anchors break. Three options,
+cheapest first:
+
+| Option | What it does | Cost | What it gives up |
+|---|---|---|---|
+| **Re-anchor to a surviving script** | Point document 45 at `64_dropped_pick_confounds_r2.py`'s successor in the 26 — but round 2 has no survivor, so this only works for document 47, via `65_dropped_pick_diagnostic.py`. | One line in doc 47; nothing available for doc 45. | Partial; doc 45 is still stranded. |
+| **Re-anchor to the commit, not the file** | Replace "before `research/63_…py`, the first of…" with "before commit `<sha>`, which added the round's first fitting script". | Two lines. Survives any future drop. | Nothing — the claim is unchanged and the evidence is stronger, since a sha is checkable and a filename is not. |
+| **Delete the anchor sentence** | Drop the pre-registration claim from both documents. | Two lines. | The thing the documents are *for*. Not recommended. |
+
+**Recommended: the commit-sha form**, whichever package is chosen. It is the
+only one that does not break a third time the next time a file moves.
+
+### 3d. What a public visitor can and cannot do afterwards
+
+**Can still do**, unchanged: install the package; pull the data; run all four
+build commands; render any game 2016–2025; adjudicate a game that has just gone
+final; run the test suite (minus the 25 tests in `test_weekout_folds.py`, unless
+that file is rewritten); read all 94 surviving documents; regenerate the shipped
+posteriors and reproduce every headline number.
+
+**Can no longer do**: re-run a single refused candidate. Every "we measured this
+and did not ship it" verdict — the overtime toss, deflected interceptions,
+onside kicks, kickoff muffs, blocked-kick aftermath, the placement meter's two
+failed designs — keeps its document and loses its script. Nor can a visitor
+re-run a power calculation, so **the pre-registration claim becomes unfalsifiable
+from inside the repo**: the documents say a threshold was computed before the fit,
+and the code that computed it is gone.
+
+**The exposure this buys is close to zero.** The 94 signed documents state each
+model's structure, its priors, its likelihood, its gate thresholds and the
+arithmetic of every verdict, in prose. Anyone — a person or a tool — who wanted
+to reimplement the method would work from documents 03, 05, 05b and 09, all of
+which are KEEP. Dropping `research/` removes the transcript, not the recipe.
+
+### 3e. What the pre-registration story becomes
+
+"The record documents the process; the fitting code is private" is a defensible
+sentence, and it is weaker than what the repo can say today. Pre-registration's
+whole force is *checkability* — the reason document 70 kept 94 documents is that
+a dated decision record is worth more than a claim. A reader who can read the
+gate but not the script has to take the gate on trust, which is the position
+pre-registration exists to escape. If the maintainer picks a DROP package, the
+honest framing is not "the process is documented" but **"the process is
+documented and the evidence for it is held privately"** — and that sentence
+should go in the README rather than being left for a reader to work out.
+
+---
+
+## 4. Three packages, and a recommendation
+
+Counts reconcile against §2. "Forced edits" counts stays-set files that name a
+dropped script by its exact filename and would be left pointing at nothing;
+"sites" counts the individual lines.
+
+### Package 1 — drop all 101
+
+| | |
+|---|---|
+| **Drops** | 101 |
+| **Keeps** | 0 |
+| **Forced edits** | **75 stays-set files, 332 sites** — 63 numbered documents, the write-up caption sheet, `README.md`, six `src/` modules, four test files |
+| **Also requires** | Relocating the 26 load-bearing files into `src/` or the private orchestration repo; deleting the README quickstart entirely (artifacts would have to be shipped or downloaded); rewriting `tests/test_weekout_folds.py` and `tests/test_artifact_reads.py`; fixing the two stale `src/` error messages, which now point at files in another repo |
+
+This is not a documentation edit. It is a repackaging of the project, and it
+changes what the public repo *is* — from "a method you can run" to "a library
+that reads artifacts you cannot rebuild".
+
+### Package 2 — keep the functional minimum, drop 75
+
+| | |
+|---|---|
+| **Drops** | 75 |
+| **Keeps** | 26 (§3a) |
+| **Forced edits** | **63 stays-set files, 231 sites** — 57 numbered documents, the write-up caption sheet, `README.md`, `src/fg_model.py`, `src/render.py`, `src/teams.py`, `tests/test_render.py` |
+| **Heaviest documents** | `27-make-probability-refit.md` (15 sites), `35-placement-meter-prereg.md` (12), `36-placement-redesign-prereg.md` (11), `05b-fg-model-foundations.md` (11), `10-interval-coverage.md` (10) |
+| **Also requires** | The doc 45/47 anchor fix (§3c); the three README edits (§3b); the pre-registration framing sentence (§3e) |
+
+Every shipped command still works. The 231-site sweep is the same shape of work
+as exp31's 49-site sweep, at roughly five times the size, and it is the
+expensive part — each site is a sentence that has to be reworded, not deleted,
+because the surrounding claim still needs to say what the evidence was.
+
+### Package 3 — keep all 101
+
+| | |
+|---|---|
+| **Drops** | 3 (`23_phase4_figures.py`, `74_receiver_drop_weekout.py`, `75_a3_sensitivities.py`) |
+| **Keeps** | 98 |
+| **Forced edits** | **0.** All three have no stays-set citation, no importer, and no artifact anything reads |
+| **Also requires** | The two stale `src/` error messages (§2a item 5) and the missing quickstart line for `26_overtime.py` (§3b item 2), both of which are pre-existing defects worth fixing regardless |
+
+### Recommendation
+
+**Package 3.** The protection the drop packages are meant to buy is not
+available: the 94 documents the maintainer already signed as KEEP state every
+model's structure, priors and thresholds in prose, so dropping scripts removes
+the evidence and leaves the recipe. The 26 files that cannot leave are exactly
+the fitting scripts — the most imitable part of `research/` — while the 75 that
+could leave are the power calculations, the refused candidates and the audits,
+which is the part that makes the record credible rather than copyable. Package 2
+costs 231 rewording sites across 63 files, breaks the documents 45 and 47
+anchors a second time in one day, and converts every pre-registration into a
+claim a reader cannot check. Package 1 is a repackaging of the project, not an
+edit to it. If the maintainer's real worry is wholesale lifting, the effective
+levers are the licence and the wiki framing, not amputating the evidence — and
+if a DROP package is chosen anyway, take Package 2 over Package 1 and put §3e's
+framing sentence in the README.
+
+*This is a recommendation, not a ruling. The maintainer signs the table.*
