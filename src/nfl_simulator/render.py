@@ -1,9 +1,9 @@
-"""One game in, three PNGs out.
+"""One game in, four PNGs out.
 
 This is the product layer's front door. Everything under it — the simulator,
 the ledger, the figures — already exists and is already tested; what is here is
 the assembly: find the game's committed numbers, fetch the colours and the
-marks, put plain words on the events, and write three files named the way the
+marks, put plain words on the events, and write four files named the way the
 baseball simulator names its own.
 
 **Nothing here recomputes a published number.** The deserved margin, the DTW%

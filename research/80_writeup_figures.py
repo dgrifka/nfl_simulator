@@ -3271,11 +3271,17 @@ def audit() -> None:
             f"CAPTIONS covers {sorted(set(CAPTIONS) ^ set(files))} differently from the directory"
         )
 
-    linked = set(re.findall(r"\(figures/([^)]+\.png)\)", ARTICLE.read_text()))
-    missing = sorted(linked - set(files))
-    if missing:
-        raise AssertionError(f"the article links images that do not exist: {missing}")
-    unlinked = sorted(set(files) - linked)
+    # The article prose leaves the repo once it is live on Medium (doc 70 §3a);
+    # from then on CAPTIONS alone is the manifest and the link check has no text
+    # to run against.
+    if ARTICLE.exists():
+        linked = set(re.findall(r"\(figures/([^)]+\.png)\)", ARTICLE.read_text()))
+        missing = sorted(linked - set(files))
+        if missing:
+            raise AssertionError(f"the article links images that do not exist: {missing}")
+        unlinked = sorted(set(files) - linked)
+    else:
+        unlinked = []
 
     print(
         f"\n{len(files)} images in {FIGURE_DIR.relative_to(paths.REPO_ROOT)}, "
