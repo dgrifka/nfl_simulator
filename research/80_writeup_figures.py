@@ -1824,7 +1824,7 @@ FG_LABELS = {
     "roof": "indoors\nor out",
     "wind": "wind",
     "temp": "temperature",
-    "elev": "elevation\n(kft)",
+    "elev": "elevation, in\nthousands of feet",
     "kicker": "this kicker,\nthis season",
 }
 
