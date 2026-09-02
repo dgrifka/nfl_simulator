@@ -284,7 +284,7 @@ def smoke_tests(
     )
     print(f"    ledger sums to the applied adjustment: {sums}")
     with pl.Config(tbl_rows=20, fmt_str_lengths=20):
-        print(game_ledger.select("component", "event_class", "realized", "expected", "luck_epa"))
+        print(game_ledger.select("component", "event_class", "actual", "expected", "luck_epa"))
 
     shift = candidate["dtw_shift"]
     mean_adjustment = float(lottery["adjustment"].mean())

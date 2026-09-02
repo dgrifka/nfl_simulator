@@ -158,7 +158,7 @@ def onside_events(
                 component="onside",
                 event_class=row["onside_class"],
                 charged_team=row["kicking_team"],
-                realized=float(row["recovered"]),
+                actual=float(row["recovered"]),
                 expected_draws=draws,
                 swing=float(row["swing_value"]) * home_sign,
             )

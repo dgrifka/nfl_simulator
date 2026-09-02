@@ -73,10 +73,10 @@ sentence works for an audience of everyone.
 
 | file:line | cat | sev | what and why |
 |---|---|---|---|
-| `docs/research/65-article-audit.md:500` | P | **high** | The line carries a full external URL whose **account segment is a personal handle of the maintainer's**, of the same form as an identifier checklist §1 forbids outright ("no usernames, emails …"). It is the **only** such URL in the surviving set — the other eight are nflverse, gitleaks, Creative Commons and an ESPN CDN path. `scripts/check_public_safe.sh --all` **exits 0 on this tree**, verified by running it, and the pre-commit hook passed on this document's own Part 1 commit: the built-in patterns match an e-mail address but not a bare handle. This is precisely the finding a regex cannot make and a reader can. |
-| `docs/research/65-article-audit.md:537` | P | med | Names a live public web domain belonging to the maintainer's sibling project, and confirms in the same row what that site is. Together with the 32 in-code references above it makes the link between this repo and the private sibling explicit and followable, which is the connection `CLAUDE.md`'s alias convention exists to prevent. |
+| the article audit, line 500 — **dropped, doc 69 §10.8** | P | **high** | The line carries a full external URL whose **account segment is a personal handle of the maintainer's**, of the same form as an identifier checklist §1 forbids outright ("no usernames, emails …"). It is the **only** such URL in the surviving set — the other eight are nflverse, gitleaks, Creative Commons and an ESPN CDN path. `scripts/check_public_safe.sh --all` **exits 0 on this tree**, verified by running it, and the pre-commit hook passed on this document's own Part 1 commit: the built-in patterns match an e-mail address but not a bare handle. This is precisely the finding a regex cannot make and a reader can. |
+| the article audit, line 537 — **dropped, doc 69 §10.8** | P | med | Names a live public web domain belonging to the maintainer's sibling project, and confirms in the same row what that site is. Together with the 32 in-code references above it makes the link between this repo and the private sibling explicit and followable, which is the connection `CLAUDE.md`'s alias convention exists to prevent. |
 | docs 00:24, 05:197, 26:515, 28:301, 31:281, 51:154, 56:36, 57:53, 57:460 | P | med | Nine sites refer to the maintainer with a gendered pronoun. The name itself was scrubbed to "the maintainer" everywhere; the pronouns were not, so the substitution still discloses something about a specific person on every one of these lines. Nine sites, one substitution each. |
-| docs 03:203, 05b:181, 43:187, 57:130, 65:519 | P | low | "on this laptop", "on the laptop", "on this machine" as the unit of a runtime claim. Same class as `live.py:33` in Part 1, and worth one ruling covering both halves. |
+| docs 03:203, 05b:181, 43:187, 57:130, and the dropped article audit at 519 | P | low | "on this laptop", "on the laptop", "on this machine" as the unit of a runtime claim. Same class as `live.py:33` in Part 1, and worth one ruling covering both halves. |
 | `docs/research/05b-fg-model-foundations.md:547`, `41` (six sites), `42` (three), `60:982`, `60:1006` | P | med | The private sibling project again, in prose. `60:982` is the sharpest of these: it names the sibling **and** the file, function and argument value inside it that a decision was copied from. |
 
 ### C — wrong or stale claims
@@ -98,15 +98,23 @@ sentence works for an audience of everyone.
 
 | file:line | cat | sev | what and why |
 |---|---|---|---|
-| `docs/research/65-article-audit.md`, whole file | T | med | 651 lines whose subject is a document that does not survive (see R-1). Its method is adversarial by design and it works — but read without the article, the long verbatim quotations of the article's eight WRONG and ten MISLEADING claims are the only version of those sentences a public reader ever sees, attributed to this project and with no corrected text beside them. |
+| the article audit, whole file — **dropped, doc 69 §10.8** | T | med | 651 lines whose subject is a document that does not survive (see R-1). Its method is adversarial by design and it works — but read without the article, the long verbatim quotations of the article's eight WRONG and ten MISLEADING claims are the only version of those sentences a public reader ever sees, attributed to this project and with no corrected text beside them. |
 | `docs/research/09-coinflip-candidates.md:410` | T | low | "every football-analytics writer has said so at some point" — a broad claim about a named professional community, made in passing and without a citation, in a document that cites everything else. |
 | `docs/research/60-figure-round6.md`, whole file | T | low | 1,124 lines of figure-round minutiae, twelve rounds deep, including pixel measurements and label-collision arithmetic. Nothing in it is wrong or private. It is flagged only because it is the longest document in the record and the least likely to reward a public reader, and because §14–§19 are dated appendices in a document whose title says "round 6". |
 
 ### R — files whose existence is worth reconsidering
 
+> **Resolved 2026-09-01.** The article audit — this document's most-flagged
+> file — was ruled out of the public repository and its history (doc 69 §10.8),
+> together with the article prose it audits. Its four flags above (the personal
+> handle, the sibling-project domain, the tone flag and this R-flag) are closed
+> by removal rather than by edit, and its path is written here in plain prose so
+> that nothing surviving cites a file that left.
+
+
 | file | cat | sev | the case, in two sentences |
 |---|---|---|---|
-| `docs/research/65-article-audit.md` | R | **med** | It is a 651-line adversarial audit of `docs/writeup/community-writeup.md`, which doc 70 §2 puts in the DROP set — so the public repo would ship the audit, and all 24 of the article's figures as KEEP files, but not the article. A reader finds a meticulous list of errors in a document they cannot read, quoting sentences that exist nowhere else in the repository; either the article should survive with it, or the audit should leave with the article, or it should be rewritten as a defect register that does not depend on quoting its subject. |
+| the article audit — **dropped, doc 69 §10.8** | R | **med** | It is a 651-line adversarial audit of the article prose, which doc 70 §2 puts in the DROP set — so the public repo would ship the audit, and all 24 of the article's figures as KEEP files, but not the article. A reader finds a meticulous list of errors in a document they cannot read, quoting sentences that exist nowhere else in the repository; either the article should survive with it, or the audit should leave with the article, or it should be rewritten as a defect register that does not depend on quoting its subject. |
 | `docs/research/60-figure-round6.md` | R | low | Twelve figure rounds and six dated appendices in one 1,124-line file, most of it label geometry that no longer describes the shipped code. Worth considering whether the four rulings a reader would actually cite could be lifted into one short record and the rest dropped, in the way doc 71 already ruled the research scripts stay whole. |
 
 ---
@@ -128,7 +136,7 @@ sentence works for an audience of everyone.
 | file | flags | shape of them |
 |---|---:|---|
 | `src/nfl_simulator/style.py` | 6 | the sibling-project provenance, the handle that contradicts its own docstring twice, a citation to tooling outside the repo, a stale return annotation |
-| `docs/research/65-article-audit.md` | 4 | the only personal handle in the surviving set, a sibling-project domain, and the R-class question about the whole file |
+| the article audit (dropped) | 4 | the only personal handle in the surviving set, a sibling-project domain, and the R-class question about the whole file |
 | `research/` scripts (7 files) | 7 | six `realized=` runtime breaks and one dead ledger column — one defect, seven sites |
 | `docs/research/41-brand-figures.md` | 4 | six sibling-project references, and two of the six stale `@[TBD]` claims |
 | `docs/research/52-amendment-a3-prereg.md` | 2 | the superseded edition names, and a lower-case substitution seam |
@@ -158,7 +166,7 @@ Each is one decision, applied everywhere.
    coordinate name inside every saved trace. The record schedules this scrub as
    outstanding; the only file that records it *failing* is DROP-class.
 6. **One line carries an external URL whose account segment is a personal handle
-   of the maintainer's** (`65-article-audit.md:500`). The only one in the
+   of the maintainer's**, in the article audit at line 500. The only one in the
    surviving set, and the automated gate passes on it — verified by running the
    scanner and by this document's own Part 1 commit going through the hook
    clean.

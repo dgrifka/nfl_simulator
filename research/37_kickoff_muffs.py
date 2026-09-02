@@ -155,7 +155,7 @@ def widened_fumble_events(
                 component="fumble",
                 event_class=row["fumble_class"],
                 charged_team=row["fumbled_1_team"],
-                realized=float(row["retained"]),
+                actual=float(row["retained"]),
                 expected_draws=draws,
                 swing=float(row["swing_value"]) * home_sign,
             )
