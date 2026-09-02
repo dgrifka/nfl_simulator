@@ -2957,8 +2957,7 @@ def bootstrap_buildup(walkthrough: dict) -> dict:
         title_axes(fig, height_frac=0.15),
         "Where 160,000 comes from",
         [
-            "DEN at WAS, week 13 of 2025, Full edition. Each panel adds posterior draws; "
-            "the axis never moves.",
+            "DEN at WAS, week 13 of 2025. Each panel adds posterior draws; the axis never moves.",
             "Layer 1 draws the probabilities, layer 2 flips the coins.",
         ],
         title_size=17,
