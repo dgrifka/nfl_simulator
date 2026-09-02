@@ -466,7 +466,7 @@ Results are written back into this document as §9.
 ## 9. Results
 
 *Script: `research/10_sequencing.py`. Design, statistics and thresholds fixed by
-§§1–8 above, committed at `9d6f11d` before this script produced a result.
+§§1–8 above, committed at `2f27c1a` before this script produced a result.
 Results in `research/outputs/10_sequencing.json`.*
 
 ### Gate outcomes, stated first
@@ -708,7 +708,7 @@ for a quantity built by averaging two bootstraps.
 ## 11. Drive-outcome resampling — results
 
 *Script: `research/11_drive_bootstrap.py`. Design, statistic and thresholds fixed
-by §10 above, committed at `1d91af4` before this script existed. Results in
+by §10 above, committed at `9e9af9d` before this script existed. Results in
 `research/outputs/11_drive_bootstrap.json`.*
 
 ### Gate outcomes, stated first

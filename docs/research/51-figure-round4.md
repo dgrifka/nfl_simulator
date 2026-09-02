@@ -2,7 +2,7 @@
 
 Round 4 of the product layer's figure work. Nothing here is fitted and no
 published number moves: every DTW%, deserved margin, ledger row and interval is
-the same number it was on `main` at `a0b6ec6`, and the five example games still
+the same number it was on `main` when round 4 opened, and the five example games still
 replay to their committed summaries at **0.00e+00**. What changed is what a
 reader is asked to do — round 4's brief was that no figure should leave
 arithmetic for the reader to finish.
@@ -13,7 +13,7 @@ Branch `fix/figure-round-4`, four commits, one per part, plus this record.
 
 ## A. The card's footer is the interval and nothing else
 
-**Commit** `e891b18` — *fix(card): drop the coverage stamp from the share footer*
+**Commit** `afd70c5` — *fix(card): drop the coverage stamp from the share footer*
 
 **Decision.** The share card's last line read
 `89% interval on GB's share: 92–96% (measured coverage 91.5%).` It now reads
@@ -37,7 +37,7 @@ card's layout above the footer is frozen as it was.
 
 ## B. The share distribution is two teams' deserved points
 
-**Commit** `43883c3` — *feat(dtw): team deserved-points histograms replace the
+**Commit** `98e3cfa` — *feat(dtw): team deserved-points histograms replace the
 margin plot on the share image*
 
 **Decision.** The `dtw` share image stops asking "by how much" and asks "what
@@ -90,7 +90,7 @@ the product has said it out loud.
 
 ## C. A kick shows what it was expected to do
 
-**Commit** `5dd2984` — *fix(ledger): kicks show their make probability and
+**Commit** `bb1e2c5` — *fix(ledger): kicks show their make probability and
 kicker*
 
 **Decision.** A field-goal or extra-point row's What-happened cell now reads
@@ -119,7 +119,7 @@ too.
 
 ## D. The waterfall reads without arithmetic
 
-**Commit** `f1d4489` — *fix(waterfall): rename, shade sides, anchor bars, tip
+**Commit** `5feaefd` — *fix(waterfall): rename, shade sides, anchor bars, tip
 labels; close D-4*
 
 **Decision, in four parts.**

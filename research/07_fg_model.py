@@ -1,7 +1,7 @@
 """Step 4 — the kicker-hierarchical field-goal make model.
 
 Fits the model pre-registered in `docs/research/05b-fg-model-foundations.md`,
-committed at `7e9e6d1` before this script produced anything, and checks all four
+committed at `d02395d` before this script produced anything, and checks all four
 gates. Constants here are the ones in that document's appendix; changing one
 means editing the doc too.
 

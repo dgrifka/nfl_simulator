@@ -316,7 +316,7 @@ the maintainer merges.**
 
 | Part | Commit | What |
 |---|---|---|
-| A | `795f07b` | `research/67_dropped_pick_model.py`, the fit; V-6 PASS, V-8 FAIL; `build_swing_table` and its tests |
-| B | `7ad17be` | `dropped_picks.py`, `simulator.dropped_pick_events`, the switch, `render._simulation_context`; 502 → 525 tests |
-| C | `2cf395b` | `research/68_dropped_pick_variant_audit.py`; V-1 0.00e+00, V-2 0.00e+00, the read-side round trip, the audit |
+| A | `5f412f5` | `research/67_dropped_pick_model.py`, the fit; V-6 PASS, V-8 FAIL; `build_swing_table` and its tests |
+| B | `dc9e9ef` | `dropped_picks.py`, `simulator.dropped_pick_events`, the switch, `render._simulation_context`; 502 → 525 tests |
+| C | `60750d1` | `research/68_dropped_pick_variant_audit.py`; V-1 0.00e+00, V-2 0.00e+00, the read-side round trip, the audit |
 | D | this commit | This document, document 05 §3's row, document 49 §10, and the queue |

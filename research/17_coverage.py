@@ -1,7 +1,7 @@
 """Phase 3, step 5 — the DTW interval-coverage check, against pre-registered gates.
 
 Design, statistic and thresholds are fixed by `docs/research/10-interval-coverage.md`,
-committed at `bf95345` before this script existed. Nothing here chooses anything.
+committed at `e1ba8a8` before this script existed. Nothing here chooses anything.
 
     Gate V-1  coverage within 3 pp of the nominal 89%, at the shipped settings
     Gate V-2  which direction any miss runs — reported, no pass rule

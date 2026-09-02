@@ -1,7 +1,7 @@
 """Phase 5 candidate 1 — the overtime coin toss: the fit.
 
 Runs the three gates `docs/research/16-overtime-toss.md` §5 committed at
-`3fbbc59`, before this file existed:
+`fea34ea`, before this file existed:
 
 * **Gate O-1** — does the 89% interval on the swing exclude zero?
 * **Gate O-2** — does an independent estimator agree to within 10% relative,

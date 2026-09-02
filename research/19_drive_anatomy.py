@@ -1,7 +1,7 @@
 """Phase 4, step 1 — drive anatomy, run against the gates document 11 committed.
 
 Design, statistics and thresholds are fixed by `docs/research/11-drive-anatomy.md`,
-committed at `a2b9376` before this script produced a result. Nothing here chooses
+committed at `03c6a66` before this script produced a result. Nothing here chooses
 anything; it executes what that document committed to.
 
     Gate DA-1   positive control — points per drive must persist far above the

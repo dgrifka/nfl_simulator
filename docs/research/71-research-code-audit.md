@@ -6,7 +6,7 @@ by this round. The sibling of document 70, and it reuses that document's method
 (§1a) and its citation convention (§1c).*
 
 *Inputs: the handoff for this round, document 70's signed classification, and
-`git ls-files` at `a7e9542`.*
+`git ls-files` at `06a171f`.*
 
 ---
 
@@ -56,7 +56,7 @@ Every row also carries three things the docs audit did not need:
 
 | Term | Count |
 |---|---|
-| `git ls-files research/` at `a7e9542` | 101 |
+| `git ls-files research/` at `06a171f` | 101 |
 | — in the shipped import closure (cannot drop) | 26 |
 | — cited by at least one stays-set file, not in the closure | 72 |
 | — no citation, no importer, no artifact | 3 |

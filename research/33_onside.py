@@ -1,7 +1,7 @@
 """Phase 5 candidate 4 — onside kicks: the Gate K-3 and K-5 fits.
 
 Runs the gates `docs/research/20-onside-kicks.md` §5d and §5f committed at
-`c5d4dfe`, before this file existed:
+`b80fe9f`, before this file existed:
 
 * **K-3** — does replacing the onside coin move the games it touches by more
   than the interval simulator v1.2 already prints on them?

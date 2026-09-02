@@ -135,9 +135,9 @@ Round 3 ran 2026-08-27 on `docs/dropped-pick-confounds`. Full record: document
 
 | Part | Result | Commit |
 |---|---|---|
-| A — rulings recorded | R-1 and R-2 carried into documents 43 §7 and 46 §4/§7, and the two §8 register rows they close | `d9b098b` |
-| B — game-clustering check | **§2 row 1 landed.** `σ_d` 5.83 pp [1.99, 8.88], upper clears 5.920 pp; `σ_g` 8.53 pp [2.45, 13.22]; Gate C-1 PASS (0 divergences, 0 of 1,461 over a bar). R-2's wording stands | `410f588` |
-| C — the diagnostic | 2,278 game-team rows; all six bin cells above the 30-per-branch floor, every swing negative; median `fortune_epa` +0.00, 89% [−3.32, +3.70], 10.8% at or over one full pick | `4ee8c46` |
+| A — rulings recorded | R-1 and R-2 carried into documents 43 §7 and 46 §4/§7, and the two §8 register rows they close | `339c069` |
+| B — game-clustering check | **§2 row 1 landed.** `σ_d` 5.83 pp [1.99, 8.88], upper clears 5.920 pp; `σ_g` 8.53 pp [2.45, 13.22]; Gate C-1 PASS (0 divergences, 0 of 1,461 over a bar). R-2's wording stands | `6129bf7` |
+| C — the diagnostic | 2,278 game-team rows; all six bin cells above the 30-per-branch floor, every swing negative; median `fortune_epa` +0.00, 89% [−3.32, +3.70], 10.8% at or over one full pick | `2ab0552` |
 | D — the record | Document 48, and the hypothesis queue | this commit |
 
 **One deviation, disclosed in document 48 §6:** §3's imputation instruction

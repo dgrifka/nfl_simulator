@@ -7,7 +7,7 @@ runs Gate B for every candidate, including the four that failed Gate A, because
 document 05 §3 prints a parenthesised `w` for penalties for the same reason: an
 argument a reader can see the numbers behind is one they can disagree with.
 
-Thresholds are fixed by §4 of that document, committed at `1c585e2` before this
+Thresholds are fixed by §4 of that document, committed at `f07cab2` before this
 script produced a result.
 
     Gate C-1  sampler health, plus agreement with the exact grid posterior

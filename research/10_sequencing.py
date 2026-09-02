@@ -1,7 +1,7 @@
 """Phase 3, step 2 — the sequencing-luck round, run against pre-registered gates.
 
 Design, statistics and thresholds are fixed by `docs/research/08-sequencing-luck.md`,
-committed at `9d6f11d` before this script produced a result. Nothing here chooses
+committed at `2f27c1a` before this script produced a result. Nothing here chooses
 anything; it executes what that document committed to.
 
     Gate S-1  positive control — overall offensive EPA per play must persist

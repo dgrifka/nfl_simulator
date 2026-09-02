@@ -322,7 +322,7 @@ Results are written back into this document as §8.
 ## 8. Results
 
 *Script: `research/30_fumble_oob.py`. Gate F-2's threshold was committed at
-`afae577` before this script existed. Results in
+`3f203dc` before this script existed. Results in
 `research/outputs/30_fumble_oob.json`.*
 
 ### The verdict, stated first

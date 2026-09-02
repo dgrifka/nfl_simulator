@@ -189,9 +189,9 @@ Round 4 ran 2026-08-27 on `feat/dropped-pick-variant`, off
 
 | Part | Result | Commit |
 |---|---|---|
-| A — the fit and its artifact | `trace_dropped_pick.nc` + `dropped_pick_summary.json` written. **V-6 PASS** (0 divergences, max r̂ 1.0070 on `sigma_q`, min ESS 587/522 over 429 parameters). **V-8 FAIL** — 2022 NYG's 89% interval [0.289, 0.509] against §6's [0.30, 0.70], 1.1 pp outside, 9 of 10 inside | `795f07b` |
-| B — the component, TDD | `dropped_picks.py`, `simulator.dropped_pick_events`, the default-off switch, `SimulationResult.variant`. V-2, V-3, V-4, V-5, V-7 all PASS as tests; 502 → 525 | `7ad17be` |
-| C — V-1 and the audit | **V-1 PASS exactly**: 2,761 games, max \|Δ deserved margin\| 0.00e+00, and 0.00e+00 on DTW% and both bounds. V-2 over 1,139 variant games: 0.00e+00. Read-side round trip 0.00e+00 over 2,969 rows. §7's audit written, **provisional on V-8's ruling** | `2cf395b` |
+| A — the fit and its artifact | `trace_dropped_pick.nc` + `dropped_pick_summary.json` written. **V-6 PASS** (0 divergences, max r̂ 1.0070 on `sigma_q`, min ESS 587/522 over 429 parameters). **V-8 FAIL** — 2022 NYG's 89% interval [0.289, 0.509] against §6's [0.30, 0.70], 1.1 pp outside, 9 of 10 inside | `5f412f5` |
+| B — the component, TDD | `dropped_picks.py`, `simulator.dropped_pick_events`, the default-off switch, `SimulationResult.variant`. V-2, V-3, V-4, V-5, V-7 all PASS as tests; 502 → 525 | `dc9e9ef` |
+| C — V-1 and the audit | **V-1 PASS exactly**: 2,761 games, max \|Δ deserved margin\| 0.00e+00, and 0.00e+00 on DTW% and both bounds. V-2 over 1,139 variant games: 0.00e+00. Read-side round trip 0.00e+00 over 2,969 rows. §7's audit written, **provisional on V-8's ruling** | `60750d1` |
 | D — the record | Document 50, this section, document 05 §3's row, and the queue | this commit |
 
 **The round is stopped at §6's V-8 stop-and-ask, as pre-registered.** Document

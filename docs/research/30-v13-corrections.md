@@ -226,7 +226,7 @@ where it would show.
 
 Gate C (document 05 §2, amendment C-1) admits a correction only if all four
 clauses hold, *each stated in a pre-registration committed before the correction
-is measured*. Document 26 is that pre-registration, committed at `a06edb3`. The
+is measured*. Document 26 is that pre-registration, committed at `e33edc6`. The
 clauses are checked against it here rather than asserted.
 
 | Clause | Where document 26 satisfies it |
@@ -420,7 +420,7 @@ Results are written back into this document as §13.
 
 *Scripts: `research/44_read_side_fix.py` (Part A) and
 `research/45_blocked_exclusion_c1.py` (Part B). The gates were committed at
-`b9e44c4` before either script existed. The ship record is document 31.*
+`e6920d0` before either script existed. The ship record is document 31.*
 
 ### The verdict, stated first
 

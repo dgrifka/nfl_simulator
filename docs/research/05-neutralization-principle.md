@@ -551,7 +551,7 @@ resolvable with ten seasons"* rather than to a verdict.
 ## 8. Attribution round — results
 
 *Script: `research/06_attribution.py`. Gates pre-registered in §7 above, committed
-at `c1b454f` before any of these models existed. Results in
+at `f4080d6` before any of these models existed. Results in
 `research/outputs/06_attribution.json`.*
 
 ### Outcomes, stated first

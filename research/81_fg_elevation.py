@@ -1,7 +1,7 @@
 """Round 24, step 2 — does stadium elevation belong in the make-probability model?
 
 Runs the gates `docs/research/66-fg-elevation-prereg.md` §7 committed at
-`e97a918`, before this file existed:
+`8ba4219`, before this file existed:
 
 * **E-1** sampler health, **E-2** elevation-by-distance calibration, **E-3**
   elevation resolvable, **E-4** distance calibration preserved, **E-5** held-out

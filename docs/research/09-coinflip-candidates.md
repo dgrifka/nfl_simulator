@@ -346,7 +346,7 @@ Results are written back into this document as §8.
 ## 8. Results
 
 *Script: `research/12_coinflips.py`. Gate A settled in §2, thresholds fixed in
-§4, both committed at `1c585e2` before this script produced a result. Results in
+§4, both committed at `f07cab2` before this script produced a result. Results in
 `research/outputs/12_coinflips.json`.*
 
 ### Verdicts, stated first

@@ -1,7 +1,7 @@
 # 04 — Bayesian results
 
 *Script: `research/03_bayesian_rates.py`. Gates pre-registered in
-`docs/research/03-model-foundations.md`, committed at `c104430` before any fit
+`docs/research/03-model-foundations.md`, committed at `b914fb6` before any fit
 existed. PyMC 6.3.1 / ArviZ 1.3.0 / nutpie 0.16.11.*
 
 ## Gate outcomes, stated first

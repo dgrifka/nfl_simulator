@@ -340,8 +340,8 @@ wording must be consistent with both. Avenue (3) is closed on the evidence.
 Nothing in this document opens Gate A, and nothing in it admits a ledger row.
 Document 32's closure stands, on the argument it always rested on.
 
-**Commits.** `4cfaa66` document 45 (the pre-registration) · `b645105` Part A, the
-power table and its thresholds · `824cc72` Part B, the fits · Part C, this
+**Commits.** `4240339` document 45 (the pre-registration) · `261f9c3` Part A, the
+power table and its thresholds · `34b8b9d` Part B, the fits · Part C, this
 record.
 Branch `docs/dropped-pick-confounds`, unmerged; the maintainer merges. `git diff main --
 src/` is empty; 502 tests pass; ruff clean.

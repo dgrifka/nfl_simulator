@@ -1,8 +1,8 @@
 # 67 — Stadium elevation in the make-probability model, results
 
 *Script: `research/81_fg_elevation.py`. Design, prior and gates fixed by document
-66, committed at `e97a918` before this script existed; the null bound and power
-table by `research/81a_fg_elevation_power.py` at `abf9beb`, before document 66.
+66, committed at `8ba4219` before this script existed; the null bound and power
+table by `research/81a_fg_elevation_power.py` at `64fa393`, before document 66.
 Effect ladder: `research/81b_fg_elevation_effects.py`, which fits nothing and
 reads the posterior. Raw report: `research/outputs/81_fg_elevation.json`.*
 

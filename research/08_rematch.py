@@ -1,7 +1,7 @@
 """Step 6 — the rematch validation, run against the pre-registered gate.
 
 Design, statistic and thresholds are fixed by
-`docs/research/06-rematch-validation.md`, committed at `70d6254` before the
+`docs/research/06-rematch-validation.md`, committed at `defee5c` before the
 simulator produced a single deserve-to-win number. Nothing here chooses
 anything; it executes what that document committed to.
 

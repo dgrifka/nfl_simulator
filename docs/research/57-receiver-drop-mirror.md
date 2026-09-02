@@ -448,11 +448,11 @@ both audit runs.
 
 | Part | Result | Commit |
 |---|---|---|
-| A — power, then thresholds | Guards exact. C-3 **0.40** receiver-season, **0.88** team-season, **0.88** defence-season. Clause-1 rule fires on its second branch. A third file was needed and is licensed in §2a | `048e614` |
-| B — the study, arms 1–3 | C-1 PASS on all three arms. **G-4a PASS** (C-3 0.877 at the charged grain). C-2 **FAIL** at that grain and reportable. V-8 PASS. The hindsight substitute **fires** | `790cac0` |
-| C — the component, TDD | `receiver_drops.py`, the switch, composable `variant`. V-2..V-5, V-7 as tests, plus the defence-exclusion pin and the swing-sign guard | `109799f` |
-| D — G-4b, G-4d, G-5 | **G-4b PASS**, **G-4d PASS** (2.32 pp vs 0.56 pp). Handoff constraint 1 discharged: `+dp` alone reproduces document 55 at 136 / 1.59 pp exactly | `e88a42f` |
-| D — G-4c | **PASS.** 19/19 folds clear C-1; agreement 0.996, 0.04 pp | `e774547` |
+| A — power, then thresholds | Guards exact. C-3 **0.40** receiver-season, **0.88** team-season, **0.88** defence-season. Clause-1 rule fires on its second branch. A third file was needed and is licensed in §2a | `3291646` |
+| B — the study, arms 1–3 | C-1 PASS on all three arms. **G-4a PASS** (C-3 0.877 at the charged grain). C-2 **FAIL** at that grain and reportable. V-8 PASS. The hindsight substitute **fires** | `71aa7d0` |
+| C — the component, TDD | `receiver_drops.py`, the switch, composable `variant`. V-2..V-5, V-7 as tests, plus the defence-exclusion pin and the swing-sign guard | `1971828` |
+| D — G-4b, G-4d, G-5 | **G-4b PASS**, **G-4d PASS** (2.32 pp vs 0.56 pp). Handoff constraint 1 discharged: `+dp` alone reproduces document 55 at 136 / 1.59 pp exactly | `98e07b8` |
+| D — G-4c | **PASS.** 19/19 folds clear C-1; agreement 0.996, 0.04 pp | `0253434` |
 | E — the record | This document, document 52 §8, document 05 §3, and the queue | this commit |
 
 **The round's deliverable is a decision for the maintainer, not a verdict.** Every

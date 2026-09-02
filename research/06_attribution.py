@@ -1,7 +1,7 @@
 """Step 3 — the attribution round.
 
 Fits the three questions pre-registered in `docs/research/05-neutralization-principle.md`
-§7, committed at `c1b454f` before any of these models existed:
+§7, committed at `f4080d6` before any of these models existed:
 
     3a  whose skill is the 14.3% interception spread — quarterbacks' or defenses'?
     3b  is offensive holding random, even though pooled judgment calls persist?

@@ -1,6 +1,6 @@
 """Phase 8, task 3 — document 26's blocked-kick exclusion, re-measured under Gate C.
 
-Runs the gates `docs/research/30-v13-corrections.md` §7 committed at `b9e44c4`,
+Runs the gates `docs/research/30-v13-corrections.md` §7 committed at `e6920d0`,
 before this file existed. Gate C (document 05 §2, amendment C-1, accepted
 2026-08-18) replaces document 26's materiality *floor* with a materiality
 *report*, and leaves every other gate standing:

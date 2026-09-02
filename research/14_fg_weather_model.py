@@ -1,7 +1,7 @@
 """Phase 3, step 4 — refit the kicker model with weather and extra points.
 
 Executes the change proposal in `docs/research/05b-fg-model-foundations.md` §10,
-committed at `8e0b50e` before this script existed. Constants here are that
+committed at `962717b` before this script existed. Constants here are that
 section's; changing one means editing the doc too.
 
 Writes the posterior the simulator consumes:

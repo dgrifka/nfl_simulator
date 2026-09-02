@@ -521,7 +521,7 @@ Results are written back into this document as §11.
 ## 11. Results
 
 *Script: `research/20_dq_successor.py`. Design, criteria and thresholds fixed by
-§§1–10 above, committed at `b0bc656` before this script existed. Results in
+§§1–10 above, committed at `7dc0fb5` before this script existed. Results in
 `research/outputs/20_dq_successor.json`.*
 
 ### Outcome, stated first

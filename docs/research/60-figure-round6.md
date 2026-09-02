@@ -1,6 +1,6 @@
 # 60 — Figure round 6: the two editions on the page
 
-*2026-08-28, on `fix/figure-round-6` off `main` at `6f1f598`. Nothing here is
+*2026-08-28, on `fix/figure-round-6` off `main` at `b656057`. Nothing here is
 fitted and no gate is read. Ruling R-4 (document 58 §2) gave the simulator two
 named adjudications and round 8 shipped both in the code; this round is the
 first time either of them is named on an image. Every number the figures state
@@ -298,7 +298,7 @@ call*).
 
 ## 8. Round 7 — the maintainer's notes on these figures
 
-*Appended 2026-08-28, on `fix/figure-round-7` off `main` at `27d29e8`. Five
+*Appended 2026-08-28, on `fix/figure-round-7` off `main` at `b34580d`. Five
 settled changes from a Fable 5 chat after the maintainer read the round-6
 PNGs. No statistic moves: all nine renders replay at `0.00e+00` before and
 after. 751 → **784 tests**, ruff clean.*
@@ -1081,7 +1081,7 @@ catch)`. No label-width test failed; the row was read on
 
 ### 15e. Verification
 
-935 tests pass (929 at `4491f2f`, plus six), ruff clean. Nine game-editions
+935 tests pass (929 before this round, plus six), ruff clean. Nine game-editions
 re-rendered from document 63's list — `2018_05_GB_DET`, `2021_14_LV_KC`,
 `2016_14_NYJ_SF` and `2017_11_JAX_CLE` Strict; `2025_17_DET_MIN`,
 `2025_13_DEN_WAS`, `2022_13_WAS_NYG`, `2024_19_LAC_HOU` and `2023_01_PHI_NE`

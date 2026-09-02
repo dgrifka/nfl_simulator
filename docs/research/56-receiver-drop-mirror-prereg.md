@@ -178,11 +178,11 @@ Round 7 ran 2026-08-27 on `feat/dropped-pick-variant`. Full record: **document
 
 | Part | Result | Commit |
 |---|---|---|
-| A — power, then thresholds | Guards **exact** (56,211 / 2,781 / 128). §1's table filled above. **The clause-1 grain rule fired on its second branch**: C-3 is 0.400 at receiver-season and 0.877 at team-season, so the component charges the receiving corps. A third file was needed — §1's instrument costs 183.8 s per fit at the receiver grain, ~100 hours for this part; `research/_crossed_block_grid.py` computes the same posterior on the same grid in 0.17 s and reproduces it to 1.2e-15 | `048e614` |
-| B — the study, arms 1–3 | Gate C-1 PASS on all three arms, 0 divergences, worst r̂ 1.0022. **G-4a PASS** (C-3 0.877). Gate **C-2 FAILS** at the charged grain, 0.87 pp against 0.63 pp, and is reportable. Like-grain cross-check 0.01 pp. **V-8 PASS**, both readings, both reference rows stored | `790cac0` |
-| C — the component, TDD | `receiver_drops.py`, the default-off switch, composable `variant`. The defence-effect-excluded-on-read pin and the swing-sign guard are tests, as §2 and handoff constraint 3 asked | `109799f` |
-| D — G-4b, G-4d, G-5 | **G-4b PASS**, **G-4d PASS** (2.32 pp vs 0.56 pp). V-1 0.00e+00 twice; read-side round trip 0.00e+00 over 54,160 rows | `e88a42f` |
-| D — G-4c | **PASS.** 19/19 folds clear C-1; agreement 0.996, median \|ΔDTW\| 0.04 pp | `e774547` |
+| A — power, then thresholds | Guards **exact** (56,211 / 2,781 / 128). §1's table filled above. **The clause-1 grain rule fired on its second branch**: C-3 is 0.400 at receiver-season and 0.877 at team-season, so the component charges the receiving corps. A third file was needed — §1's instrument costs 183.8 s per fit at the receiver grain, ~100 hours for this part; `research/_crossed_block_grid.py` computes the same posterior on the same grid in 0.17 s and reproduces it to 1.2e-15 | `3291646` |
+| B — the study, arms 1–3 | Gate C-1 PASS on all three arms, 0 divergences, worst r̂ 1.0022. **G-4a PASS** (C-3 0.877). Gate **C-2 FAILS** at the charged grain, 0.87 pp against 0.63 pp, and is reportable. Like-grain cross-check 0.01 pp. **V-8 PASS**, both readings, both reference rows stored | `71aa7d0` |
+| C — the component, TDD | `receiver_drops.py`, the default-off switch, composable `variant`. The defence-effect-excluded-on-read pin and the swing-sign guard are tests, as §2 and handoff constraint 3 asked | `1971828` |
+| D — G-4b, G-4d, G-5 | **G-4b PASS**, **G-4d PASS** (2.32 pp vs 0.56 pp). V-1 0.00e+00 twice; read-side round trip 0.00e+00 over 54,160 rows | `98e07b8` |
+| D — G-4c | **PASS.** 19/19 folds clear C-1; agreement 0.996, median \|ΔDTW\| 0.04 pp | `0253434` |
 | E — the record | Document 57, this section, document 52 §8, document 05 §3's two rows, and the queue | this commit |
 
 **§3's enactment rule is half satisfied.** G-4a–d all pass, so the computed

@@ -179,11 +179,11 @@ document 58; the round's record is document 59.
 
 | Enactment artifact | Commit |
 |---|---|
-| Ruling R-4 and the enactment plan (document 58) | `1080760` |
-| §3 preamble rewritten, treatment table, status (Part A) | `f2b8128` |
-| Editions in code — `strict` / `full` strings and `edition=` (Part B) | `b97624b` |
-| Sensitivities S-1 and S-2, reported (Part C) | `b8382f1` |
-| Record (document 59) and §6's Outcome | `b8382f1`, with Part C |
+| Ruling R-4 and the enactment plan (document 58) | `405f3ca` |
+| §3 preamble rewritten, treatment table, status (Part A) | `d7fe389` |
+| Editions in code — `strict` / `full` strings and `edition=` (Part B) | `a8c8117` |
+| Sensitivities S-1 and S-2, reported (Part C) | `d98ff67` |
+| Record (document 59) and §6's Outcome | `d98ff67`, with Part C |
 | Results, log and queue (Part D) | this commit |
 
 *Everything below this line was written before the ruling and is kept as it
@@ -217,11 +217,11 @@ mirror)`, which described the state before round 7.
 
 | Gate | Round 7 result | Commit |
 |---|---|---|
-| **G-4a** — the study (clause 1) | **PASS.** C-3 power **0.877** at the charged grain. The clause-1 grain rule fired on its second branch: power was 0.40 at receiver-season, so the component charges the **team-season**, the receiving corps. Gate C-2 **fails** at that grain (0.87 pp against a 0.63 pp threshold) and is reported, which is what clause 1's "reported whichever way it lands" provides for — and what §6 predicted | `790cac0` |
-| **G-4b** — the component | **PASS.** V-1 0.00e+00 over 2,761 games, V-2 0.00e+00 on all three variant arms, V-6 (0 divergences, max r̂ 1.0018 over 276 parameters), V-8 ten of ten lines under both readings, read-side round trip 0.00e+00 over 54,160 rows. V-3, V-4, V-5, V-7 as tests | `109799f`, `e88a42f` |
-| **G-4c** — self-fulfilment (clause 5) | **PASS.** Nineteen folds at document 54 F-1's spec, **all nineteen clearing Gate C-1 with zero divergences**; worst r̂ 1.0036, thinnest ESS-tail 1,904. Bucket agreement **0.996** (1,134/1,139) against ≥ 0.90; median \|ΔDTW\| between the arms **0.04 pp** against < 1.0 pp. §5's consequence applies to this direction too: **production keeps the in-sample read.** The week-out arm moves 165 games against the in-sample arm's 162, so the 14% is not an in-sample artifact | `e774547` |
-| **G-4d** — materiality (clause 4) | **PASS.** On the 1,138 affected games, median \|ΔDTW\| **2.32 pp** against a median 89% half-width of **0.56 pp**, clear by 1.75 pp. The floor was not re-tuned | `e88a42f` |
-| **G-5** — the combined audit | Reported, never gated. `+dp` 136 bucket moves, `+rd` 162, `+dp+rd` 200. §6's predicted asymmetry shows up in the interval widening: `+dp` widens the mean 89% DTW interval 0.0383 → 0.0514, `+rd` only 0.0387 → 0.0405, because a team-season's catch rate rests on ~437 balls and a defence-season's finishing on ~22 chances | `e88a42f` |
+| **G-4a** — the study (clause 1) | **PASS.** C-3 power **0.877** at the charged grain. The clause-1 grain rule fired on its second branch: power was 0.40 at receiver-season, so the component charges the **team-season**, the receiving corps. Gate C-2 **fails** at that grain (0.87 pp against a 0.63 pp threshold) and is reported, which is what clause 1's "reported whichever way it lands" provides for — and what §6 predicted | `71aa7d0` |
+| **G-4b** — the component | **PASS.** V-1 0.00e+00 over 2,761 games, V-2 0.00e+00 on all three variant arms, V-6 (0 divergences, max r̂ 1.0018 over 276 parameters), V-8 ten of ten lines under both readings, read-side round trip 0.00e+00 over 54,160 rows. V-3, V-4, V-5, V-7 as tests | `1971828`, `98e07b8` |
+| **G-4c** — self-fulfilment (clause 5) | **PASS.** Nineteen folds at document 54 F-1's spec, **all nineteen clearing Gate C-1 with zero divergences**; worst r̂ 1.0036, thinnest ESS-tail 1,904. Bucket agreement **0.996** (1,134/1,139) against ≥ 0.90; median \|ΔDTW\| between the arms **0.04 pp** against < 1.0 pp. §5's consequence applies to this direction too: **production keeps the in-sample read.** The week-out arm moves 165 games against the in-sample arm's 162, so the 14% is not an in-sample artifact | `0253434` |
+| **G-4d** — materiality (clause 4) | **PASS.** On the 1,138 affected games, median \|ΔDTW\| **2.32 pp** against a median 89% half-width of **0.56 pp**, clear by 1.75 pp. The floor was not re-tuned | `98e07b8` |
+| **G-5** — the combined audit | Reported, never gated. `+dp` 136 bucket moves, `+rd` 162, `+dp+rd` 200. §6's predicted asymmetry shows up in the interval widening: `+dp` widens the mean 89% DTW interval 0.0383 → 0.0514, `+rd` only 0.0387 → 0.0405, because a team-season's catch rate rests on ~437 balls and a defence-season's finishing on ~22 chances | `98e07b8` |
 | **V-1** — v1.3 untouched | **PASS** again, 0.00e+00 over 2,761 games, at the start and end of both round-7 audit runs | round 7 |
 
 *The round-6 table below is kept as it was written.*
@@ -236,7 +236,7 @@ the wording §5's G-4 clause wrote for exactly this state.
 | Gate | Round 6 result | Commit |
 |---|---|---|
 | **G-1** — self-fulfilment (clause 5) | **PASS.** Nineteen folds at document 54 F-1's spec (weeks 1-18 plus a postseason fold holding weeks 19-22 together), **all nineteen clearing Gate C-1 with zero divergences**; worst r̂ 1.0043, thinnest ESS-tail 1,602. Bucket agreement between the in-sample and week-out arms **0.997** (1,136 of 1,139 games) against a ≥ 0.90 bar; median \|ΔDTW\| between the arms **0.05 pp** against a < 1.0 pp bar. Document 52 §5's consequence applies: **production keeps the in-sample read, with this bound recorded.** The week-out arm moves 139 games across a bucket against the in-sample arm's 136, so the 12% is not an in-sample artifact | round 6, document 55 |
-| **G-2**, **G-3** | Unchanged from round 5 — both PASS | `a4ce823` |
+| **G-2**, **G-3** | Unchanged from round 5 — both PASS | `99a13e5` |
 | **G-4** — the mirror (clause 3) | **Not run.** Round 7, and it is now the *only* thing A-3 waits on | — |
 | **V-1** — v1.3 untouched | **PASS** again, 0.00e+00 over 2,761 games | round 6 |
 
@@ -249,12 +249,12 @@ Round 5 ran 2026-08-27 on `feat/dropped-pick-variant`. Full record: document 53.
 
 | Gate | Result | Commit |
 |---|---|---|
-| **R-3** — ruling on V-8 | **Made.** The 2022 NYG breach of 1.1 pp on one of ten lines is immaterial; the bound stands unamended. Recorded in documents 50 §2 and 49 §10 | `cf73e8b` |
-| **G-1** — self-fulfilment (clause 5) | **BLOCKED.** Eighteen week-out folds fitted; **7 of 18 miss Gate C-1** at §7's spec (weeks 1, 3, 7, 9, 13, 14, 16) — 0 divergences in all eighteen, r̂ at worst 1.0146 on `sigma_d`/`sigma_q`, ESS-tail as low as 245. The agreement statistic is **not computed**, and neither is the week-out variant's audit. All eighteen traces are on disk; the fits cost 188 s | `2c3223a` |
-| **G-2** — pricing sensitivity | **PASS.** Every throw at the pooled −3.55 EPA moves **129** games across a verdict bucket, **0.94** of the 137 the binned swing moves, against a ≥ 0.50 bar. Element-wise: 116 in both move sets, 21 binned-only, 13 flat-only | `a4ce823` |
-| **G-3** — materiality (clause 4) | **PASS.** On the 1,033 affected games, median \|ΔDTW\| **1.62 pp** against a median 89% half-width of **0.56 pp**, clear by 1.06 pp; also clear on the means (6.96 vs 1.91 pp). §5's pre-committed note expected a possible fail by comparing a median move to a *mean full width*; the gate was computed on its own text | `a4ce823` |
+| **R-3** — ruling on V-8 | **Made.** The 2022 NYG breach of 1.1 pp on one of ten lines is immaterial; the bound stands unamended. Recorded in documents 50 §2 and 49 §10 | `61e9717` |
+| **G-1** — self-fulfilment (clause 5) | **BLOCKED.** Eighteen week-out folds fitted; **7 of 18 miss Gate C-1** at §7's spec (weeks 1, 3, 7, 9, 13, 14, 16) — 0 divergences in all eighteen, r̂ at worst 1.0146 on `sigma_d`/`sigma_q`, ESS-tail as low as 245. The agreement statistic is **not computed**, and neither is the week-out variant's audit. All eighteen traces are on disk; the fits cost 188 s | `57cc092` |
+| **G-2** — pricing sensitivity | **PASS.** Every throw at the pooled −3.55 EPA moves **129** games across a verdict bucket, **0.94** of the 137 the binned swing moves, against a ≥ 0.50 bar. Element-wise: 116 in both move sets, 21 binned-only, 13 flat-only | `99a13e5` |
+| **G-3** — materiality (clause 4) | **PASS.** On the 1,033 affected games, median \|ΔDTW\| **1.62 pp** against a median 89% half-width of **0.56 pp**, clear by 1.06 pp; also clear on the means (6.96 vs 1.91 pp). §5's pre-committed note expected a possible fail by comparing a median move to a *mean full width*; the gate was computed on its own text | `99a13e5` |
 | **G-4** — the mirror (clause 3) | **Not run.** Round 6, and it now waits on G-1 as well | — |
-| **V-1** — v1.3 untouched | **PASS**, twice: 0.00e+00 over 2,761 games on the deserved margin, DTW% and both bounds, re-printed at the end of both audit runs | `2c3223a`, `a4ce823` |
+| **V-1** — v1.3 untouched | **PASS**, twice: 0.00e+00 over 2,761 games on the deserved margin, DTW% and both bounds, re-printed at the end of both audit runs | `57cc092`, `99a13e5` |
 
 **A-3 was not enacted at the end of round 5.** Both substantive gates passed;
 what was missing was the precondition to G-1, so clause 5 had no bound and §4's

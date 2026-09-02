@@ -265,7 +265,7 @@ the check that would fail if this frame's own constants had been used.
 
 ## 7. Commits
 
-`98d6e03` document 47 (the pre-registration and the rulings) · Part A, the
+`e655060` document 47 (the pre-registration and the rulings) · Part A, the
 rulings recorded in documents 43 and 46 · Part B,
 `research/66_dropped_pick_game_effect.py` · Part C,
 `research/65_dropped_pick_diagnostic.py` · Part D, this record.

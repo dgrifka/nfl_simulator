@@ -214,7 +214,7 @@ Results are written back into this document as §8.
 
 *Scripts: `research/17_coverage.py` (the check) and
 `research/18_coverage_remediation.py` (the pre-registered remediation). Gates
-fixed by §4 above, committed at `bf95345` before either script existed. Results
+fixed by §4 above, committed at `e1ba8a8` before either script existed. Results
 in `research/outputs/17_coverage.json` and `18_coverage_remediation.json`.*
 
 ### Gate outcomes, stated first

@@ -376,7 +376,7 @@ Results are written back into this document as §8.
 
 ## 8. Results
 
-*Script: `research/41_blocked_pricing.py`. The gates were committed at `a06edb3`
+*Script: `research/41_blocked_pricing.py`. The gates were committed at `e33edc6`
 before this script existed. Results in `research/outputs/41_blocked_pricing.json`.*
 
 ### The verdict, stated first
@@ -502,7 +502,7 @@ Three things make this concrete rather than a complaint:
    than a threshold. **That gate does not exist in this project and this round is
    the argument for writing one.**
 
-**This document does not adopt that gate.** The rule was fixed at `a06edb3` and
+**This document does not adopt that gate.** The rule was fixed at `e33edc6` and
 the result is read against the rule as written. Proposing the new gate is a
 separate round with its own pre-registration, and it should be written before
 anybody looks at this candidate again — otherwise it is goalpost-moving with a

@@ -1,7 +1,7 @@
 # 07 — Rematch validation: results
 
 *Script: `research/08_rematch.py`. Design, statistic and thresholds fixed by
-`docs/research/06-rematch-validation.md`, committed at `70d6254` **before the
+`docs/research/06-rematch-validation.md`, committed at `defee5c` **before the
 simulator produced a single deserve-to-win number**. Results in
 `research/outputs/08_rematch.json`.*
 

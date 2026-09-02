@@ -1,7 +1,7 @@
 """Phase 6 candidate 2 — blocked-kick aftermath: the Gate B-4 / B-5 / B-6 fit.
 
 Runs the gates `docs/research/25-blocked-kick-aftermath.md` §5 committed at
-`0427bd1`, before this file existed:
+`03a1a2b`, before this file existed:
 
 * **B-4** — does a blocked-kick component move the 378 games that carry one by
   more than v1.2's own 1.4392 pp median half-width on them?

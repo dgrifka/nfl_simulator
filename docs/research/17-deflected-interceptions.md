@@ -319,7 +319,7 @@ Results are written back into this document as §8.
 
 ## 8. Results
 
-*Script: `research/28_deflected_int.py`. Gates committed at `5cdf574` before this
+*Script: `research/28_deflected_int.py`. Gates committed at `6fe81c2` before this
 script existed. Results in `research/outputs/28_deflected_int.json`.*
 
 ### The verdict, stated first

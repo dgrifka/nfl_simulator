@@ -332,7 +332,7 @@ Results are written back into this document as §8.
 
 ## 8. Results
 
-*Script: `research/33_onside.py`. The gates were committed at `c5d4dfe` before
+*Script: `research/33_onside.py`. The gates were committed at `b80fe9f` before
 this script existed. Results in `research/outputs/33_onside.json`.*
 
 ### The verdict, stated first

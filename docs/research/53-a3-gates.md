@@ -285,7 +285,7 @@ the maintainer merges.**
 
 | Part | Commit | What |
 |---|---|---|
-| A | `cf73e8b` | Ruling R-3 recorded in documents 50 §2 and 49 §10 |
-| B | `2c3223a` | `research/69_dropped_pick_weekout.py`; `67` and `68` refactored callable; 18 folds fitted and saved; G-1 blocked at C-1; 525 → 536 tests |
-| C | `a4ce823` | `research/70_dropped_pick_sensitivity.py`; G-2 PASS 0.94, G-3 PASS 1.62 vs 0.56 pp; V-1 0.00e+00 |
+| A | `61e9717` | Ruling R-3 recorded in documents 50 §2 and 49 §10 |
+| B | `57cc092` | `research/69_dropped_pick_weekout.py`; `67` and `68` refactored callable; 18 folds fitted and saved; G-1 blocked at C-1; 525 → 536 tests |
+| C | `99a13e5` | `research/70_dropped_pick_sensitivity.py`; G-2 PASS 0.94, G-3 PASS 1.62 vs 0.56 pp; V-1 0.00e+00 |
 | D | this commit | This document, document 52 §8, document 05 §3's row, and the queue |

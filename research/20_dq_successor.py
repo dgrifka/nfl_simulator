@@ -1,7 +1,7 @@
 """Phase 4, step 2 — the DQW% successor, run against the criteria document 12 committed.
 
 Design, statistics and thresholds are fixed by `docs/research/12-dq-successor.md`,
-committed at `b0bc656` before this script existed. Nothing here chooses anything.
+committed at `7dc0fb5` before this script existed. Nothing here chooses anything.
 
     SC-1  the finishing residual must not persist       (binding; threshold 0.0669)
     SC-2  between-team spread must survive              (retention >= 0.95)

@@ -410,7 +410,7 @@ Results are written back into this document as §10.
 ## 10. Results
 
 *Script: `research/19_drive_anatomy.py`. Design, statistics and thresholds fixed
-by §§1–9 above, committed at `a2b9376` before this script produced a result.
+by §§1–9 above, committed at `03c6a66` before this script produced a result.
 Results in `research/outputs/19_drive_anatomy.json`; the drive table itself is
 persisted to `research/outputs/drive_anatomy.parquet`.*
 

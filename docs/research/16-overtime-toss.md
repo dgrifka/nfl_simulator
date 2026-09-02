@@ -469,7 +469,7 @@ Results are written back into this document as §8.
 ## 8. Results
 
 *Script: `research/26_overtime.py`. Gate A settled in §2, thresholds fixed in
-§4–§5, all committed at `3fbbc59` before this script existed. Results in
+§4–§5, all committed at `fea34ea` before this script existed. Results in
 `research/outputs/26_overtime.json`, per-game impact in
 `research/outputs/26_overtime_games.parquet`.*
 

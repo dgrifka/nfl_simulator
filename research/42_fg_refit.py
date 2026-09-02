@@ -1,7 +1,7 @@
 """Phase 7, task 1 — refit the make-probability model without blocked kicks.
 
 Runs the gates `docs/research/27-make-probability-refit.md` §7 committed at
-`88ac49c`, before this file existed:
+`6f39c6e`, before this file existed:
 
 * **R-1** sampler health, **R-2** weather calibration, **R-3** wind resolvable,
   **R-4** distance calibration (which also picks the arm), **R-5** posterior

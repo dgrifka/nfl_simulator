@@ -1,6 +1,6 @@
 """Phase 8, task 1 — the read-side fix, measured in isolation.
 
-Runs the gates `docs/research/30-v13-corrections.md` §5 committed at `b9e44c4`,
+Runs the gates `docs/research/30-v13-corrections.md` §5 committed at `e6920d0`,
 before this file existed:
 
 * **S-1** the round trip — priced through `FieldGoalModel`, every kick in the

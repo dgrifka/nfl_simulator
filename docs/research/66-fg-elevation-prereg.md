@@ -2,7 +2,7 @@
 
 *Written 2026-08-31, **before `research/81_fg_elevation.py` existed**. The power
 calculation and the null bound run in `research/81a_fg_elevation_power.py`,
-committed at `abf9beb` with its results in
+committed at `64fa393` with its results in
 `research/outputs/81a_fg_elevation_power.json`; not one fit in that file touches
 a real outcome. Committed to git before any fit produces a number.*
 
@@ -226,7 +226,7 @@ The handoff asked for the choice to be stated. Two reasons, and one concession:
 ## 5. The elevation table
 
 `src/nfl_simulator/data/stadium_elevation.py`, committed before this document at
-`c360e78`, with `tests/test_stadium_elevation.py`.
+`87c806c`, with `tests/test_stadium_elevation.py`.
 
 - 42 rows, one per `stadium_id` appearing in 2016–2025 play-by-play. The test
   suite fails if the cache ever contains an id the table does not.

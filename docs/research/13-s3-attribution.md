@@ -371,7 +371,7 @@ response, so it exposed nothing about the result.
 
 **And one blemish on the commit ordering, recorded rather than tidied away.**
 `research/21_s3_attribution.py` — the script that produces §10 — was written
-while the null-bound simulation was still running and was committed at `4742fc4`,
+while the null-bound simulation was still running and was committed at `d32c928`,
 **before** this document. It had not been run: `research/outputs/21_s3_attribution.json`
 postdates this document's commit, and the null bounds it consumes did not exist
 when it was written. But an auditor checking goalpost integrity the way this
@@ -425,7 +425,7 @@ Results are written back into this document as §10.
 ## 10. Results
 
 *Script: `research/21_s3_attribution.py`. Design, instrument, null bounds and
-reporting rules fixed by §§1–9 above, committed at `7af5f01` before this script
+reporting rules fixed by §§1–9 above, committed at `365f7d5` before this script
 produced a result. Results in `research/outputs/21_s3_attribution.json`.*
 
 ### Outcome, stated first

@@ -1,7 +1,7 @@
 """Phase 5 candidate 2b — deflected interceptions as a bound, not a component.
 
 Runs Gate D-1 of `docs/research/22-deflected-int-bound.md` §5, committed at
-`6b00e4f` before this file existed: does the ledger impact of neutralizing
+`c82fcda` before this file existed: does the ledger impact of neutralizing
 deflected interceptions depend on `f`, the unidentified fraction of
 pass-defensed incompletions that were live tips?
 

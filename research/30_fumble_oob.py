@@ -1,7 +1,7 @@
 """Phase 5 candidate 3 — fumbles out of bounds: the Gate F-2 fit.
 
 Runs the gate `docs/research/18-fumble-out-of-bounds.md` §5c committed at
-`afae577`, before this file existed: is the entity spread on the widened
+`3f203dc`, before this file existed: is the entity spread on the widened
 retention branch below the 5.260 pp null bound, so that full neutralization
 survives?
 

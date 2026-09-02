@@ -1,7 +1,7 @@
 """Phase 5 candidate 2 — deflected-pass interceptions: the determination.
 
 Runs the gates `docs/research/17-deflected-interceptions.md` §5 committed at
-`5cdf574`, before this file existed:
+`6fe81c2`, before this file existed:
 
 * **Gate D-1** — the branch point. Settled in §2 by argument; nothing to run.
 * **Gate D-2** — the identification gate. Re-checked here against the data

@@ -1,6 +1,6 @@
 """Phase 6 candidate 1 — kickoff muffs: the Gate M-3 / M-4 / M-5 / M-6 fit.
 
-Runs the gates `docs/research/24-kickoff-muffs.md` §5 committed at `b5ec6d4`,
+Runs the gates `docs/research/24-kickoff-muffs.md` §5 committed at `2042289`,
 before this file existed:
 
 * **M-3** — is the entity spread on the widened population below the 5.0718 pp

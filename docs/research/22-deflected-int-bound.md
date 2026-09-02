@@ -175,7 +175,7 @@ Results are written back into this document as §8.
 
 ## 8. Results
 
-*Script: `research/34_deflected_bound.py`. The gate was committed at `6b00e4f`
+*Script: `research/34_deflected_bound.py`. The gate was committed at `c82fcda`
 before this script existed. Results in
 `research/outputs/34_deflected_bound.json`.*
 

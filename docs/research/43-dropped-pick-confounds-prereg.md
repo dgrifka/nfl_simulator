@@ -352,11 +352,11 @@ document 09 read onside kicks. The diagnostic says "not persistent *at this
 sample*"; avenue (3) stays closed on grounds of **unmeasurability**, not of a
 measured zero.
 
-**Commits.** `6cdeb5d` this pre-registration · `67a98b6` Part A, the power table
-and its thresholds · `feca435` Part B, the fits · Part C, this record, the
+**Commits.** `ff70ebb` this pre-registration · `d290416` Part A, the power table
+and its thresholds · `8fcc5e5` Part B, the fits · Part C, this record, the
 results file and the queue. Branch `docs/dropped-pick-confounds`, cut from
 `docs/dropped-pick-prereg` rather than from `main` because this document is not
-on `main` — so merging it merges `6cdeb5d` too. Unmerged; the maintainer merges.
+on `main` — so merging it merges `ff70ebb` too. Unmerged; the maintainer merges.
 `git diff main -- src/` is empty; 502 tests pass.
 
 **One question is open and it is the maintainer's**: the Gate C-1 failure on `sigma_q`.

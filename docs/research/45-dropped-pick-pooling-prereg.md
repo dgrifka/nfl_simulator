@@ -190,7 +190,7 @@ failure (document 46 §4a — the pooled comparison is grain-mismatched by
 construction, and fixing that is a change to document 43 §5's committed text),
 and which §7 wording the game page carries.
 
-**Commits.** `4cfaa66` this amendment · `b645105` Part A, the power table and its
-thresholds · `824cc72` Part B, the fits · Part C, the record, results file and
+**Commits.** `4240339` this amendment · `261f9c3` Part A, the power table and its
+thresholds · `34b8b9d` Part B, the fits · Part C, the record, results file and
 queue. Branch `docs/dropped-pick-confounds`, unmerged; the maintainer merges.
 `git diff main -- src/` is empty; 502 tests pass.

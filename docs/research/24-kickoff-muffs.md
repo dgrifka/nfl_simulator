@@ -503,7 +503,7 @@ Results are written back into this document as §8.
 
 ## 8. Results
 
-*Script: `research/37_kickoff_muffs.py`. The gates were committed at `b5ec6d4`
+*Script: `research/37_kickoff_muffs.py`. The gates were committed at `2042289`
 before this script existed. Results in `research/outputs/37_kickoff_muffs.json`.*
 
 ### The verdict, stated first

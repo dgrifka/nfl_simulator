@@ -387,7 +387,7 @@ Results are written back into this document as §8.
 
 ## 8. Results
 
-*Script: `research/39_blocked_kicks.py`. The gates were committed at `0427bd1`
+*Script: `research/39_blocked_kicks.py`. The gates were committed at `03a1a2b`
 before this script existed. Results in `research/outputs/39_blocked_kicks.json`.*
 
 ### The verdict, stated first

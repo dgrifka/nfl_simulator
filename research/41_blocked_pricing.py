@@ -1,7 +1,7 @@
 """Phase 6 candidate 3 — blocked kicks priced as misses: the Gate P-3 / P-4 fit.
 
 Runs the gates `docs/research/26-blocked-kick-pricing.md` §5 committed at
-`a06edb3`, before this file existed:
+`e33edc6`, before this file existed:
 
 * **P-3** — does excluding blocked kicks from the field-goal and extra-point
   components move the 287 games that carry one by more than v1.2's own 1.6250 pp

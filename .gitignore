@@ -29,3 +29,7 @@ CLAUDE.local.md
 .public-safety-patterns
 CLAUDE.md
 docs/research/hypothesis-queue.md
+# Round scaffolding: local-only, like the working queue
+docs/research/handoff-*
+docs/research/log-*
+docs/research/results-*

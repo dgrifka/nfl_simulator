@@ -624,7 +624,7 @@ Results are written back into this document as §14.
 *Scripts: `research/42a_fg_refit_power.py` (thresholds), `research/42_fg_refit.py`
 (the fits and gates, §9a and §9b), `research/42b_fg_refit_impact.py` (§9c and
 §9d) and `research/42c_read_side_defect.py` (§14f, written after the round-trip
-check failed). The gates were committed at `88ac49c` before any of them existed.
+check failed). The gates were committed at `6f39c6e` before any of them existed.
 Results in `research/outputs/fg_refit_summary.json`,
 `42a_fg_refit_power.json`, `42b_fg_refit_impact.json` and
 `42c_read_side_defect.json`.*

@@ -1,7 +1,7 @@
 """Phase 3, step 2 — the drive-outcome resampling, run against pre-registered gates.
 
 Design, statistic and thresholds are fixed by `docs/research/08-sequencing-luck.md`
-§10, committed at `1d91af4` before this script existed. Nothing here chooses
+§10, committed at `9e9af9d` before this script existed. Nothing here chooses
 anything.
 
 The measure it produces, **DQW%**, answers a different question from DTW%:

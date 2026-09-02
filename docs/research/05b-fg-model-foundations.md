@@ -324,7 +324,7 @@ Results are written back into this document as §9.
 ## 9. Results
 
 *Script: `research/07_fg_model.py`. Gates pre-registered in §6, committed at
-`7e9e6d1` before any fit existed. Results in
+`d02395d` before any fit existed. Results in
 `research/outputs/07_fg_model.json`.*
 
 ### Gate outcomes, stated first
@@ -658,7 +658,7 @@ document 08 §7 records the equivalent for the sequencing round.
 ## 11. Weather and extra points — results
 
 *Script: `research/14_fg_weather_model.py`. Design, priors and gates fixed by §10
-above, committed at `8e0b50e` before this script existed. Results in
+above, committed at `962717b` before this script existed. Results in
 `research/outputs/fg_weather_summary.json`.*
 
 ### Gate outcomes, stated first

@@ -390,7 +390,7 @@ and 3 replaced.
 in the clash ladder are accepted as implemented. Neither needed work.
 
 **(a) The ledger card's headline is the luck on that team's own plays**
-(`a8196f9`, closes D-1). Both boxes carry the same three lines — `LUCK ON OWN
+(`41be6fa`, closes D-1). Both boxes carry the same three lines — `LUCK ON OWN
 PLAYS`, the headline, the event count — and the headline is the sum of the table
 under it. The lane between the boxes carries `vs`, the game's net luck in the
 favoured club's colour, and the two margins as one sentence about the scoreboard
@@ -403,7 +403,7 @@ On `2025_13_DEN_WAS`, the card this defect was raised on: both headlines are now
 green (+2.2 and +4.5) over green columns, and the lane reads `Net luck: WAS
 +2.3`. Nothing on the card contradicts anything else on it.
 
-**(b) The callout declines with the pill** (`31a2b6d`, closes D-3). Inside the
+**(b) The callout declines with the pill** (`f739cce`, closes D-3). Inside the
 band it reads `MIN 55% · DET 45% — too close to call` in ink. Outside the band
 the wording and the club colour are unchanged, and a test pins that.
 
@@ -415,7 +415,7 @@ degeneracy caveat all still carry the 100%, and the luck arrow was already
 suppressed on degenerate games for the same reason. Easily reversed.
 
 **(c) A club under the contrast floor wears its secondary everywhere**
-(`805ebd8`, closes D-2). The floor moved from the pair rule up to the club
+(`1296dc1`, closes D-2). The floor moved from the pair rule up to the club
 lookup, where a club's identity is chosen rather than a pair's:
 `teams.readable_colours` returns the secondary first when the primary is under
 3:1 on the surface, and darkens the darker of the two until it reads if both
