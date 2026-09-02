@@ -72,6 +72,18 @@ DEFAULT_SEED = 20260817
 # Document 03's convention, carried through Phase 2.
 ETI_LOW, ETI_HIGH = 5.5, 94.5
 
+# Document 73 §3's rule, as a key. The two variant builders below read their
+# frame's *row position* twice over: `_resample` hands out one block of posterior
+# indices per event in iteration order, and `_replayed_adjustment` then
+# column-indexes its coin uniforms by each event's position in the sequence. The
+# frames they iterate come out of an inner join, and an inner join makes no order
+# promise — Polars' hash join emits the order the charting frame arrived in, so
+# two charting pulls that agree on every value row for row still adjudicate
+# differently (document 73 §1: 0 of 47,316 rows differ, the margin moves
+# 1.14e-06 pt). Sorting to a key with no ties makes the adjudication a function
+# of the data's values rather than of the order they were handed over in.
+TOTAL_ORDER = ("game_id", "play_id")
+
 
 @dataclass(frozen=True)
 class LuckEvent:
@@ -406,7 +418,8 @@ def dropped_pick_events(
         return []
 
     events = []
-    for row in worthy_throw_frame(plays, ftn).iter_rows(named=True):
+    # Sorted before a single draw is taken — document 73 §3, and see `TOTAL_ORDER`.
+    for row in worthy_throw_frame(plays, ftn).sort(TOTAL_ORDER).iter_rows(named=True):
         catch = model.catch_probability(row["defence_season"], row)
         home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
         swing = abs(model.swing_for(row["yardline_100"], row["down"]))
@@ -470,7 +483,8 @@ def receiver_drop_events(
         return []
 
     events = []
-    for row in catchable_target_frame(plays, ftn).iter_rows(named=True):
+    # Sorted before a single draw is taken — document 73 §3, and see `TOTAL_ORDER`.
+    for row in catchable_target_frame(plays, ftn).sort(TOTAL_ORDER).iter_rows(named=True):
         catch = model.catch_probability(row["entity_season"], row)
         home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
         swing = abs(model.swing_for_play(row))

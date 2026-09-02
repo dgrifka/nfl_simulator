@@ -337,7 +337,8 @@ def test_g1_every_ledger_row_is_exactly_invariant_to_ftn_row_order(baselines, sp
     base = adjudicate(baselines, ftn_frame(), posterior_spread=spread)
     base_rows = [entry.to_dict() for entry in base.ledger]
     for name, permuted in permutations():
-        rows = [entry.to_dict() for entry in adjudicate(baselines, permuted, spread).ledger]
+        other = adjudicate(baselines, permuted, posterior_spread=spread)
+        rows = [entry.to_dict() for entry in other.ledger]
         assert rows == base_rows, name
 
 
