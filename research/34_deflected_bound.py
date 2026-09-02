@@ -104,7 +104,7 @@ def deflection_events(
                 component="deflection",
                 event_class="deflected pass",
                 charged_team=row["defteam"],
-                realized=1.0 if intercepted else 0.0,
+                actual=1.0 if intercepted else 0.0,
                 expected_draws=np.full(POSTERIOR_DRAWS, p),
                 swing=swing * home_sign,
             )

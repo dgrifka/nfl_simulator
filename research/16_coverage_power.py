@@ -133,7 +133,7 @@ def one_game(
                 component="synthetic",
                 event_class="synthetic",
                 charged_team="HOM",
-                realized=realized[i],
+                actual=realized[i],
                 expected_draws=draws,
                 swing=float(swing[i]),
             )

@@ -94,7 +94,7 @@ def blocked_kick_events(
                 component="blocked_kick",
                 event_class=row["kick_class"],
                 charged_team=row["kicking_team"],
-                realized=float(row["retained"]),
+                actual=float(row["retained"]),
                 expected_draws=draws,
                 swing=float(row["swing_value"]) * home_sign,
             )
