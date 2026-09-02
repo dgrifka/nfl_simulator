@@ -1,6 +1,6 @@
 [project]
 name = "nfl-simulator"
-version = "0.1.0"
+version = "1.4.0"
 description = "NFL deserve-to-win simulator: re-adjudicate games by neutralizing luck rather than replaying plays."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"

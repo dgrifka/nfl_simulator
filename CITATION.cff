@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this simulator or its research record, please cite it as below."
+title: "nfl_simulator: a deserve-to-win simulator for NFL games"
+type: software
+authors:
+  - name: "dgrifka"
+version: 1.4.0
+date-released: "2026-09-02"
+repository-code: "https://github.com/dgrifka/nfl_simulator"
+license: MIT
+abstract: >-
+  Re-adjudicates one NFL game by neutralizing luck rather than replaying
+  plays: each luck event's realized EPA is replaced by its expectation, and
+  the coin flips are bootstrapped into a deserve-to-win distribution. Built
+  on play-by-play and charting data from the nflverse project
+  (https://github.com/nflverse), with full credit to its maintainers.

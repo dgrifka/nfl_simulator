@@ -12,7 +12,7 @@ The second is exposed lazily: importing it pulls in matplotlib and the whole
 figure stack, and `from nfl_simulator import paths` should not pay for that.
 """
 
-__version__ = "0.1.0"
+__version__ = "1.4.0"
 
 __all__ = ["adjudicate_live_game"]
 
