@@ -87,7 +87,11 @@ and `full`. See [59 — the two editions](docs/research/59-a3-enacted.md) and
 
 Across the 1,139 games of 2022–2025, the deserved winner differs from the
 scoreboard in **168 of them (14.75%)** — about one game in seven
-([68 §6](docs/research/68-simulator-v14.md)).
+([68 §6](docs/research/68-simulator-v14.md)). Verdicts ship in three buckets
+rather than one cutoff: **127 clear flips, 97 too close to call** (deserved-win
+probability between 40 and 60%) and **915 where the scoreboard holds** — and
+309 games (27%) are pinned at 0 or 100, decided beyond luck's reach
+([64 §12](docs/research/64-one-simulator-summary.md)).
 
 ## What is deliberately out of scope
 

@@ -18,9 +18,9 @@ Three things are load-bearing rather than decorative:
   credit for the play-by-play this whole repo runs on, so it travels with the
   image rather than with the post it was attached to.
 
-The handle is deliberately a placeholder. ``BRAND_HANDLE`` reads ``@[TBD]``
-until the maintainer names the account; a figure that shipped with an invented handle
-would be pointing readers at somebody else.
+``BRAND_HANDLE`` names the account the product posts from. It read ``@[TBD]``
+until the maintainer named the account; a figure that ships with an invented
+handle would be pointing readers at somebody else.
 """
 
 from __future__ import annotations

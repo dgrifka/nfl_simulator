@@ -3178,7 +3178,7 @@ CAPTIONS = {
     ),
     "16_den_was_with_without.png": (
         "One game with and without the hands-on-the-ball rows, on one axis. Denver's share "
-        "falls from 86% to 59%; the verdict did not flip, it stopped being a verdict."
+        "falls from 85% to 59%; the verdict did not flip, it stopped being a verdict."
     ),
     "17_fumble_retention_bars.png": (
         "How often the fumbling team keeps the ball, by class of play, on the fitted "
@@ -3230,7 +3230,7 @@ ARTICLE = paths.REPO_ROOT / "docs" / "writeup" / "community-writeup.md"
 
 def write_captions() -> Path:
     """One line per shipped image, for worker 2 to read after the merge."""
-    lines = ["# Figure captions — community write-up, round 2", ""]
+    lines = ["# Figure captions", ""]
     lines += [
         "*Written by `research/80_writeup_figures.py`. Every image in "
         "`docs/writeup/figures/` is listed; every one was opened before its line "

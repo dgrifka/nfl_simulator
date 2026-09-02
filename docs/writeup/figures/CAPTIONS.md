@@ -1,4 +1,4 @@
-# Figure captions — community write-up, round 2
+# Figure captions
 
 *Written by `research/80_writeup_figures.py`. Every image in `docs/writeup/figures/` is listed; every one was opened before its line was written.*
 
@@ -11,7 +11,7 @@
 - **`13_epa_to_points.png`** — Final margin against EPA differential, 2,761 games — the 0.8389 points-per-EPA conversion the whole article quotes, r² = 0.992.
 - **`14_refused_floors.png`** — Three components that passed the mechanism test and failed on size, each against the floor committed before its effect was computed.
 - **`15_defense_shrinkage.png`** — Five defense-seasons' interception catch rate on interceptable throws, and where the model puts each — a logistic regression, not the beta-binomial figure 3 draws.
-- **`16_den_was_with_without.png`** — One game with and without the hands-on-the-ball rows, on one axis. Denver's share falls from 86% to 59%; the verdict did not flip, it stopped being a verdict.
+- **`16_den_was_with_without.png`** — One game with and without the hands-on-the-ball rows, on one axis. Denver's share falls from 85% to 59%; the verdict did not flip, it stopped being a verdict.
 - **`17_fumble_retention_bars.png`** — How often the fumbling team keeps the ball, by class of play, on the fitted baseline the simulator prices with. A botched snap on a run is kept 76.9% of the time and a fumble on a run 46.1% — a coin, but not the same coin.
 - **`18_kicker_prior_posterior.png`** — One kicker-season priced: E. Piñeiro's 2025 record of 31 of 32 is raw, and the colored curve is his shrunk posterior — both read as make probability from 45 yards.
 - **`19_denver_prior_posterior.png`** — The same picture for a defense's hands: Denver's 2024 defense caught 13 of 17 interceptable throws, and the model moves from the league's 49.8% to 55.2%.
