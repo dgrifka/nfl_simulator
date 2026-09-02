@@ -141,6 +141,7 @@ DOC_CHECKS = {
     "worthy_clean_pct": (47.6, 0.05),
     "den_2025_worthy": (21, 0.001),
     "den_2025_caught": (8, 0.001),
+    "den_2025_league_pct": (52.3, 0.05),
     # document 02 §1, the pooled recovery-rate split half
     "fumble_rate_split_half_r": (0.051, 0.001),
     # document 02, test 1 — the six split-half correlations
@@ -1295,7 +1296,8 @@ def denver_2025_followup() -> dict:
 
     The maintainer 2026-08-31. Raw 2025 rate on interception-worthy throws against the
     Denver defense, from the same charting join every drop figure uses. The
-    check pins the counts so the article's sentence cannot drift from the data.
+    checks pin the counts and the league rate so the article's sentence cannot
+    drift from the data.
     """
     import glob
 
@@ -1314,6 +1316,7 @@ def denver_2025_followup() -> dict:
     caught = int(denver["interception"].sum())
     check("den_2025_worthy", denver.height)
     check("den_2025_caught", caught)
+    check("den_2025_league_pct", round(float(worthy["interception"].mean()) * 100, 1))
     return {
         "worthy": denver.height,
         "caught": caught,

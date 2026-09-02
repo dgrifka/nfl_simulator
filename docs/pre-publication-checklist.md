@@ -48,6 +48,11 @@ Nothing below is automated away. A grep is the floor, not the review.
 - [ ] Fresh clone into a clean directory; run the test suite and one research
       script; confirm nothing depends on anything outside the repo.
 - [ ] Read the README and `CLAUDE.md` as a stranger would.
+- [ ] Re-trace the article's final pasted text (added 2026-09-02): any hand
+      edit to the Medium draft after a claim trace reopens every row, so the
+      last text that will actually be published gets one more read-only trace
+      per `handoff-2026-09-02-claim-trace.md` — extract the final text, run
+      the trace, zero MISMATCH rows before the Publish button.
 
 ## 5. Spelling and voice (added 2026-08-27)
 
