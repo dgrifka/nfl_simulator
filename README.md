@@ -158,6 +158,13 @@ an `nflreadpy` pull that returns the FTN charting rows in a different order
 (same rows, same values, different order) is enough to trip it. And
 `data/logos/` is not part of `ingest`; the club marks are fetched separately.
 
+The artifacts themselves are not distributed. This repository is the research
+record — the documents publish the method and the scripts are its evidence,
+and the quickstart above rebuilds the current make-probability posterior from
+scratch. The full adjudication artifacts belong to the maintainer's product
+pipeline; `NFL_SIM_ARTIFACT_DIR` exists for pointing a checkout at your own
+copy, not because one is shipped.
+
 ### Adjudicating a game that has just gone final
 
 `render_game` reads a game's numbers from the shipped 2016–2025 artifacts, so it
