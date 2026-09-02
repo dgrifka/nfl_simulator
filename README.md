@@ -309,8 +309,10 @@ kick in Denver. The ship record, with every gate and what moved, is
 [68 — Simulator v1.4](docs/research/68-simulator-v14.md).
 
 The measurement program is closed: every candidate component is shipped, refused
-with the arithmetic attached, or marked unmeasurable. A longer write-up of the
-whole method for a general reader is forthcoming.
+with the arithmetic attached, or marked unmeasurable. The write-up of the whole
+method for a general reader is
+[Who Deserved to Win? Pricing Luck in NFL Games](https://medium.com/@dmgrifka_64770/who-deserved-to-win-pricing-luck-in-nfl-games-02d5ae4ced91)
+— every figure in it lives in this repository.
 
 ## Wiki
 
