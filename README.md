@@ -112,27 +112,51 @@ uv run pytest
 uv run ruff check .
 ```
 
-Pull the data, build the artifacts, then render a game:
+Pull the data, then fit the models a clean checkout can build for itself. Each
+line needs the ones above it:
 
 ```bash
-uv run python -m nfl_simulator.ingest      # ten seasons of play-by-play; cached
-uv run python research/26_overtime.py      # the overtime-toss sidebar artifact
-uv run python research/82_fg_v14_refit.py  # the make-probability posterior
-uv run python research/83_simulator_v14.py # adjudications, 2016–2025
-uv run python research/84_full_edition_v14.py  # adds the charted components, 2022–2025
+uv run python -m nfl_simulator.ingest         # ten seasons of play-by-play; cached
+uv run python research/13_fg_weather_power.py # the weather term's power analysis
+uv run python research/14_fg_weather_model.py # the weather-aware FG posterior
+uv run python research/26_overtime.py         # the overtime-toss sidebar artifact
+uv run python research/42a_fg_refit_power.py  # the refit's power analysis
+uv run python research/42_fg_refit.py         # the refit posterior
+uv run python research/81_fg_elevation.py     # the elevation study (~9 min, the long one)
+uv run python research/82_fg_v14_refit.py     # the make-probability posterior
+```
+
+The first ingest downloads ten seasons and caches them to a **gitignored**
+`data/` directory alongside a manifest recording seasons, pull date and library
+version; re-running it is a no-op, and `--force` re-downloads. The fits write to
+the gitignored `research/outputs/` and only need running once per checkout.
+
+### Rendering a game needs the adjudication artifacts
+
+`render_game` reads the v1.4 adjudications, and **a clean clone cannot build
+them.** `research/46_simulator_v13.py` opens with a V-1 replay gate that
+requires the previous version's artifact to reproduce exactly, and a lineage
+rebuilt today does not: `src/` is v1.4-era code, so re-running the v1.1 and v1.2
+scripts produces what today's simulator makes under an old configuration rather
+than the artifacts those versions actually shipped. The gate stops, as it is
+meant to. The adjudication artifacts are therefore synced, not rebuilt — point
+the simulator at a copy:
+
+```bash
+export NFL_SIM_ARTIFACT_DIR=/path/to/research/outputs
 ```
 
 ```python
 from nfl_simulator.render import render_game
 
-render_game("2025_13_DEN_WAS")  # four PNGs into research/outputs/
+render_game("2025_13_DEN_WAS")  # four PNGs into the artifact directory
 ```
 
-The first ingest downloads ten seasons and caches them to a **gitignored**
-`data/` directory alongside a manifest recording seasons, pull date and library
-version; re-running it is a no-op, and `--force` re-downloads. The three
-research scripts fit posteriors and write to the gitignored `research/outputs/`,
-so they take a while and only need running once per checkout.
+Two things to know about that copy. It has to have been built from **the same
+`data/` snapshot** you are running against — the round-trip guard is exact, and
+an `nflreadpy` pull that returns the FTN charting rows in a different order
+(same rows, same values, different order) is enough to trip it. And
+`data/logos/` is not part of `ingest`; the club marks are fetched separately.
 
 ### Adjudicating a game that has just gone final
 
