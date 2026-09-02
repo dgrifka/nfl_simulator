@@ -81,19 +81,21 @@ EDITION_NAMES = {"strict": "Strict", "full": "Full"}
 
 
 def edition_stamp(edition: str) -> str:
-    """`"Full edition · Data: nflverse | @[TBD]"` — the corner of every PNG.
+    """`"Data: nflverse | @nfl_simulator"` — the corner of every PNG.
 
-    The edition goes **before** the credit rather than after it because the
-    credit is the fixed part: a reader who has seen one of these images already
-    knows where nflverse's name sits, and the word that changes between two
-    images of the same game is the one worth reading first.
+    The edition is validated but no longer printed. The public story is one
+    deserve-to-win verdict whose coverage depends on the season (ruled
+    2026-09-02), so the word "edition" never reaches a rendered image; the
+    argument stays because an image may still not claim an adjudication nobody
+    named, and `strict`/`full` remain the internal identifiers that filenames
+    and the `edition` field are keyed on.
     """
     if edition not in EDITION_NAMES:
         raise ValueError(
             f"{edition!r} is not an edition anybody named; they are "
             f"{list(EDITION_NAMES)} (document 58 §2)."
         )
-    return f"{EDITION_NAMES[edition]} edition \u00b7 {WATERMARK}"
+    return WATERMARK
 
 
 # Font preference order. Matplotlib walks the list and uses the first family

@@ -2810,11 +2810,16 @@ def strict_and_full(**kwargs):
     )
 
 
-def test_the_stamp_names_the_edition_before_the_data_credit():
+def test_the_stamp_is_the_data_credit_alone_on_either_edition():
+    """Ruled 2026-09-02: the word "edition" never reaches a rendered image.
+
+    The argument is still validated — an image may not claim an adjudication
+    nobody named — but it is no longer printed, so both of ruling R-4's two
+    stamp the same corner."""
     from nfl_simulator.style import WATERMARK, edition_stamp
 
-    assert edition_stamp("full") == f"Full edition · {WATERMARK}"
-    assert edition_stamp("strict") == f"Strict edition · {WATERMARK}"
+    assert edition_stamp("full") == WATERMARK
+    assert edition_stamp("strict") == WATERMARK
 
 
 def test_an_edition_nobody_named_cannot_be_stamped():
@@ -2840,12 +2845,16 @@ def test_finalize_stamps_the_edition_it_is_told(tmp_path, monkeypatch):
 def test_a_full_image_states_the_strict_headline_and_margin_in_one_line():
     """The other edition is one line away, and it is the whole other verdict."""
     _strict, full = strict_and_full()
-    assert full.edition_note() == "Strict edition: HOU 100% · LAC 0% — deserved margin HOU by 23.3"
+    assert full.edition_note() == (
+        "Without the hands-on-the-ball rows: HOU 100% · LAC 0% — deserved margin HOU by 23.3"
+    )
 
 
 def test_a_strict_image_of_a_charted_game_states_the_full_one_the_same_way():
     strict, _full = strict_and_full()
-    assert strict.edition_note() == "Full edition: LAC 52% · HOU 48% — deserved margin LAC by 0.2"
+    assert strict.edition_note() == (
+        "With the hands-on-the-ball rows: LAC 52% · HOU 48% — deserved margin LAC by 0.2"
+    )
 
 
 def test_a_game_that_predates_charting_says_so_instead():
@@ -2885,7 +2894,18 @@ def edition_figures(game):
 def test_no_figure_carries_the_other_edition_line(suffix):
     """The maintainer 2026-09-01 (doc 60 §18): the cross-edition footer is gone."""
     _strict, full = strict_and_full()
-    assert "Strict edition:" not in flat_text(edition_figures(full)[suffix])
+    assert "Without the hands-on-the-ball rows:" not in flat_text(edition_figures(full)[suffix])
+
+
+@pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
+def test_no_figure_prints_the_word_edition_anywhere(suffix):
+    """Ruled 2026-09-02: no user-visible rendered string carries the word.
+
+    `flat_text` reads the figure's own artists, which is every string this
+    package draws; the corner stamp is painted onto the saved PNG afterwards and
+    is covered by `test_the_stamp_is_the_data_credit_alone_on_either_edition`."""
+    _strict, full = strict_and_full()
+    assert "edition" not in flat_text(edition_figures(full)[suffix]).lower()
 
 
 @pytest.mark.parametrize("suffix", ["dtw", "luck_ledger", "card", "waterfall"])
@@ -3502,14 +3522,15 @@ def test_nothing_under_the_waterfall_axis_prints_through_anything_else():
             assert not box.overlaps(other)
 
 
-def test_the_overtime_sidebar_names_the_edition_its_toss_number_belongs_to():
-    """Hard constraint 2: no image mixes editions in one number.
+def test_the_overtime_sidebar_names_the_coverage_its_toss_number_belongs_to():
+    """Hard constraint 2: no image mixes coverages in one number.
 
-    The per-game toss move was measured on simulator v1.1 against v1.3 — which
-    is now called Strict — and the sidebar said it was measured "against the
-    v1.3 share above". On a Full-edition article figure the share above is the
-    Full share, so the sentence attributed a Strict-measured move to a number it
-    was never measured against."""
+    The per-game toss move was measured without the hands-on-the-ball rows, and
+    the sidebar said it was measured "against the v1.3 share above". On an
+    article figure the share above is the one *with* those rows, so the sentence
+    attributed a move to a number it was never measured against. Ruled
+    2026-09-02: the sentence names the coverage in the reader's words, not by an
+    internal edition name."""
     from nfl_simulator.plots import overtime_lines
 
     _strict, full = strict_and_full(went_to_overtime=True)
@@ -3518,8 +3539,17 @@ def test_the_overtime_sidebar_names_the_edition_its_toss_number_belongs_to():
         for text in overtime_lines(full, OvertimeToss("HOU", 2024, -0.14))
         if "toss is worth" in text
     )
-    assert "Strict" in line
+    assert "without the hands-on-the-ball rows" in line
     assert "share above" not in line
+
+
+def test_no_overtime_sidebar_line_prints_the_word_edition():
+    """The 2026-09-02 ruling, on the one sidebar that used to carry it."""
+    from nfl_simulator.plots import overtime_lines
+
+    _strict, full = strict_and_full(went_to_overtime=True)
+    lines = overtime_lines(full, OvertimeToss("HOU", 2024, -0.14))
+    assert "edition" not in " ".join(lines).lower()
 
 
 # --------------------------------------------------------------------------

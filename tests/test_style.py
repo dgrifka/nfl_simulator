@@ -265,7 +265,7 @@ def test_a_wide_title_does_not_run_under_the_stamp(blank, tmp_path):
     draw_title_block(
         title_axes(blank, height_frac=0.2),
         "Los Angeles Chargers at Houston Texans — wild-card round, 2024",
-        ["Deserved-to-win share across 160,000 re-simulations of the Full edition"],
+        ["Deserved-to-win share across 160,000 re-simulations"],
     )
     path = tmp_path / "wide_title.png"
     blank.savefig(path, dpi=200, bbox_inches="tight", facecolor=PALETTE["bg"])

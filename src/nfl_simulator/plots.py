@@ -104,7 +104,15 @@ DEGENERATE_SHARE = "44.4%"
 # from `ingest` rather than written as 2022, the way `dropped_picks` and
 # `receiver_drops` read it, so the three cannot drift apart.
 FIRST_CHARTED_SEASON = min(FTN_SEASONS)
-CHARTING_NOTE = f"Strict edition only \u2014 charting begins in {FIRST_CHARTED_SEASON}."
+CHARTING_NOTE = f"Fumbles and kicks only \u2014 play charting begins in {FIRST_CHARTED_SEASON}."
+
+# The two coverages in the reader's own words — the article's phrase for
+# amendment A-3's hands-on-the-ball rows. Ruled 2026-09-02: a rendered line
+# names what the adjudication counted, never the internal edition name.
+COVERAGE_PHRASES = {
+    "strict": "Without the hands-on-the-ball rows",
+    "full": "With the hands-on-the-ball rows",
+}
 
 # --------------------------------------------------------------------------
 # style
@@ -215,7 +223,7 @@ class GameVerdict:
             other = self.counterpart
             shares = other.headline().replace(" / ", " \u00b7 ")
             return (
-                f"{other.edition_name} edition: {shares} "
+                f"{COVERAGE_PHRASES[other.edition]}: {shares} "
                 f"\u2014 deserved margin {other.deserved_phrase()}"
             )
         return CHARTING_NOTE if self.season < FIRST_CHARTED_SEASON else ""
@@ -4104,15 +4112,16 @@ def overtime_lines(verdict: GameVerdict, toss: OvertimeToss) -> list[str]:
         # away team. Mirroring it is the same correction `interval_note` makes.
         move = toss.delta_dtw_home if favoured == verdict.home_team else -toss.delta_dtw_home
         lines.append(
-            # The edition is named rather than left as "the share above",
-            # because on a Full-edition article figure the share above is the
-            # Full one and this move was never measured against it. Document 16
-            # measured it on simulator v1.1 against v1.3, which ruling R-4
-            # renamed Strict — so the sentence names Strict on both editions and
-            # is true on both.
-            f"Here the toss is worth {move * 100:+.0f} pp of {favoured}'s share in the "
-            f"Strict edition — measured on simulator {OVERTIME_IMPACT_VERSION} against "
-            "Strict (v1.4), so it sizes the toss rather than correcting it."
+            # The coverage is named rather than left as "the share above",
+            # because on an article figure the share above is the one *with* the
+            # hands-on-the-ball rows and this move was never measured against
+            # it. Document 16 measured it without them, on simulator v1.1
+            # against v1.3 — which v1.4 rebuilt — so the sentence is true
+            # whichever coverage the figure headlines.
+            f"Here the toss is worth {move * 100:+.0f} pp of {favoured}'s share without "
+            f"the hands-on-the-ball rows — measured on simulator "
+            f"{OVERTIME_IMPACT_VERSION} against v1.4, so it sizes the toss rather than "
+            "correcting it."
         )
 
     if toss.season >= OVERTIME_NEW_RULES_SEASON:
