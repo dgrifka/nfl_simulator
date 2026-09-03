@@ -28,11 +28,15 @@ checked game. The exact round-trip guard refuses, as it should.
 > within-game between a fresh pull and the cache, a fresh play-by-play pull is
 > identical to the cache in both values and physical order, and block layout
 > alone does not change the builders' join emission order — so the 1.14e-06 pt
-> move cannot be attributed to charting row order and the input that produced
-> it remains unidentified (the leading remaining candidate is the fresh
-> clone's independently re-fitted posterior). The positional-read defect this
-> document's fix closed is established independently by the permutation tests
-> of `tests/test_row_order.py`.
+> move cannot be attributed to charting row order. The input was identified
+> in the v1.4.1 round (2026-09-03): upstream nflverse revised the 2020
+> play-by-play EPA/WP values after the maintained cache was pulled, and the
+> revision reaches every margin through the fitted EPA-to-points slope at
+> the 1e-06 scale — a data-freshness effect, not an order effect. With
+> values held fixed, order alone moves nothing: the fresh-vs-cache check
+> passes to the last bit on both coverage levels. The positional-read defect
+> this document's fix closed is established independently by the permutation
+> tests of `tests/test_row_order.py`.
 
 Values equal, order different, output different: the pipeline is reading
 meaning from row position somewhere. The repo already documents the two known
