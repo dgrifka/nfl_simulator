@@ -77,6 +77,20 @@ EXPECTED_GAMES = 2761  # document 31 §2
 REPLAY_TOLERANCE = 1e-9  # document 49 §6's V-1
 IDENTITY_TOLERANCE = 1e-9
 
+# Document 73 (the v1.4.1 re-ship): the four games whose shipped kicks were
+# priced at the play-by-play cache's physical row order. Under the canonical
+# sort they — and only they — replay differently from the shipped artifacts,
+# by at most ~1.9e-02 pt of deserved margin (pinned in
+# `tests/test_strict_movers.py`). The ceiling is a sanity bound well above any
+# measured order move and far below anything a real regression would produce.
+ORDER_MOVERS = (
+    "2016_10_ATL_PHI",
+    "2018_02_OAK_DEN",
+    "2019_16_NYG_WAS",
+    "2021_08_JAX_SEA",
+)
+ORDER_MOVE_CEILING = 5e-2
+
 # Document 67 §6, measured against the shipped v1.3 posterior on the fitted
 # population. The corpus this script replays is the same 23,247 kicks, so a
 # materially different count here means the two are not pricing the same thing.
@@ -133,6 +147,13 @@ def gate_w1(shipped: pl.DataFrame, replayed: pl.DataFrame) -> dict:
     Run on v1.4's frame, which carries `stadium_id`. Under a v1.3 posterior that
     column reaches `make_probability` and is dropped there, because absent means
     absent — and this is the corpus-scale proof of the unit test that says so.
+
+    **v1.4.1 (document 73):** the shipped v1.3 artifact priced four games'
+    kicks at the play-by-play cache's physical row order; the code now sorts to
+    the canonical order first, so the replay is expected to move *exactly*
+    those four games (`ORDER_MOVERS`, pinned by `tests/test_strict_movers.py`)
+    and no other. Every other game still replays at 0.00e+00, and a fifth
+    mover — or a fourth that fails to move — is a stop.
     """
     joined = shipped.select(
         "game_id",
@@ -151,26 +172,49 @@ def gate_w1(shipped: pl.DataFrame, replayed: pl.DataFrame) -> dict:
         "dtw_high": float((joined["dtw_high"] - joined["shipped_high"]).abs().max()),
         "total_luck_epa": float((joined["total_luck_epa"] - joined["shipped_luck"]).abs().max()),
     }
+    per_game = joined.with_columns(
+        pl.max_horizontal(
+            (pl.col("deserved_margin") - pl.col("shipped_margin")).abs(),
+            (pl.col("dtw_home") - pl.col("shipped_dtw")).abs(),
+            (pl.col("dtw_low") - pl.col("shipped_low")).abs(),
+            (pl.col("dtw_high") - pl.col("shipped_high")).abs(),
+            (pl.col("total_luck_epa") - pl.col("shipped_luck")).abs(),
+        ).alias("gap")
+    )
+    moved = per_game.filter(pl.col("gap") > REPLAY_TOLERANCE).sort("game_id")
+    mover_deltas = {
+        row["game_id"]: float(row["deserved_margin"] - row["shipped_margin"])
+        for row in moved.iter_rows(named=True)
+    }
     report = {
         "games_shipped": int(shipped.height),
         "games_matched": int(joined.height),
         "max_abs_gaps": gaps,
         "tolerance": REPLAY_TOLERANCE,
+        "expected_order_movers": list(ORDER_MOVERS),
+        "moved_games": mover_deltas,
         "pass": bool(
             joined.height == EXPECTED_GAMES
             and shipped.height == EXPECTED_GAMES
-            and max(gaps.values()) <= REPLAY_TOLERANCE
+            and set(mover_deltas) == set(ORDER_MOVERS)
+            and max(gaps.values()) <= ORDER_MOVE_CEILING
         ),
     }
     print(f"\n{'=' * 72}\nGATE W-1 — v1.3 under v1.4's code, on v1.4's frame\n{'=' * 72}")
     for name, gap in gaps.items():
         print(f"  max |Δ {name:16s}| = {gap:.2e}")
+    print("  moved games (document 73's four expected, margin Δ):")
+    for game_id, delta in sorted(mover_deltas.items()):
+        print(f"    {game_id}  {delta:+.4e} pt")
     print(
         f"  {joined.height:,} of {EXPECTED_GAMES:,} games matched -> "
         f"{'PASS' if report['pass'] else 'FAIL'}"
     )
     if not report["pass"]:
-        raise SystemExit("v1.4's code no longer reproduces v1.3. Stop and report.")
+        raise SystemExit(
+            "v1.4's code no longer reproduces v1.3 within document 73's ruled blast "
+            "radius (the four order movers). Stop and report."
+        )
     return report
 
 
@@ -468,6 +512,12 @@ def main() -> None:
     table = table.join(
         games.select("game_id", "season", "week", "home_team", "away_team"), on="game_id"
     )
+    # Document 73 (v1.4.1): the artifacts are written in the canonical order,
+    # not `group_by` emission order — which polars does not keep stable run to
+    # run. The ledger sorts to `TOTAL_ORDER` plus `component` (a blocked kick
+    # books two components on one play), the game table to its key.
+    table = table.sort("game_id")
+    ledger = ledger.sort("game_id", "play_id", "component")
     table.write_parquet(paths.RESEARCH_OUTPUT_DIR / V14_GAMES)
     ledger.write_parquet(paths.RESEARCH_OUTPUT_DIR / V14_LEDGER)
 
