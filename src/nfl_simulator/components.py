@@ -44,6 +44,23 @@ COMPONENTS: tuple[str, ...] = (
 # coarse enough that every bin holds hundreds of attempts across ten seasons.
 FG_BIN_WIDTH = 5
 
+# Document 73 §3's key: the order every frame in this package is delivered in.
+#
+# It lives here, in the package's one module that imports nothing else of its
+# own, so `simulator`, `dropped_picks` and `receiver_drops` can all read the
+# same tuple without a cycle. It is a *total* order — no ties — because that is
+# the whole point: `play_id` is unique within a game, and the cached
+# play-by-play carries 0 duplicated `(game_id, play_id)` pairs across 484,254
+# rows in 2,761 games.
+#
+# The rule it enforces: a frame is sorted to this key before anything reads its
+# row position. Several things downstream do — a seeded draw taken one row at a
+# time, and an event's index into a block of coin uniforms — and a filter, a
+# `group_by` or an inner join promises no particular output order, so without
+# the sort those draws are bound to whatever order the data happened to arrive
+# in rather than to its values.
+TOTAL_ORDER = ("game_id", "play_id")
+
 
 def add_home_perspective_epa(pbp: pl.DataFrame) -> pl.DataFrame:
     """Sign every play's EPA so positive is always good for the home team."""
@@ -146,6 +163,11 @@ def _fumble_frame(pbp: pl.DataFrame) -> pl.DataFrame:
             ).alias("fumble_class"),
         )
         .drop_nulls("retained")
+        # Document 73 §3. The fits below aggregate and do not care, but
+        # `simulator.fumble_events` iterates this frame and draws a rate per row
+        # off a seeded stream, and the research scripts reach it directly rather
+        # than through `simulate_game`'s own sort.
+        .sort(TOTAL_ORDER)
     )
 
 
@@ -263,13 +285,19 @@ def fg_attempt_mask(include_blocked: bool = False) -> pl.Expr:
 
 
 def _fg_frame(pbp: pl.DataFrame, include_blocked: bool = False) -> pl.DataFrame:
-    return pbp.filter(fg_attempt_mask(include_blocked)).with_columns(
-        (pl.col("field_goal_result") == "made").cast(pl.Int8).alias("made"),
-        # Cast first: a frame with no attempts leaves kick_distance as dtype
-        # Null, which has no floor-division.
-        ((pl.col("kick_distance").cast(pl.Float64) // FG_BIN_WIDTH) * FG_BIN_WIDTH)
-        .cast(pl.Int32)
-        .alias("fg_bin"),
+    return (
+        pbp.filter(fg_attempt_mask(include_blocked))
+        .with_columns(
+            (pl.col("field_goal_result") == "made").cast(pl.Int8).alias("made"),
+            # Cast first: a frame with no attempts leaves kick_distance as dtype
+            # Null, which has no floor-division.
+            ((pl.col("kick_distance").cast(pl.Float64) // FG_BIN_WIDTH) * FG_BIN_WIDTH)
+            .cast(pl.Int32)
+            .alias("fg_bin"),
+        )
+        # Document 73 §3, as on `_fumble_frame`: `simulator.field_goal_events`
+        # takes a `_resample` block per row of this frame, in this frame's order.
+        .sort(TOTAL_ORDER)
     )
 
 

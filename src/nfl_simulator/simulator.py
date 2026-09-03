@@ -33,6 +33,7 @@ import numpy as np
 import polars as pl
 
 from nfl_simulator.components import (
+    TOTAL_ORDER,
     ExtraPointBaseline,
     FieldGoalBaseline,
     FumbleBaseline,
@@ -72,17 +73,14 @@ DEFAULT_SEED = 20260817
 # Document 03's convention, carried through Phase 2.
 ETI_LOW, ETI_HIGH = 5.5, 94.5
 
-# Document 73 §3's rule, as a key. The two variant builders below read their
-# frame's *row position* twice over: `_resample` hands out one block of posterior
-# indices per event in iteration order, and `_replayed_adjustment` then
-# column-indexes its coin uniforms by each event's position in the sequence. The
-# frames they iterate come out of an inner join, and an inner join makes no order
-# promise — Polars' hash join emits the order the charting frame arrived in, so
-# two charting pulls that agree on every value row for row still adjudicate
-# differently (document 73 §1: 0 of 47,316 rows differ, the margin moves
-# 1.14e-06 pt). Sorting to a key with no ties makes the adjudication a function
-# of the data's values rather than of the order they were handed over in.
-TOTAL_ORDER = ("game_id", "play_id")
+# `TOTAL_ORDER` is document 73 §3's key and now lives in `components`, so every
+# module that *delivers* a frame sorts to the same one. This module is where the
+# row-position reads actually happen — `_resample` hands out one block of
+# posterior indices per event in iteration order, and `_replayed_adjustment`
+# column-indexes its coin uniforms by each event's position in the sequence — so
+# the frames are sorted at their source *and* again at the point of use below.
+# The second sort is a no-op on a frame that arrives correct; it is what keeps
+# this module's guarantee from resting on a promise made three modules away.
 
 
 @dataclass(frozen=True)
