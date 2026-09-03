@@ -23,8 +23,12 @@ from PIL import Image, ImageDraw
 from nfl_simulator.style import (
     BRAND_HANDLE,
     DATA_CREDIT,
+    DATA_CREDIT_FTN,
     PALETTE,
+    STAMP_INK,
     WATERMARK,
+    WATERMARK_FTN,
+    _rgb255,
     apply_base_style,
     draw_title_block,
     finalize,
@@ -68,7 +72,29 @@ def test_the_surface_is_the_warm_cream_the_house_style_uses():
 def test_the_brand_constants_are_importable_and_the_handle_is_the_placeholder():
     assert BRAND_HANDLE == "@nfl_simulator"
     assert DATA_CREDIT == "Data: nflverse"
-    assert WATERMARK == "Data: nflverse | @nfl_simulator"
+    assert DATA_CREDIT_FTN == "Data: nflverse & FTN"
+    assert WATERMARK == "Data: nflverse\n@nfl_simulator"
+    assert WATERMARK_FTN == "Data: nflverse & FTN\n@nfl_simulator"
+
+
+def test_the_credit_stacks_the_handle_under_the_data_line():
+    """Two lines, credit first: the stamp is a credit that also signs itself."""
+    for stamp, credit in ((WATERMARK, DATA_CREDIT), (WATERMARK_FTN, DATA_CREDIT_FTN)):
+        first, second = stamp.split("\n")
+        assert first == credit
+        assert second == BRAND_HANDLE
+
+
+def test_the_credit_is_inked_dark_enough_to_read_on_the_cream():
+    """The mid-grey round 10 used measures 3.23:1 on `bg`; the house muted ink
+    measures 5.73:1. A credit nobody can read is not a credit that was given."""
+
+    def luminance(rgb):
+        channels = [c / 3294.6 if c <= 10.31 else ((c / 255 + 0.055) / 1.055) ** 2.4 for c in rgb]
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+    ink, surface = luminance(_rgb255(STAMP_INK)), luminance(_rgb255(PALETTE["bg"]))
+    assert (surface + 0.05) / (ink + 0.05) >= 4.5
 
 
 def test_a_finalized_png_is_saved_on_the_cream_surface(blank, tmp_path):
@@ -130,10 +156,13 @@ def test_the_title_block_writes_its_heading_and_every_subtitle_line(blank):
 # --------------------------------------------------------------------------
 
 # Anything darker than this is ink somebody drew. The surface is cream at 249
-# mean and the stamp's own line is painted at 140, so a threshold between the
-# two separates "the title ran under the stamp" from "the stamp is the only
-# thing here".
-FOREIGN_INK = 120
+# mean, the credit's own line is painted in the house muted ink (~98 mean since
+# 2026-09-03), and the title ink that could collide with it is 26. Sitting the
+# threshold just under the credit separates "the title ran under the stamp"
+# from "the stamp is the only thing here" — derived from the ink rather than
+# written down, because a hard-coded 120 stopped discriminating the moment the
+# credit was inked darker than it.
+FOREIGN_INK = sum(_rgb255(STAMP_INK)) / 3 - 2
 
 
 def ink_mask(path, threshold: int = FOREIGN_INK) -> np.ndarray:
@@ -257,8 +286,8 @@ def test_a_wide_title_does_not_run_under_the_stamp(blank, tmp_path):
 
     Checked over the block :func:`apply_watermark` says it painted, with the
     mark suppressed, so the only ink that box may contain is the credit's own
-    mid-grey at 140. The box comes from the painter itself because recomputing
-    it on the stamped PNG would anchor on the stamp's own ink.
+    muted ink. The box comes from the painter itself because recomputing it on
+    the stamped PNG would anchor on the stamp's own ink.
     """
     from nfl_simulator.style import apply_watermark, reserve_stamp_strip
 
@@ -359,7 +388,7 @@ def test_passing_logo_path_false_suppresses_the_mark(blank, tmp_path):
 
 
 def test_the_mark_sits_above_the_credit_line(blank, tmp_path):
-    """The MLB simulator's stack, right-aligned rather than centred.
+    """The MLB simulator's stack, mark above the credit on one centred axis.
 
     Beside the credit was round 10's arrangement, and it only worked because
     the block was anchored to the bottom edge, where a mark 1.6 lines tall
