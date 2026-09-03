@@ -170,9 +170,7 @@ def test_fold_to_frame_settles_on_the_same_rows_for_permuted_ledgers():
     ]
     game = verdict()
     folded_a, frame_a = fold_to_frame(game, luck_bars(rows, points_per_epa=PPE))
-    folded_b, frame_b = fold_to_frame(
-        game, luck_bars(list(reversed(rows)), points_per_epa=PPE)
-    )
+    folded_b, frame_b = fold_to_frame(game, luck_bars(list(reversed(rows)), points_per_epa=PPE))
     assert frame_a == frame_b
     assert folded_a == folded_b
 
@@ -193,8 +191,8 @@ def straddling_rows() -> list[dict]:
         card_row(4.0, play_id=20.0),
         card_row(3.0, play_id=30.0),
         card_row(2.0, play_id=40.0),
-        card_row(1.5, play_id=60.0),
         card_row(1.5, play_id=61.0, component="fumble", event_class="punt/live"),
+        card_row(1.5, play_id=60.0),
         card_row(1.0, play_id=70.0),
     ]
 
@@ -242,9 +240,9 @@ def test_a_summary_with_two_rows_for_one_game_is_refused():
 def test_a_schedule_with_two_rows_for_one_game_is_refused():
     schedule = pl.DataFrame({"game_id": ["2018_05_GB_DET"] * 2, "gameday": ["a", "b"]})
     with pytest.raises(AssertionError):
-        sources_with(pl.DataFrame({"game_id": []}, schema={"game_id": pl.String}), schedule=schedule).schedule_row(
-            "2018_05_GB_DET"
-        )
+        sources_with(
+            pl.DataFrame({"game_id": []}, schema={"game_id": pl.String}), schedule=schedule
+        ).schedule_row("2018_05_GB_DET")
 
 
 def test_two_overtime_rows_for_one_game_are_refused():
@@ -261,3 +259,22 @@ def test_two_overtime_rows_for_one_game_are_refused():
 def test_band_sweep_refuses_a_duplicated_half_width():
     with pytest.raises(AssertionError):
         band_sweep([0.4, 0.6], [3.0, -3.0], half_widths=[0.10, 0.10])
+
+
+def test_row_marks_refuse_a_tick_row_mismatch():
+    # `_stamp_row_logos` indexes the tick labels by row position; the axis is
+    # always built with one tick per row (`set_yticks(rows_y)`), and this
+    # asserts the invariant instead of assuming it.
+    import matplotlib.pyplot as plt
+
+    from nfl_simulator.plots import _stamp_row_logos
+
+    fig, ax = plt.subplots()
+    ax.set_yticks([0.0, 1.0, 2.0])
+    rows_y = np.arange(6, dtype=float)  # six row positions against three ticks
+    bars = [LuckBar(label=f"bar {i}", points=1.0, play_id=float(i)) for i in range(4)]
+    try:
+        with pytest.raises(AssertionError):
+            _stamp_row_logos(ax, bars, rows_y, {}, verdict())
+    finally:
+        plt.close(fig)

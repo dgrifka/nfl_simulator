@@ -30,6 +30,7 @@ import numpy as np
 import polars as pl
 
 from nfl_simulator import paths
+from nfl_simulator.components import TOTAL_ORDER
 from nfl_simulator.fg_model import load_fitted_model
 from nfl_simulator.ingest import FTN_SEASONS, SIM_COLUMNS
 from nfl_simulator.ledger import with_actual
@@ -206,7 +207,15 @@ def prepare_rows(
     passers = passers or {}
     receivers = receivers or {}
     intervals = intervals or {}
-    rows = with_actual(frame).to_dicts()
+    # Document 73's read side: this is the only place a ledger frame becomes
+    # the rows list every figure walks, and it is fed from two sources whose
+    # physical order differs (the artifact parquet and the replay's build
+    # order). Sorting to the canonical order — the play, then the component
+    # for the blocked kick that books two rows on one play — makes every
+    # figure a function of the ledger's values. A single-game frame carries
+    # no `game_id` column; the sort keeps whichever canonical keys it has.
+    order = [column for column in (*TOTAL_ORDER, "component") if column in frame.columns]
+    rows = with_actual(frame).sort(order).to_dicts()
     for row in rows:
         # Round 12: the ledger carries the modern code exactly as the summary
         # does, so a 2017 Oakland row arrives charged to `LV`. The verdict's two
@@ -314,10 +323,16 @@ class Sources:
                     else ""
                 )
             )
+        assert len(rows) == 1, (
+            f"{artifact} carries {len(rows)} rows for {game_id}; it is one row per game"
+        )
         return rows[0]
 
     def schedule_row(self, game_id: str) -> dict:
         rows = self.schedule.filter(pl.col("game_id") == game_id).to_dicts()
+        assert len(rows) <= 1, (
+            f"the schedule carries {len(rows)} rows for {game_id}; it is one row per game"
+        )
         return rows[0] if rows else {}
 
     def toss(self, verdict: GameVerdict) -> OvertimeToss | None:
@@ -325,6 +340,9 @@ class Sources:
         rows = self.overtime.filter(pl.col("game_id") == verdict.game_id).to_dicts()
         if not rows:
             return None
+        assert len(rows) == 1, (
+            f"the overtime table carries {len(rows)} rows for {verdict.game_id}; it is one row per game"
+        )
         row = rows[0]
         return OvertimeToss(
             received=verdict.home_team if row["home_received"] else verdict.away_team,

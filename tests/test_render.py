@@ -165,9 +165,11 @@ def test_prepared_rows_read_as_sentences(game):
     from nfl_simulator.plots import plain_label
 
     rows = prepare_rows(ledger_frame(), game, distances={834.0: 42.0})
+    # Canonical order (document 73's read side): the rows come back sorted by
+    # play, so the punt at 324 now reads before the kick at 834.
     assert [plain_label(row) for row in rows] == [
-        "GB 42-yd field goal, missed (88% kick)",
         "GB fumble on a punt, recovered by DET",
+        "GB 42-yd field goal, missed (88% kick)",
     ]
 
 
@@ -175,12 +177,14 @@ def test_a_prepared_kick_row_carries_the_kicker_the_play_by_play_names(game):
     from nfl_simulator.plots import plain_label
 
     rows = prepare_rows(ledger_frame(), game, distances={834.0: 42.0}, kickers={834.0: "Crosby"})
-    assert plain_label(rows[0]) == "GB 42-yd field goal · Crosby, missed (88% kick)"
+    (kick,) = [row for row in rows if row["component"] == "field_goal"]
+    assert plain_label(kick) == "GB 42-yd field goal · Crosby, missed (88% kick)"
 
 
 def test_a_play_with_no_kicker_on_file_prepares_without_one(game):
     rows = prepare_rows(ledger_frame(), game, distances={834.0: 42.0})
-    assert rows[0]["kicker"] is None
+    (kick,) = [row for row in rows if row["component"] == "field_goal"]
+    assert kick["kicker"] is None
 
 
 def test_a_kicker_is_read_down_to_the_surname_the_figure_prints():
@@ -207,7 +211,8 @@ def test_the_opponent_is_the_other_team_in_the_game_not_the_home_team(game):
 
 def test_a_distance_that_is_not_known_leaves_the_label_on_its_class(game):
     rows = prepare_rows(ledger_frame(), game, distances={})
-    assert rows[0].get("kick_distance") is None
+    (kick,) = [row for row in rows if row["component"] == "field_goal"]
+    assert kick.get("kick_distance") is None
 
 
 # --------------------------------------------------------------------------
