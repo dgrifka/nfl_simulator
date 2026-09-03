@@ -17,8 +17,13 @@ fixtures are produced by ``tests/fixtures/strict_movers/generate.py``, which
 verifies at generation time that the stub reproduces the real artifact
 adjudication bit for bit.
 
-Exact equality throughout — no ``pytest.approx``. A tolerance here would let
-the very defect document 73 closed creep back in unnoticed.
+Two kinds of equality, deliberately. Same-machine invariance comparisons
+(permuted frame vs base frame) are exact ``==`` — any tolerance there would
+let the defect document 73 closed creep back in. Comparisons against the
+*recorded* fixture values use ``PIN`` (rel/abs 1e-12): the fixtures were
+generated on one platform, and libm rounding differs across platforms by an
+ulp in the 16th digit, eight orders of magnitude below the smallest real
+order-move ever measured (1.17e-04 pt).
 """
 
 from __future__ import annotations
@@ -52,6 +57,11 @@ GAMES = (*MOVERS, CONTROL)
 # total order rather than arrival order.
 ATL_PHI_KICK = 2998.0
 ATL_PHI_KICK_EXPECTED = 0.6122270460246664
+
+
+def PIN(value):
+    """A recorded fixture value: exact up to cross-platform libm rounding."""
+    return pytest.approx(value, rel=1e-12, abs=1e-12)
 
 
 # --------------------------------------------------------------------------
@@ -186,29 +196,38 @@ def test_the_atl_phi_kick_prices_at_the_fixed_code_value(context):
         if entry.play_id == ATL_PHI_KICK and entry.component == "field_goal"
     ]
     assert len(rows) == 1
-    assert rows[0].expected == ATL_PHI_KICK_EXPECTED
-    assert rows[0].luck_epa == (rows[0].actual - ATL_PHI_KICK_EXPECTED) * rows[0].swing
+    assert rows[0].expected == PIN(ATL_PHI_KICK_EXPECTED)
+    assert rows[0].luck_epa == PIN((rows[0].actual - ATL_PHI_KICK_EXPECTED) * rows[0].swing)
 
 
 @pytest.mark.parametrize("game_id", GAMES)
 def test_the_adjudication_reproduces_the_fixed_code_exactly(context, game_id):
-    """Every summary statistic, pinned to the last bit."""
+    """Every summary statistic, pinned up to cross-platform rounding."""
     result = adjudicate(context, load_plays(game_id))
     pinned = context["expected"][game_id]["replayed"]
 
     assert result.game_id == game_id
     assert result.variant == "strict"
     assert result.actual_margin == pinned["actual_margin"]
-    assert result.deserved_margin == pinned["deserved_margin"]
-    assert result.total_luck_epa == pinned["total_luck_epa"]
-    assert result.dtw_home == pinned["dtw_home"]
-    assert result.dtw_interval == (pinned["dtw_low"], pinned["dtw_high"])
+    assert result.deserved_margin == PIN(pinned["deserved_margin"])
+    assert result.total_luck_epa == PIN(pinned["total_luck_epa"])
+    assert result.dtw_home == PIN(pinned["dtw_home"])
+    assert result.dtw_interval == PIN((pinned["dtw_low"], pinned["dtw_high"]))
 
 
 @pytest.mark.parametrize("game_id", GAMES)
 def test_every_ledger_row_is_pinned(context, game_id):
     result = adjudicate(context, load_plays(game_id))
-    assert [entry.to_dict() for entry in result.ledger] == context["expected"][game_id]["ledger"]
+    rows = [entry.to_dict() for entry in result.ledger]
+    pinned_rows = context["expected"][game_id]["ledger"]
+    assert len(rows) == len(pinned_rows)
+    for row, pinned in zip(rows, pinned_rows, strict=True):
+        assert set(row) == set(pinned)
+        for field, value in pinned.items():
+            if isinstance(value, float):
+                assert row[field] == PIN(value), (row["play_id"], field)
+            else:
+                assert row[field] == value, (row["play_id"], field)
 
 
 @pytest.mark.parametrize("game_id", MOVERS)
@@ -218,22 +237,22 @@ def test_the_movers_moved_off_the_shipped_v14_margin(context, game_id):
     shipped, replayed = pinned["shipped"], pinned["replayed"]
     result = adjudicate(context, load_plays(game_id))
 
-    assert result.deserved_margin == replayed["deserved_margin"]
+    assert result.deserved_margin == PIN(replayed["deserved_margin"])
     assert result.deserved_margin != shipped["deserved_margin"]
     delta = result.deserved_margin - shipped["deserved_margin"]
-    assert delta == pinned["margin_delta"]
+    assert delta == PIN(pinned["margin_delta"])
     # The move never crosses anything a reader would see: same sign, and the
     # deserved-to-win probability stays on the same side of every bucket edge.
     assert (result.deserved_margin > 0) == (shipped["deserved_margin"] > 0)
 
 
 def test_the_control_game_does_not_move(context):
-    """`2016_01_CAR_DEN`'s rows were already in total order: zero delta, exactly."""
+    """`2016_01_CAR_DEN`'s rows were already in total order: zero delta."""
     pinned = context["expected"][CONTROL]
     result = adjudicate(context, load_plays(CONTROL))
-    assert result.deserved_margin == pinned["shipped"]["deserved_margin"]
-    assert result.dtw_home == pinned["shipped"]["dtw_home"]
-    assert result.total_luck_epa == pinned["shipped"]["total_luck_epa"]
+    assert result.deserved_margin == PIN(pinned["shipped"]["deserved_margin"])
+    assert result.dtw_home == PIN(pinned["shipped"]["dtw_home"])
+    assert result.total_luck_epa == PIN(pinned["shipped"]["total_luck_epa"])
     assert pinned["margin_delta"] == 0.0
 
 
