@@ -56,8 +56,10 @@ Nothing below is automated away. A grep is the floor, not the review.
 
 ## 5. Spelling and voice (added 2026-08-27)
 
-- [ ] American English throughout tracked files: "defense" not "defence",
-      "neutralize" not "neutralise", "color" not "colour", "modeling" not
-      "modelling". `git ls-files | xargs grep -n -i "defence\|neutralis\|colour\|modelling"`
-      returns nothing (code identifiers included — rename, don't just re-spell prose).
+- [ ] American English in **prose and rendered strings**: "defense" not
+      "defence", "neutralize" not "neutralise", "color" not "colour",
+      "modeling" not "modelling". Code *identifiers* are exempt (ruled
+      2026-09-03): v1.4.0 shipped with British-spelled identifiers in 83
+      files, and renaming them churns history for zero function — new
+      identifiers use American spelling, existing ones stay.
 - [ ] No personal names beyond the author's own handle; no coworkers.
