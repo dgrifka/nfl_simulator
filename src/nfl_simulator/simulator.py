@@ -854,6 +854,17 @@ def simulate_game(
     if plays.is_empty():
         raise ValueError("cannot simulate a game with no plays")
 
+    # Document 73 §3 on the other input. The three Strict builders below iterate
+    # frames that are filters of this one, so they inherit its row order — and
+    # each of them reads that order positionally: `fumble_events` and
+    # `extra_point_events` draw a fresh rate per event from the shared stream,
+    # `field_goal_events` takes a `_resample` block per kick, and every event's
+    # position in the sequence then indexes `_replayed_adjustment`'s uniforms.
+    # Sorting once here rather than in each builder keeps a single boundary, and
+    # it also settles the three `[0]` reads below, which otherwise take whatever
+    # row happened to be handed over first.
+    plays = plays.sort(TOTAL_ORDER)
+
     game_id = plays["game_id"][0]
     actual_margin = float(plays["result"][0])
     rng = np.random.default_rng(seed)
