@@ -36,8 +36,9 @@ import numpy as np
 import polars as pl
 import pytest
 
-from nfl_simulator.components import fit_fg_baseline, fit_fumble_baseline
+from nfl_simulator.components import fit_fg_baseline, fit_fumble_baseline, fit_xp_baseline
 from nfl_simulator.dropped_picks import DroppedPickModel, build_swing_table, worthy_throw_frame
+from nfl_simulator.fg_model import FieldGoalModel
 from nfl_simulator.receiver_drops import (
     ReceiverDropModel,
     build_drop_swing_table,
@@ -69,6 +70,11 @@ REFERENCE_LEVELS = {"pass_location": "middle", "down": 1.0}
 # whatever the right frame looks like, and the defect hides.
 N_PLAYS = 60
 N_POSTERIOR = 40
+
+# The Strict components, appended after the passes. Enough of each that a
+# permutation has something to reorder within the component as well as between.
+N_FUMBLES = 12
+N_KICKS = 10
 
 
 # --------------------------------------------------------------------------
@@ -109,6 +115,8 @@ def pbp_play(play_id: float, **overrides) -> dict:
         "qb_hit": 0,
         "shotgun": 1,
         "wp": 0.5,
+        "extra_point_attempt": 0,
+        "extra_point_result": None,
     }
     return base | overrides
 
@@ -118,7 +126,14 @@ def game_frame(rows: list[dict]) -> pl.DataFrame:
 
 
 def plays_frame() -> pl.DataFrame:
-    """One 2022 game of charted passes, spread over drives and both offences."""
+    """One 2022 game: charted passes, plus the three Strict components.
+
+    The passes carry the charting frame's variant events; the fumbles, field
+    goals and extra points after them are what makes the Strict arm — every
+    published v1.1 to v1.4 number — testable here at all. Strict never sees the
+    FTN frame, so without these rows a permutation of `plays` would have nothing
+    to move.
+    """
     rows = []
     for index in range(N_PLAYS):
         dropped = index % 5 == 0
@@ -135,6 +150,62 @@ def plays_frame() -> pl.DataFrame:
                 interception=1 if index % 11 == 0 else 0,
             )
         )
+
+    play_id = float(N_PLAYS + 1)
+    for index in range(N_FUMBLES):
+        offence = HOME if index % 2 else AWAY
+        rows.append(
+            pbp_play(
+                play_id,
+                play_type="run",
+                posteam=offence,
+                defteam=AWAY if offence == HOME else HOME,
+                epa=-3.0 if index % 3 == 0 else 0.5,
+                fumble=1,
+                fumbled_1_team=offence,
+                fumble_recovery_1_team=offence
+                if index % 3
+                else (AWAY if offence == HOME else HOME),
+                fixed_drive=float(20 + index // 2),
+                qtr=4.0,
+            )
+        )
+        play_id += 1
+    for index in range(N_KICKS):
+        offence = HOME if index % 2 else AWAY
+        rows.append(
+            pbp_play(
+                play_id,
+                play_type="field_goal",
+                posteam=offence,
+                defteam=AWAY if offence == HOME else HOME,
+                epa=2.5 if index % 4 else -2.5,
+                field_goal_result="made" if index % 4 else "missed",
+                kick_distance=float(40 + index % 5),
+                kicker_player_id="K1" if index % 2 else "K2",
+                fixed_drive=float(40 + index),
+                qtr=4.0,
+            )
+        )
+        play_id += 1
+    for index in range(N_KICKS):
+        offence = HOME if index % 2 else AWAY
+        rows.append(
+            pbp_play(
+                play_id,
+                play_type="extra_point",
+                posteam=offence,
+                defteam=AWAY if offence == HOME else HOME,
+                epa=0.6 if index % 5 else -2.4,
+                extra_point_attempt=1,
+                extra_point_result="good" if index % 5 else "failed",
+                kick_distance=33.0,
+                kicker_player_id="K1" if index % 2 else "K2",
+                fixed_drive=float(60 + index),
+                qtr=4.0,
+            )
+        )
+        play_id += 1
     return game_frame(rows)
 
 
@@ -220,9 +291,31 @@ def receiver_drop_model(spread: float) -> ReceiverDropModel:
     )
 
 
+def kicking_model(spread: float) -> FieldGoalModel:
+    """A make-probability surface with two kickers and a real posterior spread.
+
+    `spread = 0` reproduces the constant-`alpha` fixture the rest of the suite
+    uses; a positive spread is what makes `_resample`'s per-kick index block
+    visible, exactly as it does on the two charting models.
+    """
+    rs = np.random.default_rng(21)
+    jitter = rs.normal(0.0, spread, size=N_POSTERIOR) if spread else np.zeros(N_POSTERIOR)
+    return FieldGoalModel(
+        alpha=1.9 + jitter,
+        beta=np.full(N_POSTERIOR, -0.115),
+        gamma=np.full(N_POSTERIOR, 0.13),
+        kicker_effects={
+            f"{SEASON}_K1": np.full(N_POSTERIOR, 0.6),
+            f"{SEASON}_K2": np.full(N_POSTERIOR, -0.6),
+        },
+        delta_xp=np.full(N_POSTERIOR, 0.9),
+        lambda_xp=np.full(N_POSTERIOR, 0.5),
+    )
+
+
 @pytest.fixture(scope="module")
 def baselines():
-    """Fumble and field-goal baselines, off a corpus of their own."""
+    """Fumble, field-goal and extra-point baselines, off a corpus of their own."""
     rows, play_id = [], 1000.0
     for index in range(100):
         rows.append(
@@ -236,29 +329,54 @@ def baselines():
             )
         )
         play_id += 1
-    for index in range(40):
+    for index in range(60):
         rows.append(
             pbp_play(
                 play_id,
                 play_type="field_goal",
-                epa=2.5 if index < 32 else -2.5,
-                field_goal_result="made" if index < 32 else "missed",
-                kick_distance=42.0,
+                epa=2.5 if index < 48 else -2.5,
+                field_goal_result="made" if index < 48 else "missed",
+                kick_distance=float(40 + index % 5),
+                kicker_player_id="K1",
+            )
+        )
+        play_id += 1
+    for index in range(40):
+        rows.append(
+            pbp_play(
+                play_id,
+                play_type="extra_point",
+                epa=0.6 if index < 36 else -2.4,
+                extra_point_attempt=1,
+                extra_point_result="good" if index < 36 else "failed",
+                kick_distance=33.0,
                 kicker_player_id="K1",
             )
         )
         play_id += 1
     corpus = game_frame(rows)
-    return fit_fumble_baseline(corpus, min_class_size=10), fit_fg_baseline(corpus, min_bin_size=10)
+    return (
+        fit_fumble_baseline(corpus, min_class_size=10),
+        fit_fg_baseline(corpus, min_bin_size=10),
+        fit_xp_baseline(corpus, min_attempts=10),
+    )
 
 
-def adjudicate(baselines, ftn: pl.DataFrame, *, posterior_spread: float = 0.0, edition="full"):
-    fumble_baseline, fg_baseline = baselines
+def adjudicate(
+    baselines,
+    ftn: pl.DataFrame,
+    *,
+    posterior_spread: float = 0.0,
+    edition="full",
+    plays: pl.DataFrame | None = None,
+):
+    fumble_baseline, fg_baseline, xp_baseline = baselines
     return simulate_game(
-        plays_frame(),
+        plays_frame() if plays is None else plays,
         fumble_baseline=fumble_baseline,
         fg_baseline=fg_baseline,
-        fg_model=None,
+        xp_baseline=xp_baseline,
+        fg_model=kicking_model(posterior_spread),
         points_per_epa=0.6,
         dropped_pick_model=dropped_pick_model(posterior_spread),
         receiver_drop_model=receiver_drop_model(posterior_spread),
@@ -269,13 +387,27 @@ def adjudicate(baselines, ftn: pl.DataFrame, *, posterior_spread: float = 0.0, e
     )
 
 
-def permutations() -> list[tuple[str, pl.DataFrame]]:
-    ftn = ftn_frame()
+def _permute(frame: pl.DataFrame) -> list[tuple[str, pl.DataFrame]]:
     return [
-        ("shuffled seed 7", ftn.sample(fraction=1.0, shuffle=True, seed=7)),
-        ("shuffled seed 1984", ftn.sample(fraction=1.0, shuffle=True, seed=1984)),
-        ("reversed", ftn.reverse()),
+        ("shuffled seed 7", frame.sample(fraction=1.0, shuffle=True, seed=7)),
+        ("shuffled seed 1984", frame.sample(fraction=1.0, shuffle=True, seed=1984)),
+        ("reversed", frame.reverse()),
     ]
+
+
+def permutations() -> list[tuple[str, pl.DataFrame]]:
+    return _permute(ftn_frame())
+
+
+def play_permutations() -> list[tuple[str, pl.DataFrame]]:
+    """The same three permutations, applied to the play-by-play frame.
+
+    `simulate_game` reads `plays["game_id"][0]`, `plays["result"][0]` and
+    `plays["home_team"][0]` off the first row, so a permutation is only a
+    permutation if every row agrees on those three — which they do here, being
+    one game. A frame that mixed games could not be shuffled this way.
+    """
+    return _permute(plays_frame())
 
 
 # --------------------------------------------------------------------------
@@ -383,5 +515,89 @@ def test_g1_the_strict_edition_never_saw_the_charting_frame_at_all(baselines):
     base = adjudicate(baselines, ftn_frame(), edition="strict")
     for name, permuted in permutations():
         other = adjudicate(baselines, permuted, edition="strict")
+        assert other.total_luck_epa == base.total_luck_epa, name
+        assert np.array_equal(other.margin_draws, base.margin_draws), name
+
+
+# --------------------------------------------------------------------------
+# the play-by-play frame — the same rule, on the other input
+# --------------------------------------------------------------------------
+#
+# The charting frame was where document 73 §1 saw the defect, but nothing in
+# §3's rule is specific to it: "every frame is sorted to a total order before
+# any step that reads row position". The play-by-play frame feeds the three
+# Strict builders, and every published v1.1 to v1.4 number is a Strict number,
+# so if `plays` order is load-bearing the blast radius is the whole record
+# rather than the charted seasons.
+#
+# `fumble_events` and `extra_point_events` draw a fresh Beta per event
+# (`_class_rate_draws`) and `field_goal_events` takes a `_resample` block per
+# kick, all three in the frame's iteration order; then every event's position
+# in the sequence indexes `_replayed_adjustment`'s uniforms, exactly as on the
+# charting side.
+
+
+def test_the_play_permutations_carry_the_same_values():
+    """The premise again: same rows, different order, nothing added or dropped."""
+    key = ["game_id", "play_id"]
+    base = plays_frame().sort(key)
+    for name, permuted in play_permutations():
+        assert permuted.sort(key).equals(base), name
+        assert not permuted.equals(plays_frame()), f"{name} is not actually a permutation"
+
+
+def test_the_game_has_something_of_every_component_to_reorder(baselines):
+    """Guard: a green permutation test proves nothing if the ledger is empty."""
+    result = adjudicate(baselines, ftn_frame(), posterior_spread=0.6)
+    counts: dict[str, int] = {}
+    for entry in result.ledger:
+        counts[entry.component] = counts.get(entry.component, 0) + 1
+    for component in ("fumble", "field_goal", "extra_point", "dropped_pick", "receiver_drop"):
+        assert counts.get(component, 0) > 1, f"{component}: {counts}"
+
+
+@pytest.mark.parametrize("spread", [0.0, 0.6], ids=["flat posterior", "posterior spread"])
+@pytest.mark.parametrize("edition", ["strict", "full"], ids=["strict", "full"])
+def test_the_adjudication_is_exactly_invariant_to_play_by_play_row_order(
+    baselines, edition, spread
+):
+    """Document 73 §3's rule, applied to `plays` instead of the charting frame."""
+    base = adjudicate(baselines, ftn_frame(), posterior_spread=spread, edition=edition)
+    for name, permuted in play_permutations():
+        other = adjudicate(
+            baselines, ftn_frame(), posterior_spread=spread, edition=edition, plays=permuted
+        )
+        label = f"{edition} / {name}"
+
+        assert other.deserved_margin == base.deserved_margin, label
+        assert other.total_luck_epa == base.total_luck_epa, label
+        assert other.actual_margin == base.actual_margin, label
+        assert other.dtw_home == base.dtw_home, label
+        assert other.dtw_interval == base.dtw_interval, label
+        assert other.variant == base.variant, label
+        assert np.array_equal(other.margin_draws, base.margin_draws), label
+        assert np.array_equal(other.home_point_draws, base.home_point_draws), label
+        assert np.array_equal(other.away_point_draws, base.away_point_draws), label
+
+
+@pytest.mark.parametrize("edition", ["strict", "full"], ids=["strict", "full"])
+def test_every_ledger_row_is_exactly_invariant_to_play_by_play_row_order(baselines, edition):
+    base = adjudicate(baselines, ftn_frame(), posterior_spread=0.6, edition=edition)
+    base_rows = [entry.to_dict() for entry in base.ledger]
+    for name, permuted in play_permutations():
+        other = adjudicate(
+            baselines, ftn_frame(), posterior_spread=0.6, edition=edition, plays=permuted
+        )
+        assert [entry.to_dict() for entry in other.ledger] == base_rows, f"{edition} / {name}"
+
+
+def test_both_frames_permuted_at_once_still_lands_on_the_same_adjudication(baselines):
+    """The two inputs together, since production reorders both independently."""
+    base = adjudicate(baselines, ftn_frame(), posterior_spread=0.6)
+    for (name, permuted_ftn), (_, permuted_plays) in zip(
+        permutations(), play_permutations(), strict=True
+    ):
+        other = adjudicate(baselines, permuted_ftn, posterior_spread=0.6, plays=permuted_plays)
+        assert other.deserved_margin == base.deserved_margin, name
         assert other.total_luck_epa == base.total_luck_epa, name
         assert np.array_equal(other.margin_draws, base.margin_draws), name
