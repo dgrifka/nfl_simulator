@@ -106,11 +106,14 @@ pre-registered materiality floor are reported and left alone.
 ## Install and quickstart
 
 ```bash
-uv venv
-uv pip install -e '.[dev]'
+uv sync --extra dev
 uv run pytest
 uv run ruff check .
 ```
+
+`uv sync` builds the environment from `uv.lock`, so a fresh clone runs the
+exact dependency versions the shipped numbers were validated against —
+Polars included — rather than whatever a fresh resolution would pick.
 
 Pull the data, then fit the models a clean checkout can build for itself. Each
 line needs the ones above it:

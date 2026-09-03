@@ -1696,6 +1696,27 @@ class LuckBar:
     actor: str | None = None
 
 
+def _size_order(bar: LuckBar) -> tuple:
+    """Biggest mover first, ties broken by play then component — a total order.
+
+    ``abs(points)`` alone is not an order at all: two extra points by the same
+    kicker on the same branch carry identical points, and document 73's
+    read-side audit found the tie decided by input row order — which differs
+    between the artifact parquet and the replay for the same game. The play
+    and the component (the blocked kick books two components on one play)
+    settle every ledger tie; a fold has no play, sits after any tied event,
+    and is told apart from a sibling fold by its label, which is itself a pure
+    function of the fold's values.
+    """
+    return (
+        -abs(bar.points),
+        bar.play_id is None,
+        bar.play_id if bar.play_id is not None else 0.0,
+        bar.component or "",
+        bar.label,
+    )
+
+
 def _fumble_phrase(event_class: str) -> str:
     """`"run/aborted"` -> `"an aborted run"`, falling back to the class as written."""
     play, _, liveness = str(event_class).partition("/")
@@ -1977,7 +1998,7 @@ def luck_bars(
     if chronological:
         kept.sort(key=lambda bar: bar.play_id)
     else:
-        kept.sort(key=lambda bar: abs(bar.points), reverse=True)
+        kept.sort(key=_size_order)
     # The folds go last whatever the ordering: they have no play to sit at on a
     # timeline, and `group_rows` re-sorts the adjudication's reading anyway.
     return kept + folded
@@ -2232,7 +2253,7 @@ def group_rows(
             )
         )
 
-    return sorted(big + kept, key=lambda bar: abs(bar.points), reverse=True)
+    return sorted(big + kept, key=_size_order)
 
 
 def running_totals(bars: Sequence[LuckBar], start: float) -> list[tuple[float, float]]:
@@ -2353,6 +2374,10 @@ def _stamp_row_logos(ax, bars, rows_y, logos, verdict) -> None:
     renderer = _renderer(ax.figure)
     box = ax.get_window_extent()
     labels = ax.get_yticklabels()
+    # The column is found by indexing these labels at each row's y position,
+    # which is only right while the axis carries one tick per row — the
+    # waterfall builds it that way (`set_yticks(rows_y)`); asserted, not assumed.
+    assert len(labels) == len(rows_y), f"{len(labels)} tick labels against {len(rows_y)} rows"
 
     def beneficiary(bar):
         """The maintainer 2026-09-01: the mark matches the bar's colour — the club the
@@ -3080,17 +3105,31 @@ def team_ledgers(verdict: GameVerdict, rows, *, points_per_epa: float) -> tuple[
     ledgers = []
     for team in (verdict.away_team, verdict.home_team):
         sign = 1.0 if team == verdict.home_team else -1.0
+        charged_rows = [
+            (row, toward_home * sign)
+            for row, (charged, toward_home) in zip(rows, signed, strict=True)
+            if charged == team
+        ]
+        # Biggest mover first, ties settled by play then component: on a tie
+        # straddling `table_rows`' top-5 cut, the sort decides which event the
+        # card names and which it folds into "and N more" — document 73's
+        # read-side audit found that choice made by input row order.
+        charged_rows.sort(
+            key=lambda pair: (
+                -abs(pair[1]),
+                float(pair[0]["play_id"]),
+                str(pair[0]["component"]),
+            )
+        )
         own = [
             LuckRow(
                 event=event_phrase(row),
                 outcome=outcome_phrase(row),
-                points=toward_home * sign,
+                points=points,
                 label=plain_label(row),
             )
-            for row, (charged, toward_home) in zip(rows, signed, strict=True)
-            if charged == team
+            for row, points in charged_rows
         ]
-        own.sort(key=lambda entry: abs(entry.points), reverse=True)
         ledgers.append(TeamLuck(team=team, net_points=net_home * sign, rows=own))
     return ledgers[0], ledgers[1]
 
@@ -3898,6 +3937,11 @@ def band_sweep(
             f"per game ({dtw_home.shape} vs {actual_margin.shape})."
         )
 
+    # One row per half-width is the figure's whole identity; a duplicate would
+    # print the same band twice and read as two different choices agreeing.
+    assert len(set(half_widths)) == len(half_widths), (
+        f"duplicated half-widths in {list(half_widths)}"
+    )
     rows = []
     for half_width in half_widths:
         low, high = round(0.5 - half_width, 4), round(0.5 + half_width, 4)
