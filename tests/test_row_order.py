@@ -36,7 +36,13 @@ import numpy as np
 import polars as pl
 import pytest
 
-from nfl_simulator.components import fit_fg_baseline, fit_fumble_baseline, fit_xp_baseline
+from nfl_simulator.components import (
+    _fg_frame,
+    _fumble_frame,
+    fit_fg_baseline,
+    fit_fumble_baseline,
+    fit_xp_baseline,
+)
 from nfl_simulator.dropped_picks import DroppedPickModel, build_swing_table, worthy_throw_frame
 from nfl_simulator.fg_model import FieldGoalModel
 from nfl_simulator.receiver_drops import (
@@ -601,3 +607,57 @@ def test_both_frames_permuted_at_once_still_lands_on_the_same_adjudication(basel
         assert other.deserved_margin == base.deserved_margin, name
         assert other.total_luck_epa == base.total_luck_epa, name
         assert np.array_equal(other.margin_draws, base.margin_draws), name
+
+
+# --------------------------------------------------------------------------
+# the four public frame builders, each on its own
+# --------------------------------------------------------------------------
+#
+# `simulate_game` sorts what it is handed, so the adjudication is covered above.
+# These four frames are also public and are called directly — by the baseline
+# fits, and by the research scripts that produce the artifacts — and none of
+# those callers goes through `simulate_game`. Document 73 §3 says "every
+# frame", so each builder owns its own output order rather than borrowing one
+# from whoever happened to call it.
+
+
+def test_the_fumble_frame_is_row_order_invariant():
+    base = _fumble_frame(plays_frame())
+    assert base.height > 1, "the fixture must carry fumbles for this to mean anything"
+    for name, permuted in play_permutations():
+        assert _fumble_frame(permuted).equals(base), name
+
+
+def test_the_field_goal_frame_is_row_order_invariant():
+    base = _fg_frame(plays_frame())
+    assert base.height > 1, "the fixture must carry kicks for this to mean anything"
+    for name, permuted in play_permutations():
+        assert _fg_frame(permuted).equals(base), name
+
+
+def test_the_worthy_throw_frame_is_row_order_invariant():
+    base = worthy_throw_frame(plays_frame(), ftn_frame())
+    assert base.height > 1
+    for (name, permuted_ftn), (_, permuted_plays) in zip(
+        permutations(), play_permutations(), strict=True
+    ):
+        assert worthy_throw_frame(permuted_plays, permuted_ftn).equals(base), name
+
+
+def test_the_catchable_target_frame_is_row_order_invariant():
+    base = catchable_target_frame(plays_frame(), ftn_frame())
+    assert base.height > 1
+    for (name, permuted_ftn), (_, permuted_plays) in zip(
+        permutations(), play_permutations(), strict=True
+    ):
+        assert catchable_target_frame(permuted_plays, permuted_ftn).equals(base), name
+
+
+def test_the_baseline_fits_do_not_move_when_their_corpus_is_permuted():
+    """The fits read the same two frames, so they inherit the same guarantee."""
+    corpus = plays_frame()
+    base_fumble = fit_fumble_baseline(corpus, min_class_size=1)
+    base_fg = fit_fg_baseline(corpus, min_bin_size=1)
+    for name, permuted in play_permutations():
+        assert fit_fumble_baseline(permuted, min_class_size=1).table.equals(base_fumble.table), name
+        assert fit_fg_baseline(permuted, min_bin_size=1).table.equals(base_fg.table), name
