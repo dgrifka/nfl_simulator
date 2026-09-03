@@ -182,6 +182,71 @@ def record(manifest: dict, result: SeasonResult) -> None:
 
 
 # --------------------------------------------------------------------------
+# data manifest — the slope-provenance guard
+# --------------------------------------------------------------------------
+#
+# exp40 traced a 1e-06-scale margin mystery to upstream nflverse revising the
+# cached pbp-2020 *values* after the pull. The corpus build stamps a hash per
+# cached season into the model metadata, and the live entry point compares the
+# cache it is about to read against that stamp — so value drift names its own
+# season instead of costing an afternoon of byte-diffs.
+
+
+def data_manifest(data_dir: Path | None = None) -> dict[str, str]:
+    """A hash per cached season parquet, keyed ``pbp/pbp_2020.parquet``."""
+    import hashlib
+
+    root = Path(data_dir) if data_dir is not None else paths.data_dir()
+    manifest: dict[str, str] = {}
+    for family in ("pbp", "ftn"):
+        directory = root / family
+        if not directory.is_dir():
+            continue
+        for file in sorted(directory.glob("*.parquet")):
+            digest = hashlib.sha256(file.read_bytes()).hexdigest()[:16]
+            manifest[f"{family}/{file.name}"] = digest
+    return manifest
+
+
+def manifest_drift(recorded: dict[str, str], current: dict[str, str]) -> list[str]:
+    """Every file whose bytes moved, vanished, or appeared — named, sorted."""
+    findings = []
+    for key in sorted(recorded.keys() | current.keys()):
+        if key not in current:
+            findings.append(f"{key} (missing from cache)")
+        elif key not in recorded:
+            findings.append(f"{key} (not in the recorded manifest)")
+        elif recorded[key] != current[key]:
+            findings.append(f"{key} (revised)")
+    return findings
+
+
+def warn_on_manifest_drift(metadata: dict, data_dir: Path | None = None) -> None:
+    """Warn, naming each drifted file, when the cache no longer matches the
+    manifest the model metadata recorded at corpus-build time.
+
+    A warning, not an error: the frozen-cache policy is the maintainer's, and a
+    dry run must still run — loudly — on a drifted cache. Metadata without a
+    recorded manifest (every artifact built before v1.4.1) is silently fine.
+    """
+    import warnings
+
+    recorded = metadata.get("data_manifest")
+    if not recorded:
+        return
+    drifted = manifest_drift(recorded, data_manifest(data_dir))
+    if drifted:
+        warnings.warn(
+            "the data cache no longer matches the manifest recorded in the model "
+            f"metadata at corpus-build time: {', '.join(drifted)}. Adjudications "
+            "against the shipped artifacts may drift at the 1e-06 scale per "
+            "revised season (document 73, amendment C-1).",
+            UserWarning,
+            stacklevel=2,
+        )
+
+
+# --------------------------------------------------------------------------
 # pulls
 # --------------------------------------------------------------------------
 

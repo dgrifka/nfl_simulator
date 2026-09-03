@@ -53,6 +53,7 @@ from nfl_simulator.ingest import (
     load_ftn_if_cached,
     load_pbp,
     schedule_row,
+    warn_on_manifest_drift,
 )
 from nfl_simulator.plots import GameVerdict, plain_label
 from nfl_simulator.render import FIRST_CHARTED_SEASON, season_of
@@ -279,6 +280,13 @@ def adjudicate_live_game(
     _baseline_cache_present()
     out_dir = Path(out_dir) if out_dir is not None else paths.artifact_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    metadata_path = paths.artifact_dir() / render.METADATA
+    if metadata_path.exists():
+        import json
+
+        with metadata_path.open() as handle:
+            warn_on_manifest_drift(json.load(handle))
 
     context = render._simulation_context()
     plays = _ensure_plays(game_id, pull=pull, refresh=refresh)

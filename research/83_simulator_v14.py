@@ -51,6 +51,7 @@ _audit = import_module("68_dropped_pick_variant_audit")
 _refit = import_module("82_fg_v14_refit")
 _power = import_module("81a_fg_elevation_power")
 
+from nfl_simulator import ingest as _ingest  # noqa: E402
 from nfl_simulator import paths  # noqa: E402
 from nfl_simulator.components import (  # noqa: E402
     build_game_table,
@@ -539,6 +540,10 @@ def main() -> None:
         "git_commit": _v13.git_commit(),
         "games_simulated": table.height,
         "points_per_epa": slope,
+        # The slope-provenance guard (document 73, amendment C-1): a hash per
+        # cached season, so the live path can name the drifted file when
+        # upstream revises values under a frozen cache.
+        "data_manifest": _ingest.data_manifest(),
         "field_goal_posterior": f"research/outputs/{_refit.TRACE_NAME}",
         "field_goal_centres": v14_centres,
         "changes_from_v13": [
