@@ -746,12 +746,12 @@ def apply_watermark(
     it stays explicit about the mark; the product's default — every figure wears
     :data:`BRAND_LOGO` — lives one level up, in :func:`finalize`.
 
-    The mark is pasted **above** the credit and right-aligned with it, at 2.5
-    line heights — the MLB simulator's stack, which right-aligns rather than
-    centring the narrower element so the corner itself is the mark. Above
-    rather than beside because the block is anchored to the top edge now: a
-    mark 2.5 lines tall centred on the credit's ink would reach a line and a
-    half above it, which at a 1.2% inset is off the canvas.
+    The mark is pasted **above** the credit at 2.5 line heights, and the whole
+    stack shares one vertical axis: the mark and the handle line are both
+    centred on the credit line (the maintainer, 2026-09-03). Above rather than
+    beside because the block is anchored to the top edge now: a mark 2.5 lines
+    tall centred on the credit's ink would reach a line and a half above it,
+    which at a 1.2% inset is off the canvas.
 
     A failure here is a warning rather than an exception: the figure is already
     on disk and correct, and losing the whole render over a missing font would
@@ -808,10 +808,11 @@ def apply_watermark(
             painted_top = min(painted_top, logo_top)
             image.paste(logo, (logo_x, logo_top), logo)
 
-        # `align="right"` so the shorter line of a stacked stamp holds the
-        # right margin the corner is measured from; a left-aligned second line
-        # would leave the block ragged against the edge it is anchored to.
-        draw.text((left, top), text, fill=_rgb255(STAMP_INK), font=font, align="right")
+        # `align="center"` so the shorter handle line sits centred under the
+        # credit — one vertical axis through mark, credit and handle (the
+        # maintainer 2026-09-03). The block's outer box is still the credit
+        # line's width, so the corner's margin is unchanged.
+        draw.text((left, top), text, fill=_rgb255(STAMP_INK), font=font, align="center")
         image.convert("RGB").save(filepath)
         return (left, painted_top, right, bottom)
     except Exception as error:  # pragma: no cover - the figure is already saved

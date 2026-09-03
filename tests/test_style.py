@@ -388,7 +388,7 @@ def test_passing_logo_path_false_suppresses_the_mark(blank, tmp_path):
 
 
 def test_the_mark_sits_above_the_credit_line(blank, tmp_path):
-    """The MLB simulator's stack, right-aligned rather than centred.
+    """The MLB simulator's stack, mark above the credit on one centred axis.
 
     Beside the credit was round 10's arrangement, and it only worked because
     the block was anchored to the bottom edge, where a mark 1.6 lines tall
