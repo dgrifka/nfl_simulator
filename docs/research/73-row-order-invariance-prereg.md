@@ -23,6 +23,17 @@ different physical order (2,064 rows reordered within seasons), and with that
 order the adjudicated deserved margin moves by **1.14e-06 points** on the
 checked game. The exact round-trip guard refuses, as it should.
 
+> **Correction (amendment C-1, 2026-09-03):** the reordering described above
+> is inter-game block movement only — no game's charting rows differ
+> within-game between a fresh pull and the cache, a fresh play-by-play pull is
+> identical to the cache in both values and physical order, and block layout
+> alone does not change the builders' join emission order — so the 1.14e-06 pt
+> move cannot be attributed to charting row order and the input that produced
+> it remains unidentified (the leading remaining candidate is the fresh
+> clone's independently re-fitted posterior). The positional-read defect this
+> document's fix closed is established independently by the permutation tests
+> of `tests/test_row_order.py`.
+
 Values equal, order different, output different: the pipeline is reading
 meaning from row position somewhere. The repo already documents the two known
 mechanisms — Polars `group_by` returns groups in thread-completion order, and
