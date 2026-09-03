@@ -15,8 +15,10 @@ Three things are load-bearing rather than decorative:
   ``bbox_inches="tight"``; a pixel-coordinate one lands in the same corner of
   every PNG the product ships.
 * **The data credit is part of the watermark, not an option.** nflverse asks for
-  credit for the play-by-play this whole repo runs on, so it travels with the
-  image rather than with the post it was attached to.
+  credit for the play-by-play this whole repo runs on, and FTN asked for credit
+  on the figures their charting is inside (2026-09-03), so the credit travels
+  with the image rather than with the post it was attached to. It names FTN on
+  the figures whose numbers used FTN charting and only those.
 
 ``BRAND_HANDLE`` names the account the product posts from. It read ``@[TBD]``
 until the maintainer named the account; a figure that ships with an invented
@@ -60,10 +62,26 @@ PALETTE = {
 HOME_ALPHA = 0.78
 AWAY_ALPHA = 0.55
 
-# Brand. `WATERMARK` is the one string stamped on every PNG.
+# Brand. `WATERMARK` and `WATERMARK_FTN` are the two strings a PNG is stamped
+# with: the data credit, and the handle on the line under it. Stacked rather
+# than joined by a pipe since 2026-09-03 (the maintainer) — the credit grew a
+# second source, and one line that long reaches back across the corner into the
+# title beside it.
 BRAND_HANDLE = "@nfl_simulator"
 DATA_CREDIT = "Data: nflverse"
-WATERMARK = f"{DATA_CREDIT} | {BRAND_HANDLE}"
+# FTN charts the dropped passes and interceptable throws (`is_drop`,
+# `is_interception_worthy`) the 2022-on components are built out of, and asked
+# for credit on the images that carry them. Which credit a figure wears is a
+# fact about the numbers in it, so it is chosen by `edition_stamp` rather than
+# by whoever writes the caption.
+DATA_CREDIT_FTN = "Data: nflverse & FTN"
+WATERMARK = f"{DATA_CREDIT}\n{BRAND_HANDLE}"
+WATERMARK_FTN = f"{DATA_CREDIT_FTN}\n{BRAND_HANDLE}"
+
+# The credit's ink. The house muted ink rather than the mid-grey round 10 drew
+# it in: on `PALETTE["bg"]` that grey measures 3.23:1 and this measures 5.73:1,
+# and a credit a reader has to hunt for is not really a credit given.
+STAMP_INK = PALETTE["text_muted"]
 
 # The mark itself, packaged rather than referenced. It sits inside
 # ``src/nfl_simulator`` so hatchling puts it in the wheel: a logo read from a
@@ -81,21 +99,28 @@ EDITION_NAMES = {"strict": "Strict", "full": "Full"}
 
 
 def edition_stamp(edition: str) -> str:
-    """`"Data: nflverse | @nfl_simulator"` — the corner of every PNG.
+    """The corner of a PNG: the data credit, with the handle on the line below.
 
-    The edition is validated but no longer printed. The public story is one
+    The edition is validated but never printed. The public story is one
     deserve-to-win verdict whose coverage depends on the season (ruled
     2026-09-02), so the word "edition" never reaches a rendered image; the
     argument stays because an image may still not claim an adjudication nobody
     named, and `strict`/`full` remain the internal identifiers that filenames
     and the `edition` field are keyed on.
+
+    What the key *does* decide is which credit the image wears. The full
+    adjudication reprices dropped picks and receiver drops, and both read FTN's
+    charting; the strict one is EPA, fumbles and kicks, and reaches no FTN
+    column at all — so it would be claiming a source it never opened. The
+    credit line is the only thing that moves, and the reader is told about the
+    data rather than about the identifier.
     """
     if edition not in EDITION_NAMES:
         raise ValueError(
             f"{edition!r} is not an edition anybody named; they are "
             f"{list(EDITION_NAMES)} (document 58 §2)."
         )
-    return WATERMARK
+    return WATERMARK_FTN if edition == "full" else WATERMARK
 
 
 # Font preference order. Matplotlib walks the list and uses the first family
@@ -478,7 +503,10 @@ STAMP_INSET = 0.012
 # 2.5 rather than round 10's 1.6, same ruling. At 1.6 the badge read as a bullet
 # in front of the credit rather than as a mark, which is the whole reason it is
 # on the image.
-STAMP_FONT_SCALE = 0.0095
+# 0.0110 rather than round 10's 0.0095 (the maintainer 2026-09-03): the credit
+# now names two sources across two lines, and it has to be legible at the size
+# the figure is actually looked at, not only when a reader zooms in.
+STAMP_FONT_SCALE = 0.0110
 STAMP_LOGO_RATIO = 2.5
 STAMP_GAP_RATIO = 0.25
 
@@ -508,6 +536,18 @@ def _stamp_font(reference: int):
         return ImageFont.truetype(fm.findfont(fm.FontProperties(family="DejaVu Sans")), size)
     except Exception:  # pragma: no cover - a machine with no findable font
         return ImageFont.load_default()
+
+
+def _credit_line_height(draw, text: str, font) -> int:
+    """The height of a single credit line, whatever the stamp's line count.
+
+    The mark hangs off this rather than off the whole text block. Stacking the
+    handle under the credit doubled the block, and a mark chained to the block
+    would have doubled with it — the badge's floor is a fact about the credit's
+    type size, not about how many lines the credit happens to take.
+    """
+    box = draw.textbbox((0, 0), text.split("\n")[0], font=font)
+    return box[3] - box[1]
 
 
 def _stamp_gap(logo_height: int) -> int:
@@ -585,7 +625,7 @@ def stamp_box(
     bbox = draw.textbbox((0, 0), text, font=font)
     text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
-    mark_h = _mark_height(text_h, width)
+    mark_h = _mark_height(_credit_line_height(draw, text, font), width)
     gap = _stamp_gap(mark_h)
     right = width - int(width * STAMP_MARGIN)
     left = right - text_w
@@ -752,7 +792,7 @@ def apply_watermark(
 
         if logo_path is not None:
             bbox = draw.textbbox((0, 0), text, font=font)
-            logo_w, logo_h = _logo_geometry(logo_path, bbox[3] - bbox[1], width)
+            logo_w, logo_h = _logo_geometry(logo_path, _credit_line_height(draw, text, font), width)
             logo = Image.open(logo_path).convert("RGBA")
             pixels = np.array(logo)
             near_white = (pixels[:, :, 0] > 240) & (pixels[:, :, 1] > 240) & (pixels[:, :, 2] > 240)
@@ -768,7 +808,10 @@ def apply_watermark(
             painted_top = min(painted_top, logo_top)
             image.paste(logo, (logo_x, logo_top), logo)
 
-        draw.text((left, top), text, fill=(140, 140, 140), font=font)
+        # `align="right"` so the shorter line of a stacked stamp holds the
+        # right margin the corner is measured from; a left-aligned second line
+        # would leave the block ragged against the edge it is anchored to.
+        draw.text((left, top), text, fill=_rgb255(STAMP_INK), font=font, align="right")
         image.convert("RGB").save(filepath)
         return (left, painted_top, right, bottom)
     except Exception as error:  # pragma: no cover - the figure is already saved

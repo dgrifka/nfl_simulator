@@ -71,6 +71,8 @@ from nfl_simulator.plots import (  # noqa: E402
 from nfl_simulator.style import (  # noqa: E402
     CLASH_DISTANCE,
     PALETTE,
+    STAMP_INK,
+    _rgb255,
     colour_distance,
 )
 
@@ -2814,12 +2816,17 @@ def test_the_stamp_is_the_data_credit_alone_on_either_edition():
     """Ruled 2026-09-02: the word "edition" never reaches a rendered image.
 
     The argument is still validated — an image may not claim an adjudication
-    nobody named — but it is no longer printed, so both of ruling R-4's two
-    stamp the same corner."""
-    from nfl_simulator.style import WATERMARK, edition_stamp
+    nobody named — but it is never printed. What the key does decide is which
+    data credit the corner carries: the full adjudication reads FTN's charting
+    for dropped picks and receiver drops, and the strict one never opens an FTN
+    column, so it would be claiming a source it did not use."""
+    from nfl_simulator.style import WATERMARK, WATERMARK_FTN, edition_stamp
 
-    assert edition_stamp("full") == WATERMARK
+    assert edition_stamp("full") == WATERMARK_FTN
     assert edition_stamp("strict") == WATERMARK
+    assert edition_stamp("full") != edition_stamp("strict")
+    for stamp in (edition_stamp("full"), edition_stamp("strict")):
+        assert "full" not in stamp and "strict" not in stamp, "ruling R-4: never on an image"
 
 
 def test_an_edition_nobody_named_cannot_be_stamped():
@@ -4559,10 +4566,12 @@ def test_the_ledger_card_still_lifts_the_cap_row_s_first_letter():
 # --------------------------------------------------------------------------
 
 # Anything darker than this is somebody's artist. The stamp's own line is
-# painted at 140 grey on a 249 cream, and the title is #1A1A1A at 26, so a
-# threshold between them separates the two without measuring the title's box in
-# a coordinate system the crop has already moved.
-FOREIGN_INK = 120
+# painted in the house muted ink (~98 mean since 2026-09-03) on a 249 cream,
+# and the title is #1A1A1A at 26, so a threshold just under the credit
+# separates the two without measuring the title's box in a coordinate system
+# the crop has already moved. Derived from the ink so re-inking the credit
+# cannot leave the threshold silently on the wrong side of it.
+FOREIGN_INK = sum(_rgb255(STAMP_INK)) / 3 - 2
 
 
 def _stamped(fig, tmp_path, name, *, mark: bool = True):
@@ -4605,7 +4614,7 @@ def test_the_stamp_box_holds_nothing_but_the_credit(figure, tmp_path):
     The old invariant — every artist's ink below the stamp's rows — is gone by
     design: the title's rows and the stamp's overlap now. What replaces it is
     the guarantee the anchor actually makes: the painted box itself holds no
-    ink but the credit's own mid-grey.
+    ink but the credit's own.
     """
     game = branded(draws=np.linspace(-20, 6, 160_000))
     fig = (
