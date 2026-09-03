@@ -1,0 +1,585 @@
+{
+  "settings": {
+    "seed": 20260817,
+    "n_posterior_draws": 200,
+    "n_coin_draws": 800,
+    "points_per_epa": 0.8389495557652871
+  },
+  "games": {
+    "2016_10_ATL_PHI": {
+      "shipped": {
+        "actual_margin": 9.0,
+        "deserved_margin": 11.195576380507621,
+        "dtw_home": 0.9959124999999999,
+        "dtw_low": 0.99125,
+        "dtw_high": 1.0,
+        "total_luck_epa": -2.6170541070312905
+      },
+      "replayed": {
+        "actual_margin": 9.0,
+        "deserved_margin": 11.17651808662564,
+        "dtw_home": 0.9960249999999999,
+        "dtw_low": 0.9925,
+        "dtw_high": 1.0,
+        "total_luck_epa": -2.5943372538533946
+      },
+      "margin_delta": -0.019058293881981214,
+      "ledger": [
+        {
+          "play_id": 1498.0,
+          "component": "fumble",
+          "event_class": "pass/live",
+          "charged_team": "PHI",
+          "actual": 0.0,
+          "expected": 0.5096033706976855,
+          "swing": 4.267505685687519,
+          "luck_epa": -2.174735281897897
+        },
+        {
+          "play_id": 2513.0,
+          "component": "fumble",
+          "event_class": "pass/live",
+          "charged_team": "PHI",
+          "actual": 1.0,
+          "expected": 0.5095955229732039,
+          "swing": 4.267505685687519,
+          "luck_epa": 2.092803893998467
+        },
+        {
+          "play_id": 863.0,
+          "component": "field_goal",
+          "event_class": "40-44 yd",
+          "charged_team": "PHI",
+          "actual": 0.0,
+          "expected": 0.8123785458081103,
+          "swing": 4.290041955688844,
+          "luck_epa": -3.4851380454182848
+        },
+        {
+          "play_id": 997.0,
+          "component": "field_goal",
+          "event_class": "35-39 yd",
+          "charged_team": "ATL",
+          "actual": 1.0,
+          "expected": 0.9091867295389237,
+          "swing": -3.9839345936243955,
+          "luck_epa": -0.3617941297500505
+        },
+        {
+          "play_id": 1329.0,
+          "component": "field_goal",
+          "event_class": "40-44 yd",
+          "charged_team": "ATL",
+          "actual": 1.0,
+          "expected": 0.8569289632657958,
+          "swing": -4.290041955688844,
+          "luck_epa": -0.6137807502336358
+        },
+        {
+          "play_id": 1632.0,
+          "component": "field_goal",
+          "event_class": "50-54 yd",
+          "charged_team": "ATL",
+          "actual": 0.0,
+          "expected": 0.6970893132364365,
+          "swing": -4.6940542128572345,
+          "luck_epa": 3.2721750275352512
+        },
+        {
+          "play_id": 2255.0,
+          "component": "field_goal",
+          "event_class": "25-29 yd",
+          "charged_team": "PHI",
+          "actual": 1.0,
+          "expected": 0.9718591796596838,
+          "swing": 3.6334410739679477,
+          "luck_epa": 0.10224801247965747
+        },
+        {
+          "play_id": 2451.0,
+          "component": "field_goal",
+          "event_class": "45-49 yd",
+          "charged_team": "ATL",
+          "actual": 1.0,
+          "expected": 0.8154038279827921,
+          "swing": -4.485250904307362,
+          "luck_epa": -0.8279601474718591
+        },
+        {
+          "play_id": 2998.0,
+          "component": "field_goal",
+          "event_class": "55-59 yd",
+          "charged_team": "PHI",
+          "actual": 0.0,
+          "expected": 0.6122270460246664,
+          "swing": 4.550570505379051,
+          "luck_epa": -2.78598233823519
+        },
+        {
+          "play_id": 3158.0,
+          "component": "field_goal",
+          "event_class": "25-29 yd",
+          "charged_team": "PHI",
+          "actual": 1.0,
+          "expected": 0.9885127832031828,
+          "swing": 3.6334410739679477,
+          "luck_epa": 0.0417381253351301
+        },
+        {
+          "play_id": 4043.0,
+          "component": "field_goal",
+          "event_class": "45-49 yd",
+          "charged_team": "PHI",
+          "actual": 1.0,
+          "expected": 0.7456761800964649,
+          "swing": 4.485250904307362,
+          "luck_epa": 1.1407061432092336
+        },
+        {
+          "play_id": 522.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "PHI",
+          "actual": 1.0,
+          "expected": 0.9505613522502242,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.04916660331349643
+        },
+        {
+          "play_id": 2818.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "ATL",
+          "actual": 0.0,
+          "expected": 0.9615064836845229,
+          "swing": -0.9944973325796396,
+          "luck_epa": 0.9562156332822868
+        }
+      ]
+    },
+    "2021_08_JAX_SEA": {
+      "shipped": {
+        "actual_margin": 24.0,
+        "deserved_margin": 23.64095200657237,
+        "dtw_home": 1.0,
+        "dtw_low": 1.0,
+        "dtw_high": 1.0,
+        "total_luck_epa": 0.4279732803483114
+      },
+      "replayed": {
+        "actual_margin": 24.0,
+        "deserved_margin": 23.64355074894181,
+        "dtw_home": 1.0,
+        "dtw_low": 1.0,
+        "dtw_high": 1.0,
+        "total_luck_epa": 0.42487566577592417
+      },
+      "margin_delta": 0.0025987423694395773,
+      "ledger": [
+        {
+          "play_id": 1830.0,
+          "component": "field_goal",
+          "event_class": "30-34 yd",
+          "charged_team": "SEA",
+          "actual": 1.0,
+          "expected": 0.9449832385810492,
+          "swing": 3.6703297949201827,
+          "luck_epa": 0.20192965865599047
+        },
+        {
+          "play_id": 523.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "SEA",
+          "actual": 1.0,
+          "expected": 0.9311051690934715,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.06851572556506788
+        },
+        {
+          "play_id": 1180.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "SEA",
+          "actual": 1.0,
+          "expected": 0.9289492496556815,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.07065978169520667
+        },
+        {
+          "play_id": 2313.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "SEA",
+          "actual": 1.0,
+          "expected": 0.9272736521453908,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.07232615894966783
+        },
+        {
+          "play_id": 3793.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "SEA",
+          "actual": 1.0,
+          "expected": 0.9271898456896284,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.07240950424637653
+        },
+        {
+          "play_id": 3876.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "JAX",
+          "actual": 1.0,
+          "expected": 0.9386975094460567,
+          "swing": -0.9944973325796396,
+          "luck_epa": -0.060965163336385186
+        }
+      ]
+    },
+    "2018_02_OAK_DEN": {
+      "shipped": {
+        "actual_margin": 1.0,
+        "deserved_margin": 1.0572964650147718,
+        "dtw_home": 0.89395625,
+        "dtw_low": 0.84625,
+        "dtw_high": 0.9263874999999999,
+        "total_luck_epa": -0.06829548287024984
+      },
+      "replayed": {
+        "actual_margin": 1.0,
+        "deserved_margin": 1.0590528970979471,
+        "dtw_home": 0.89405,
+        "dtw_low": 0.84868125,
+        "dtw_high": 0.9275687499999999,
+        "total_luck_epa": -0.07038909156353187
+      },
+      "margin_delta": 0.00175643208317533,
+      "ledger": [
+        {
+          "play_id": 280.0,
+          "component": "field_goal",
+          "event_class": "25-29 yd",
+          "charged_team": "LV",
+          "actual": 1.0,
+          "expected": 0.9919491012591604,
+          "swing": -3.6334410739679477,
+          "luck_epa": -0.02925246616732358
+        },
+        {
+          "play_id": 1047.0,
+          "component": "field_goal",
+          "event_class": "45-49 yd",
+          "charged_team": "LV",
+          "actual": 1.0,
+          "expected": 0.8731892019729078,
+          "swing": -4.485250904307362,
+          "luck_epa": -0.5687782465269534
+        },
+        {
+          "play_id": 2727.0,
+          "component": "field_goal",
+          "event_class": "35-39 yd",
+          "charged_team": "DEN",
+          "actual": 1.0,
+          "expected": 0.9267352839305062,
+          "swing": 3.9839345936243955,
+          "luck_epa": 0.2918818368413255
+        },
+        {
+          "play_id": 4030.0,
+          "component": "field_goal",
+          "event_class": "35-39 yd",
+          "charged_team": "DEN",
+          "actual": 1.0,
+          "expected": 0.9485826011224165,
+          "swing": 3.9839345936243955,
+          "luck_epa": 0.2048435541025889
+        },
+        {
+          "play_id": 2336.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "LV",
+          "actual": 1.0,
+          "expected": 0.9716625245344823,
+          "swing": -0.9944973325796396,
+          "luck_epa": -0.028181543762498314
+        },
+        {
+          "play_id": 2358.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "DEN",
+          "actual": 1.0,
+          "expected": 0.9701323359292237,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.029703312248771815
+        },
+        {
+          "play_id": 3373.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "DEN",
+          "actual": 1.0,
+          "expected": 0.9704428953828257,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.029394461700557203
+        }
+      ]
+    },
+    "2019_16_NYG_WAS": {
+      "shipped": {
+        "actual_margin": -6.0,
+        "deserved_margin": -5.779979134039552,
+        "dtw_home": 0.001,
+        "dtw_low": 0.0,
+        "dtw_high": 0.00375,
+        "total_luck_epa": -0.26225756298272973
+      },
+      "replayed": {
+        "actual_margin": -6.0,
+        "deserved_margin": -5.7810579538156865,
+        "dtw_home": 0.001175,
+        "dtw_low": 0.0,
+        "dtw_high": 0.00375,
+        "total_luck_epa": -0.2609716456487005
+      },
+      "margin_delta": -0.0010788197761346652,
+      "ledger": [
+        {
+          "play_id": 3666.0,
+          "component": "fumble",
+          "event_class": "run/live",
+          "charged_team": "NYG",
+          "actual": 1.0,
+          "expected": 0.4611463075931579,
+          "swing": -4.963125188247831,
+          "luck_epa": -2.6743983335647474
+        },
+        {
+          "play_id": 3428.0,
+          "component": "field_goal",
+          "event_class": "50-54 yd",
+          "charged_team": "NYG",
+          "actual": 0.0,
+          "expected": 0.5464321732049614,
+          "swing": -4.6940542128572345,
+          "luck_epa": 2.564982244673483
+        },
+        {
+          "play_id": 294.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "WAS",
+          "actual": 1.0,
+          "expected": 0.9451145922660379,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.05458339158897124
+        },
+        {
+          "play_id": 302.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "NYG",
+          "actual": 1.0,
+          "expected": 0.9173016165757254,
+          "swing": -0.9944973325796396,
+          "luck_epa": -0.08224332172408937
+        },
+        {
+          "play_id": 434.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "NYG",
+          "actual": 1.0,
+          "expected": 0.9171369811116094,
+          "swing": -0.9944973325796396,
+          "luck_epa": -0.08240705125400079
+        },
+        {
+          "play_id": 900.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "WAS",
+          "actual": 1.0,
+          "expected": 0.9468941321483015,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.05281364392284096
+        },
+        {
+          "play_id": 1326.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "NYG",
+          "actual": 1.0,
+          "expected": 0.9129806924377607,
+          "swing": -0.9944973325796396,
+          "luck_epa": -0.08654046925357424
+        },
+        {
+          "play_id": 2043.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "NYG",
+          "actual": 1.0,
+          "expected": 0.9130778728270394,
+          "swing": -0.9944973325796396,
+          "luck_epa": -0.08644382361565747
+        },
+        {
+          "play_id": 2675.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "WAS",
+          "actual": 1.0,
+          "expected": 0.946358691486991,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.05334613823226893
+        },
+        {
+          "play_id": 2898.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "NYG",
+          "actual": 1.0,
+          "expected": 0.9169626603396803,
+          "swing": -0.9944973325796396,
+          "luck_epa": -0.08258041279669744
+        },
+        {
+          "play_id": 3280.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "WAS",
+          "actual": 1.0,
+          "expected": 0.9453629737079499,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.054336376907527496
+        },
+        {
+          "play_id": 4304.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "WAS",
+          "actual": 1.0,
+          "expected": 0.9461235646595523,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.05357997123497469
+        }
+      ]
+    },
+    "2016_01_CAR_DEN": {
+      "shipped": {
+        "actual_margin": 1.0,
+        "deserved_margin": 0.7707785825354537,
+        "dtw_home": 0.67709375,
+        "dtw_low": 0.61493125,
+        "dtw_high": 0.7300687499999999,
+        "total_luck_epa": 0.2732243147270651
+      },
+      "replayed": {
+        "actual_margin": 1.0,
+        "deserved_margin": 0.7707785825354537,
+        "dtw_home": 0.67709375,
+        "dtw_low": 0.61493125,
+        "dtw_high": 0.7300687499999999,
+        "total_luck_epa": 0.2732243147270651
+      },
+      "margin_delta": 0.0,
+      "ledger": [
+        {
+          "play_id": 209.0,
+          "component": "fumble",
+          "event_class": "run/live",
+          "charged_team": "DEN",
+          "actual": 0.0,
+          "expected": 0.4611463075931579,
+          "swing": 4.963125188247831,
+          "luck_epa": -2.288726854683084
+        },
+        {
+          "play_id": 1826.0,
+          "component": "field_goal",
+          "event_class": "40-44 yd",
+          "charged_team": "CAR",
+          "actual": 1.0,
+          "expected": 0.8402247814191317,
+          "swing": -4.290041955688844,
+          "luck_epa": -0.6854423911912808
+        },
+        {
+          "play_id": 3425.0,
+          "component": "field_goal",
+          "event_class": "35-39 yd",
+          "charged_team": "CAR",
+          "actual": 1.0,
+          "expected": 0.9329364994326025,
+          "swing": -3.9839345936243955,
+          "luck_epa": -0.26717659988000425
+        },
+        {
+          "play_id": 4026.0,
+          "component": "field_goal",
+          "event_class": "50-54 yd",
+          "charged_team": "CAR",
+          "actual": 0.0,
+          "expected": 0.7453367997124418,
+          "swing": -4.6940542128572345,
+          "luck_epa": 3.4986513446877163
+        },
+        {
+          "play_id": 460.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "CAR",
+          "actual": 1.0,
+          "expected": 0.95938392992672,
+          "swing": -0.9944973325796396,
+          "luck_epa": -0.04039257334774474
+        },
+        {
+          "play_id": 963.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "DEN",
+          "actual": 1.0,
+          "expected": 0.966201084941147,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.03361293087011514
+        },
+        {
+          "play_id": 1494.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "CAR",
+          "actual": 1.0,
+          "expected": 0.957807263381995,
+          "swing": -0.9944973325796396,
+          "luck_epa": -0.0419605640208413
+        },
+        {
+          "play_id": 2753.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "DEN",
+          "actual": 1.0,
+          "expected": 0.9675446645567279,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.0322767445263115
+        },
+        {
+          "play_id": 3152.0,
+          "component": "extra_point",
+          "event_class": "extra point",
+          "charged_team": "DEN",
+          "actual": 1.0,
+          "expected": 0.9674385473896845,
+          "swing": 0.9944973325796396,
+          "luck_epa": 0.03238227776587712
+        }
+      ]
+    }
+  }
+}

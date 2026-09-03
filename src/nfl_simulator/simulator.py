@@ -33,6 +33,7 @@ import numpy as np
 import polars as pl
 
 from nfl_simulator.components import (
+    TOTAL_ORDER,
     ExtraPointBaseline,
     FieldGoalBaseline,
     FumbleBaseline,
@@ -71,6 +72,15 @@ DEFAULT_SEED = 20260817
 
 # Document 03's convention, carried through Phase 2.
 ETI_LOW, ETI_HIGH = 5.5, 94.5
+
+# `TOTAL_ORDER` is document 73 §3's key and now lives in `components`, so every
+# module that *delivers* a frame sorts to the same one. This module is where the
+# row-position reads actually happen — `_resample` hands out one block of
+# posterior indices per event in iteration order, and `_replayed_adjustment`
+# column-indexes its coin uniforms by each event's position in the sequence — so
+# the frames are sorted at their source *and* again at the point of use below.
+# The second sort is a no-op on a frame that arrives correct; it is what keeps
+# this module's guarantee from resting on a promise made three modules away.
 
 
 @dataclass(frozen=True)
@@ -406,7 +416,8 @@ def dropped_pick_events(
         return []
 
     events = []
-    for row in worthy_throw_frame(plays, ftn).iter_rows(named=True):
+    # Sorted before a single draw is taken — document 73 §3, and see `TOTAL_ORDER`.
+    for row in worthy_throw_frame(plays, ftn).sort(TOTAL_ORDER).iter_rows(named=True):
         catch = model.catch_probability(row["defence_season"], row)
         home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
         swing = abs(model.swing_for(row["yardline_100"], row["down"]))
@@ -470,7 +481,8 @@ def receiver_drop_events(
         return []
 
     events = []
-    for row in catchable_target_frame(plays, ftn).iter_rows(named=True):
+    # Sorted before a single draw is taken — document 73 §3, and see `TOTAL_ORDER`.
+    for row in catchable_target_frame(plays, ftn).sort(TOTAL_ORDER).iter_rows(named=True):
         catch = model.catch_probability(row["entity_season"], row)
         home_sign = 1.0 if row["posteam"] == row["home_team"] else -1.0
         swing = abs(model.swing_for_play(row))
@@ -839,6 +851,17 @@ def simulate_game(
         receiver_drop_model = None
     if plays.is_empty():
         raise ValueError("cannot simulate a game with no plays")
+
+    # Document 73 §3 on the other input. The three Strict builders below iterate
+    # frames that are filters of this one, so they inherit its row order — and
+    # each of them reads that order positionally: `fumble_events` and
+    # `extra_point_events` draw a fresh rate per event from the shared stream,
+    # `field_goal_events` takes a `_resample` block per kick, and every event's
+    # position in the sequence then indexes `_replayed_adjustment`'s uniforms.
+    # Sorting once here rather than in each builder keeps a single boundary, and
+    # it also settles the three `[0]` reads below, which otherwise take whatever
+    # row happened to be handed over first.
+    plays = plays.sort(TOTAL_ORDER)
 
     game_id = plays["game_id"][0]
     actual_margin = float(plays["result"][0])

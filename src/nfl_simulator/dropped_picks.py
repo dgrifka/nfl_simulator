@@ -41,6 +41,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+from nfl_simulator.components import TOTAL_ORDER
 from nfl_simulator.ingest import FTN_SEASONS
 
 # Document 47 §3's bins. `yardline_100` is distance to the opponent's goal line,
@@ -270,7 +271,10 @@ def worthy_throw_frame(plays: pl.DataFrame, ftn: pl.DataFrame) -> pl.DataFrame:
             "defence_season"
         ),
         (pl.any_horizontal(imputed) if imputed else pl.lit(False)).alias("covariates_imputed"),
-    )
+        # Document 73 §3. An inner join promises no output order, and this frame
+        # is iterated row by row against a seeded stream — by
+        # `simulator.dropped_pick_events` and by the research scripts directly.
+    ).sort(TOTAL_ORDER)
 
 
 # --------------------------------------------------------------------------

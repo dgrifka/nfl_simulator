@@ -51,6 +51,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+from nfl_simulator.components import TOTAL_ORDER
 from nfl_simulator.ingest import FTN_SEASONS
 
 # Document 47 §3's bins, shared with the dropped-pick table so a reader compares
@@ -343,7 +344,8 @@ def catchable_target_frame(plays: pl.DataFrame, ftn: pl.DataFrame) -> pl.DataFra
             "defence_season"
         ),
         (pl.any_horizontal(imputed) if imputed else pl.lit(False)).alias("covariates_imputed"),
-    )
+        # Document 73 §3, as on `dropped_picks.worthy_throw_frame`.
+    ).sort(TOTAL_ORDER)
 
 
 # --------------------------------------------------------------------------
