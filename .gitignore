@@ -33,3 +33,5 @@ docs/research/hypothesis-queue.md
 docs/research/handoff-*
 docs/research/log-*
 docs/research/results-*
+# Local backups of research/outputs (e.g. outputs.bak-v140) — never tracked
+research/outputs.bak*/
