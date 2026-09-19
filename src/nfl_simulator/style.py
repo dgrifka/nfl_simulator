@@ -54,6 +54,15 @@ PALETTE = {
     # a total drawn in ink is a colour four clubs also wear.
     "anchor": "#5E5B55",
     "row_alt": "#F4EFE6",
+    # Optional hooks a downstream caller may set before drawing. None / False
+    # means "behave exactly as before", so the defaults render as above.
+    "band": None,  # title-strip fill, a full-width figure patch
+    "title_ink": None,  # title + subtitle ink inside a filled band
+    "stamp_ink": None,  # credit ink; STAMP_INK when unset
+    "stamp_disc": False,  # paste the stamp's mark on a white disc
+    "mark_disc": False,  # white disc behind marks drawn by place_mark()
+    "accent": None,  # non-team mark colour
+    "accent_2": None,  # secondary non-team mark colour
 }
 
 # Bar alphas. The home team's fill is the solid one and the away team's the
@@ -413,7 +422,26 @@ def title_axes(
     Titles placed in a plot's own coordinate space collide with whatever is
     tallest in it. A dedicated strip gives them their own space, and
     ``right_reserve`` keeps the corner the watermark is stamped into clear.
+
+    With ``PALETTE["band"]`` set, the strip and its top pad are filled edge to
+    edge by a figure patch behind every axes, which ``bbox_inches="tight"``
+    keeps.
     """
+    band = PALETTE.get("band")
+    if band:
+        from matplotlib.patches import Rectangle
+
+        fig.patches.append(
+            Rectangle(
+                (0, 1 - height_frac - top_pad),
+                1,
+                height_frac + top_pad,
+                transform=fig.transFigure,
+                facecolor=band,
+                edgecolor="none",
+                zorder=-10,
+            )
+        )
     width = max(0.50, 1.0 - 0.04 - right_reserve)
     ax = fig.add_axes([0.04, 1.0 - height_frac - top_pad, width, height_frac])
     ax.set_xlim(0, 1)
@@ -445,6 +473,7 @@ def draw_title_block(
         subtitle_lines = []
     elif isinstance(subtitle_lines, str):
         subtitle_lines = [subtitle_lines]
+    title_ink = PALETTE.get("title_ink")
 
     ax.text(
         0.0,
@@ -452,7 +481,7 @@ def draw_title_block(
         title,
         fontsize=title_size,
         fontweight="bold",
-        color=PALETTE["text"],
+        color=title_ink or PALETTE["text"],
         ha="left",
         va="top",
         fontfamily=heading_font(),
@@ -464,7 +493,8 @@ def draw_title_block(
         ax.plot(
             [0.0, 1.0],
             [cursor_y, cursor_y],
-            color=PALETTE["grid"],
+            color=title_ink or PALETTE["grid"],
+            alpha=0.5 if title_ink else None,
             linewidth=0.8,
             transform=ax.transAxes,
             clip_on=False,
@@ -477,13 +507,45 @@ def draw_title_block(
             cursor_y,
             line,
             fontsize=subtitle_size,
-            color=PALETTE["text_muted"],
+            color=title_ink or PALETTE["text_muted"],
             ha="left",
             va="top",
             transform=ax.transAxes,
         )
         cursor_y -= 0.30
     return ax
+
+
+def place_mark(ax, rgba, xy, height_px, *, disc=None, zorder=5, xycoords="data"):
+    """Place an RGBA mark (a club logo, a headshot) ``height_px`` pixels tall.
+
+    ``OffsetImage`` zoom is points per image pixel, so a bare zoom renders a
+    different size at every dpi; dividing by ``dpi / 72`` makes ``height_px``
+    mean pixels on the saved figure. With ``disc`` (default
+    ``PALETTE["mark_disc"]``) a white circle 1.35 times the mark's height is
+    drawn one zorder below it.
+    """
+    from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+    dpi = ax.figure.dpi
+    if disc if disc is not None else PALETTE.get("mark_disc"):
+        diameter_pt = 1.35 * height_px * 72.0 / dpi
+        ax.scatter(
+            [xy[0]],
+            [xy[1]],
+            s=diameter_pt**2,
+            color="white",
+            edgecolors="none",
+            zorder=zorder - 1,
+            clip_on=False,
+            transform=ax.transAxes if xycoords == "axes fraction" else ax.transData,
+        )
+    zoom = height_px / rgba.shape[0] * 72.0 / dpi
+    box = AnnotationBbox(
+        OffsetImage(rgba, zoom=zoom), xy, frameon=False, pad=0, xycoords=xycoords, zorder=zorder
+    )
+    ax.add_artist(box)
+    return box
 
 
 # Where the stamp lives on the saved pixels, as fractions of the image. The
@@ -655,7 +717,14 @@ def stamp_box(
 def _top_ink(image, height: int) -> np.ndarray:
     """Boolean ink map of the top 30% of the image, mean-channel thresholded."""
     band = int(height * 0.30)
-    return np.asarray(image.convert("RGB"), dtype=float)[:band].mean(axis=2) < _SURFACE_INK
+    pixels = np.asarray(image.convert("RGB"), dtype=float)[:band]
+    ink = pixels.mean(axis=2) < _SURFACE_INK
+    fill = PALETTE.get("band")
+    if fill:
+        # A filled title band is surface the stamp sits on, not ink to anchor
+        # above or a rule to cut.
+        ink &= np.abs(pixels - np.array(_rgb255(fill))).sum(axis=2) > 12
+    return ink
 
 
 def _title_top(ink) -> int | None:
@@ -723,6 +792,42 @@ def _rgb255(colour: str) -> tuple[int, int, int]:
     return tuple(int(round(channel * 255)) for channel in to_rgb(colour))
 
 
+def _disc(mark, pad: float = 0.10):
+    """``mark`` (an RGBA image) centred on an opaque white disc.
+
+    The disc's side is ``max(w, h) * (1 + 2 * pad)``, drawn at 4x and
+    downsampled so its edge is antialiased.
+    """
+    from PIL import Image, ImageDraw
+
+    w, h = mark.size
+    side = int(round(max(w, h) * (1 + 2 * pad)))
+    big = Image.new("L", (side * 4, side * 4), 0)
+    ImageDraw.Draw(big).ellipse((0, 0, side * 4 - 1, side * 4 - 1), fill=255)
+    out = Image.new("RGBA", (side, side), (255, 255, 255, 0))
+    out.putalpha(big.resize((side, side), Image.LANCZOS))
+    out.alpha_composite(mark, ((side - w) // 2, (side - h) // 2))
+    return out
+
+
+def _prepared_mark(logo_path: str | Path):
+    """The stamp's mark at native size: near-white keyed out, then the white
+    disc when ``PALETTE["stamp_disc"]`` is set (after the key, or the key would
+    erase it), then alpha x 0.85 so disc and mark fade together. Read at call
+    time, never cached across a palette change."""
+    from PIL import Image
+
+    pixels = np.array(Image.open(logo_path).convert("RGBA"))
+    near_white = (pixels[:, :, 0] > 240) & (pixels[:, :, 1] > 240) & (pixels[:, :, 2] > 240)
+    pixels[near_white, 3] = 0
+    mark = Image.fromarray(pixels)
+    if PALETTE.get("stamp_disc"):
+        mark = _disc(mark)
+    pixels = np.array(mark)
+    pixels[:, :, 3] = (pixels[:, :, 3].astype(float) * 0.85).astype(np.uint8)
+    return Image.fromarray(pixels)
+
+
 def apply_watermark(
     filepath: str | Path,
     *,
@@ -785,20 +890,19 @@ def apply_watermark(
                 if block_top - 4 <= r <= block_bottom + 4 and 0 <= r < image.size[1]:
                     image.paste(
                         Image.new(
-                            "RGBA", (image.size[0] - (left - 12), 1), (*_rgb255(PALETTE["bg"]), 255)
+                            "RGBA",
+                            (image.size[0] - (left - 12), 1),
+                            (*_rgb255(PALETTE.get("band") or PALETTE["bg"]), 255),
                         ),
                         (left - 12, r),
                     )
 
         if logo_path is not None:
             bbox = draw.textbbox((0, 0), text, font=font)
-            logo_w, logo_h = _logo_geometry(logo_path, _credit_line_height(draw, text, font), width)
-            logo = Image.open(logo_path).convert("RGBA")
-            pixels = np.array(logo)
-            near_white = (pixels[:, :, 0] > 240) & (pixels[:, :, 1] > 240) & (pixels[:, :, 2] > 240)
-            pixels[near_white, 3] = 0
-            pixels[:, :, 3] = (pixels[:, :, 3].astype(float) * 0.85).astype(np.uint8)
-            logo = Image.fromarray(pixels).resize((logo_w, logo_h), Image.LANCZOS)
+            logo = _prepared_mark(logo_path)
+            logo_h = _mark_height(_credit_line_height(draw, text, font), width)
+            logo_w = max(1, round(logo_h * logo.width / logo.height))
+            logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
             # Centred over the credit's text (the maintainer 2026-08-31, the MLB
             # arrangement), sat on the credit's ink rather than on its box:
             # `draw.text` anchors at the ascender line, so the ink starts
@@ -812,7 +916,8 @@ def apply_watermark(
         # credit — one vertical axis through mark, credit and handle (the
         # maintainer 2026-09-03). The block's outer box is still the credit
         # line's width, so the corner's margin is unchanged.
-        draw.text((left, top), text, fill=_rgb255(STAMP_INK), font=font, align="center")
+        ink = PALETTE.get("stamp_ink") or STAMP_INK
+        draw.text((left, top), text, fill=_rgb255(ink), font=font, align="center")
         image.convert("RGB").save(filepath)
         return (left, painted_top, right, bottom)
     except Exception as error:  # pragma: no cover - the figure is already saved
