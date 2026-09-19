@@ -99,12 +99,18 @@ def test_the_stamp_disc_puts_white_behind_the_mark(palette):
     cy, cx = oy + (top + bottom) // 2, ox + (left + right) // 2
     # A 2-px ring just outside the mark's alpha bbox, on the four midlines
     # (the bbox corners fall outside a round disc).
-    ring = np.array([
-        disc[oy + top - 2, cx], disc[oy + top - 1, cx],
-        disc[oy + bottom + 1, cx], disc[oy + bottom + 2, cx],
-        disc[cy, ox + left - 2], disc[cy, ox + left - 1],
-        disc[cy, ox + right + 1], disc[cy, ox + right + 2],
-    ])
+    ring = np.array(
+        [
+            disc[oy + top - 2, cx],
+            disc[oy + top - 1, cx],
+            disc[oy + bottom + 1, cx],
+            disc[oy + bottom + 2, cx],
+            disc[cy, ox + left - 2],
+            disc[cy, ox + left - 1],
+            disc[cy, ox + right + 1],
+            disc[cy, ox + right + 2],
+        ]
+    )
     assert (ring[:, :3] == 255).all(), "ring outside the mark is not white"
     assert (ring[:, 3] > 0).all(), "ring outside the mark is transparent"
 
