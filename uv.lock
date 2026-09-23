@@ -617,7 +617,7 @@ wheels = [
 
 [[package]]
 name = "nfl-simulator"
-version = "1.4.3"
+version = "2.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "arviz" },
