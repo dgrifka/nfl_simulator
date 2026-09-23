@@ -273,7 +273,7 @@ filesystem layout rather than a pipeline stage.
 
 ## The research record
 
-[`docs/research/`](docs/research/) holds seventy numbered documents. They exist
+[`docs/research/`](docs/research/) holds seventy-odd numbered documents. They exist
 because of one rule: **every gate is written down before the model that has to
 pass it is fit**, so a document is a decision record, not a write-up of results
 that already happened. Several of them report failures for that reason.
@@ -282,6 +282,8 @@ A reader who wants the argument rather than the archive should start with these:
 
 | Doc | What's in it |
 |---|---|
+| [75 — The process meter: foundations](docs/research/75-process-meter-foundations.md) | The model of record: its two inputs, the takeaway fold, every constant |
+| [76 — The sampler of record](docs/research/76-sampler-of-record.md) | Why the number is a draw average, and the gate behind the seed, the draw count and the scale |
 | [05 — Neutralization principle](docs/research/05-neutralization-principle.md) | The one rule, the two gates, and the per-component treatment table |
 | [05b — FG model foundations](docs/research/05b-fg-model-foundations.md) | The kicker-hierarchical make model and its pre-registered gates |
 | [09 — Coin-flip candidates](docs/research/09-coinflip-candidates.md) | Every candidate component, and why most were refused |
