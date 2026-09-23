@@ -12,6 +12,10 @@ dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
     "scikit-learn>=1.5",
+    # The process meter reads scipy directly (the Normal CDF behind the percent,
+    # the Student-t fit). It arrives transitively today; naming it here keeps a
+    # thinner dependency tree from breaking the meter.
+    "scipy>=1.13",
     # PyMC 6 / ArviZ 1.x — ArviZ 1.x is the DataTree split (arviz-base, arviz-stats,
     # arviz-plots). Code written against the 0.x `az.plot_*` API will not import.
     "pymc>=6.0",
