@@ -1,7 +1,7 @@
 # nfl_simulator
 
-**Re-adjudicate one NFL game by neutralizing luck, not by replaying plays** — a
-*deserve-to-win* simulator for a single game that already happened.
+**One deserve-to-win number per NFL game, from the plays each team ran** — a
+retrospective verdict on a game that has already finished.
 
 All data comes from the [nflverse](https://github.com/nflverse) project via
 [`nflreadpy`](https://github.com/nflverse/nflreadpy) — full credit below in
@@ -9,274 +9,214 @@ All data comes from the [nflverse](https://github.com/nflverse) project via
 
 ## The idea
 
-Most single-game outcomes mix two things: what a team *did* (skill, and the
-choices that flow from it) and what *happened to them* (which way a loose ball
-bounced, whether a 48-yard field goal drifted inside the upright). This repo
-tries to separate them.
+Given the plays each team ran in one game, how many points does play like that
+usually score, and how often does the home side's play win?
 
-The approach is **luck-neutralized EPA accounting**, not play-splicing replay.
-For each play whose outcome contains a coin flip, we replace the realized
-Expected Points Added with its expectation:
+Each team gets two numbers from its own plays:
 
-- a fumble on the ground becomes the average of the recovered/not-recovered
-  branches rather than the branch that actually happened,
-- a field-goal attempt becomes make-probability-weighted points rather than
-  3 or 0,
-- and so on for the other components the research classifies as luck.
+- **its success rate** — the share of its plays that gained expected points
+  (nflverse's `success` flag: a play whose expected points added is above zero);
+- **its yards per play**.
 
-Re-bootstrapping those coin flips many times gives a distribution over margins —
-a "deserve-to-win" probability for the game that actually got played.
+A takeaway — an interception or a lost fumble — is folded into both, and folded
+differently. It counts as **one more play** for the team that took the ball in
+the success rate, successful when the offense lost expected points on it. Its
+return yards are credited in yards per play, but it is **not** a play in that
+denominator: a team is not charged a play in its yards per play for intercepting
+the ball.
+
+Weights fit on 2016–2023 turn the two into likely points. The difference between
+the two teams' likely points is the deserved margin, and the meter is the share
+of 40,000 draws of that margin that sit above zero. The gap between the actual
+margin and the deserved one is what this project calls luck.
 
 ## One example
 
-Denver at Washington, week 13 of 2025.
+Cincinnati at Cleveland, week 1 of 2025. The scoreboard read **CIN 17–16**; the
+process read **74.9% Cleveland**.
 
-![Deserved margin across re-simulations of DEN at WAS, week 13 of 2025, with the actual margin and the expected margin marked](docs/writeup/figures/05_den_was_2025_wk13_dtw_full.png)
+| | plays | yards | success rate | yards per play | likely points |
+|---|---|---|---|---|---|
+| CLE (home) | 71 | 327 | 0.394 | 4.61 | 16.3 |
+| CIN (away) | 49 | 141 | 0.431 | 3.06 | 11.1 |
 
-**How to read it.** The histogram is the deserved margin across every
-re-simulation of the game's luck events; the deserve-to-win percentage is the
-share of that mass on one side of zero. The actual margin is marked separately —
-where it sits relative to the mass is the whole claim. A distribution straddling
-zero means the game was genuinely close on the merits, however the scoreboard
-read.
+Cincinnati's rate is the higher of the two, and it is higher *because of the
+fold*: the Bengals took the ball away twice, so their rate is 22 successes over
+51 — 49 own plays plus the two takeaways — while their yards per play still
+divides by the 49. Cleveland ran 22 more plays for 186 more yards, and that is
+where the 5.2-point deserved margin comes from.
 
-![The same game's luck ledger, row by row](docs/writeup/figures/06_den_was_2025_wk13_ledger_full.png)
+```python
+from nfl_simulator.process_meter import load_weights, score_games
 
-The ledger is the audit trail: one row per luck event, each showing what
-happened, what was expected, and the difference in points. The rows sum to the
-gap between the actual margin and the deserved one — nothing is neutralized
-without appearing here.
+table = score_games(2025, ["2025_01_CIN_CLE"], load_weights())
+print(table[["home", "away", "home_score", "away_score", "p_home"]])
+```
+
+**How to read it.** `p_home` is the home team's share. A number near 50 means the
+game was genuinely close on the merits, however the scoreboard read; a number far
+from 50 on the side of the team that *lost* means the scoreboard and the process
+disagree, which is what happened here. The per-side inputs are on the same row,
+so a verdict can always be traced back to the four numbers that produced it.
 
 ## Method, in brief
 
-**One rule governs every component.** Luck is the realized outcome minus its
-expectation at the responsible entity's *shrunk* rate. Full and partial
-neutralization are not two policies — they are the same expression read at two
-values of `w = n/(n+κ)`, and `w` is measured from the data, never chosen. A
-component must first pass a mechanism gate: if there is no branch point, no
-statistic can neutralize it. See
-[05 — the neutralization principle](docs/research/05-neutralization-principle.md)
-and [09 — the coin-flip candidates](docs/research/09-coinflip-candidates.md) for
-what was admitted and what was refused.
+Three closed-form draws, and nothing else. Writing K for a team's own successes,
+N for its own plays, T for its takeaways (T_s of them successful for the taker),
+Y for its own yards and R for its credited return yards:
 
-**Then a two-layer bootstrap.** The outer layer draws from the posterior over
-the rates themselves (how often a team recovers its own fumble, how often a
-kicker makes a 45-yarder in these conditions); the inner layer re-flips every
-coin in the game at the drawn rates. The result is a distribution over deserved
-margins, and the deserve-to-win probability is the share of it on one side of
-zero — so the number carries both kinds of uncertainty, not just the coins.
+    weights ~ Normal(the 2016-2023 least-squares fit, its covariance)
+    rate    ~ Beta(K + T_s + 1, N - K + T - T_s + 1)         narrows by N + T
+    yards   ~ Normal((Y + R) / N, y_sd / sqrt(N))            narrows by N
+
+    margin draw = b_rate (rate_home - rate_away) + b_ypp (yards_home - yards_away)
+    p_home      = the mean over 40,000 draws of Phi(margin draw / 5.4528)
+
+`Phi` is the standard Normal curve. Every posterior is closed form, so there is
+no sampler to diagnose. Two things make the number reproducible: each game gets
+its **own generator**, seeded from a hash of its game id, so a game scored alone
+reads exactly what it reads inside a week's batch; and the draw count is 40,000,
+the smallest count that met a pre-registered stability rule.
+
+The scale 5.4528 is not the fit's residual standard deviation. That number was
+fit to realised rates, so it already contains their sampling noise, which the
+draws above add a second time; the scale of record takes it back out. The
+derivation, and the convention behind the last decimal, are in
+[76 — The sampler of record](docs/research/76-sampler-of-record.md).
+
+The weights ship as a committed 1 KB artifact. The library **never refits at
+score time**, and a pin refuses any artifact whose weights or constants are not
+the ones that passed the gate.
 
 ## What the meter includes
 
-Every game gets **one** deserve-to-win verdict. Which luck components feed it
-depends on the season, because the data does:
+Every game gets one verdict, and it reads the same things in every season from
+2016 on — there is no charting dependency and so no coverage that changes with
+the calendar.
 
-| Seasons | In the ledger |
+| What counts | How |
 |---|---|
-| 2016–2025 | fumbles, field goals, extra points |
-| 2022–2025 | the above **plus** dropped interceptions and receiver drops |
+| pass and run plays with EPA | the success rate's numerator and denominator, and the yards |
+| sacks | a pass play with negative yards, like any other |
+| scrambles | a run |
+| interceptions and lost fumbles | one more play for the taking team in the success rate; their return yards credited in its yards per play |
+| garbage time | kept; no win-probability filter |
 
-The two extra components need FTN charting's `is_interception_worthy` and
-`is_catchable_ball` fields, which begin in 2022 — earlier seasons simply have
-no charting to read. Where they are included, a **possession cap** applies:
-two luck events on the same drive are not independent, so a possession books
-at most its largest single swing rather than the sum. Internally — filenames
-and the API's `edition` field — the two coverage levels are labeled `strict`
-and `full`. See [59 — the two editions](docs/research/59-a3-enacted.md) and
-[62 — the possession cap](docs/research/62-possession-cap.md).
+| What does not | Why |
+|---|---|
+| two-point tries | they carry no EPA the model can read |
+| postseason | the fit and the gate are regular-season |
+| everything below | out by decision, see the next section |
 
-Across the 1,139 games of 2022–2025, the deserved winner differs from the
-scoreboard in **168 of them (14.75%)** — about one game in seven
-([68 §6](docs/research/68-simulator-v14.md)). Verdicts ship in three buckets
-rather than one cutoff: **127 clear flips, 97 too close to call** (deserved-win
-probability between 40 and 60%) and **915 where the scoreboard holds** — and
-309 games (27%) are pinned at 0 or 100, decided beyond luck's reach
-([64 §12](docs/research/64-one-simulator-summary.md)).
+## What is deliberately out
 
-## What is deliberately out of scope
+Each of these was considered and left out, and none is queued:
 
-This is not a replay engine and it is not a ranking. Nothing here re-runs a game
+- **Special teams** — field goals, punts, kickoffs and every return other than a
+  takeaway's. Nothing in the model sees them.
+- **Field position** — two teams with the same success rate and the same yards
+  per play get the same likely points wherever their drives started.
+- **Penalties** — a play wiped out by a flag is not in the frame at all.
+- **Charting data** — no dropped-interception or receiver-drop inputs, and no
+  paid feed of any kind. The model reads nflverse play-by-play and nothing else.
+- **Opponent adjustment** — measured, and it turned out to be shrinkage toward
+  the league mean rather than information about the opponent.
+
+This is also not a replay engine and not a ranking. Nothing here re-runs a game
 play by play, models play calling, drive continuation or clock management, or
-claims which of two teams is better — a deserve-to-win figure is a retrospective
-statement about *one game's* luck, and luck-stripping was tested and found not to
-improve forward-looking prediction. Neither does the simulator neutralize
-everything it can see: components that pass the mechanism gate but fall under a
-pre-registered materiality floor are reported and left alone.
+claims which of two teams is better. A deserve-to-win number is a retrospective
+statement about *one game*, and stripping luck was tested and found not to
+improve forward-looking prediction. See
+[75 §2 and §7](docs/research/75-process-meter-foundations.md).
 
 ## Install and quickstart
 
 ```bash
 uv sync --extra dev
-uv run pytest
+uv run pytest -m "not slow"
 uv run ruff check .
 ```
 
-`uv sync` builds the environment from `uv.lock`, so a fresh clone runs the
-exact dependency versions the shipped numbers were validated against —
-Polars included — rather than whatever a fresh resolution would pick.
+`uv sync` builds the environment from `uv.lock`, so a fresh clone runs the exact
+dependency versions the shipped numbers were validated against.
 
-Pull the data, then fit the models a clean checkout can build for itself. Each
-line needs the ones above it:
-
-```bash
-uv run python -m nfl_simulator.ingest         # ten seasons of play-by-play; cached
-uv run python research/13_fg_weather_power.py # the weather term's power analysis
-uv run python research/14_fg_weather_model.py # the weather-aware FG posterior
-uv run python research/26_overtime.py         # the overtime-toss sidebar artifact
-uv run python research/42a_fg_refit_power.py  # the refit's power analysis
-uv run python research/42_fg_refit.py         # the refit posterior
-uv run python research/81_fg_elevation.py     # the elevation study (~9 min, the long one)
-uv run python research/82_fg_v14_refit.py     # the make-probability posterior
-```
-
-The first ingest downloads ten seasons and caches them to a **gitignored**
+Pull the data once — ten seasons of play-by-play, cached to a **gitignored**
 `data/` directory alongside a manifest recording seasons, pull date and library
-version; re-running it is a no-op, and `--force` re-downloads. The fits write to
-the gitignored `research/outputs/` and only need running once per checkout.
-
-### Rendering a game needs the adjudication artifacts
-
-`render_game` reads the v1.4 adjudications, and **a clean clone cannot build
-them.** `research/46_simulator_v13.py` opens with a V-1 replay gate that
-requires the previous version's artifact to reproduce exactly, and a lineage
-rebuilt today does not: `src/` is v1.4-era code, so re-running the v1.1 and v1.2
-scripts produces what today's simulator makes under an old configuration rather
-than the artifacts those versions actually shipped. The gate stops, as it is
-meant to. The adjudication artifacts are therefore synced, not rebuilt — point
-the simulator at a copy:
+version:
 
 ```bash
-export NFL_SIM_ARTIFACT_DIR=/path/to/research/outputs
+uv run python -m nfl_simulator.ingest
 ```
+
+Then score a game:
 
 ```python
-from nfl_simulator.render import render_game
+from nfl_simulator.process_meter import load_weights, build_frames, score_games
 
-render_game("2025_13_DEN_WAS")  # four PNGs into the artifact directory
+weights = load_weights()  # the committed artifact, pin-checked
+frames = build_frames(2025)  # the frame and its posterior, once
+scored = score_games(2025, ["2025_01_CIN_CLE"], weights, frames=frames)
+
+round(float(scored.p_home.iloc[0]), 4)  # 0.7488
 ```
 
-Two things to know about that copy. It has to have been built from **the same
-`data/` snapshot** you are running against — the round-trip guard is exact, and
-an `nflreadpy` pull that returns the FTN charting rows in a different order
-(same rows, same values, different order) is enough to trip it. And
-`data/logos/` is not part of `ingest`; the club marks are fetched separately.
+Building the frames reads every cached season and is the expensive part, so score
+a whole week in one call, or build once and pass `frames=` to each call. A scored
+row carries the scoreboard, both sides' likely points, the model's two inputs per
+side and the five numbers the draws read.
 
-The artifacts themselves are not distributed. This repository is the research
-record — the documents publish the method and the scripts are its evidence,
-and the quickstart above rebuilds the current make-probability posterior from
-scratch. The full adjudication artifacts belong to the maintainer's product
-pipeline; `NFL_SIM_ARTIFACT_DIR` exists for pointing a checkout at your own
-copy, not because one is shipped.
+`NFL_SIM_DATA_DIR` points the loaders at a cache outside the checkout; absent, it
+is the repo's own `data/`.
 
-### Adjudicating a game that has just gone final
+**Re-fitting the weights** is a deliberate act, not part of a run:
 
-`render_game` reads a game's numbers from the shipped 2016–2025 artifacts, so it
-cannot be pointed at a game that has no row in them. `adjudicate_live_game` is
-the other door: it pulls that game's play-by-play, adjudicates it with the same
-fitted pieces, and writes the same four PNGs — without consulting the shipped
-summary for the game it is deciding.
-
-```python
-from pathlib import Path
-
-from nfl_simulator import adjudicate_live_game
-
-result = adjudicate_live_game("2026_01_DAL_PHI", out_dir=Path("out"))
-
-result.figures  # list[Path] — the four PNGs, in render.SUFFIXES order
-result.edition  # "strict" or "full"; "strict" when FTN charting is missing
-result.edition_note  # why, in one sentence, when the edition was reduced
-result.dtw_home  # deserve-to-win share for the home team
-result.dtw_low  # the 89% interval on it
-result.dtw_high
-result.deserved_margin  # home perspective, in points
-result.actual_margin
-result.home_team  # season-correct club codes
-result.away_team
-result.home_points  # the scoreboard, or None when the game is in no schedule
-result.away_points
-result.headline  # the biggest single luck event in words, or None
-result.game_id
+```bash
+uv run python -m nfl_simulator.process_meter.fit --data-dir data --out /tmp/w.json
 ```
 
-It needs two directories, and an installed package that has neither says which
-one is missing:
-
-| Variable | What goes in it | Default |
-|---|---|---|
-| `NFL_SIM_DATA_DIR` | the cached nflverse pulls — `pbp/`, `ftn/`, schedules, logos, manifest | the repo's `data/` |
-| `NFL_SIM_ARTIFACT_DIR` | the fitted artifacts — posteriors, their summaries, the shipped parquets | the repo's `research/outputs/` |
-
-The 2016–2025 play-by-play cache has to be present either way: the fumble,
-field-goal and extra-point baselines are fit on that whole window, so a 2026
-game still needs it. One game takes about 2.4 s once the baselines are fit
-(~1.3 s, cached for the life of the process), and the call is deterministic —
-same seed, same draw counts, same pixels.
+It re-measures the weights, the training row count, the residual scale and
+`sigma_once`, prints both readings of the scale, and **refuses to write** if any
+pinned number has moved.
 
 ## The pipeline
 
 ```mermaid
 flowchart TD
-  A["nflverse via nflreadpy<br/>play-by-play 2016-2025<br/>FTN charting 2022-2025, schedules"] --> B["ingest.py<br/>parquet cache + manifest.json"]
+  A["nflverse via nflreadpy<br/>play-by-play 2016-2025, schedules"] --> B["ingest.py<br/>parquet cache + manifest.json"]
   B --> C["validate.py<br/>ingest-time checks, pure functions"]
-
-  C --> D["components.py<br/>home-perspective EPA split"]
-  D --> E["Luck-event classification<br/>doc 05 gates, doc 09 candidate table"]
-
-  C --> F["rates.py<br/>team-season successes and opportunities"]
-  F --> G["research/03_bayesian_rates.py<br/>beta-binomial shrinkage, PyMC"]
-  G --> H["Fumble retention baseline"]
-
-  C --> I["research/82_fg_v14_refit.py<br/>make-probability fit, PyMC"]
-  I --> J["fg_model.py<br/>read side: distance, roof, wind,<br/>temperature, kicker, elevation"]
-  K["data/stadium_elevation.py<br/>stadium_id to feet"] --> J
-
-  C --> L["dropped_picks.py<br/>defence catch probability<br/>on interceptable throws"]
-  C --> M["receiver_drops.py<br/>offence catch probability<br/>on catchable balls"]
-
-  E --> N["simulator.py neutralization<br/>fumble_events, field_goal_events,<br/>extra_point_events, dropped_pick_events,<br/>receiver_drop_events"]
-  H --> N
-  J --> N
-  L --> N
-  M --> N
-
-  N --> O{"edition"}
-  O -->|strict| P["_bootstrap, drive_of=None"]
-  O -->|full| Q["_possession_cap_handles<br/>doc 61"]
-  Q --> R["_bootstrap, cap armed"]
-
-  P --> S["_replayed_adjustment<br/>200 posterior draws x 800 coin replays"]
-  R --> S
-  S --> T["_apply_possession_cap<br/>after the replay, no draws of its own"]
-  T --> U["ledger.py<br/>one row per branch: actual, expected, swing<br/>plus cap rows"]
-  S --> V["margins and DTW per posterior draw"]
-  U --> V
-  V --> W["SimulationResult<br/>dtw_home, dtw_interval, deserved_margin"]
-  W --> X["plots.py + style.py + teams.py<br/>verdict bucket, DTW distribution, luck ledger"]
-  X --> Y["render.render_game<br/>one game in, four PNGs out"]
+  C --> D["process_meter/plays.py<br/>one filter: pass or run, EPA present,<br/>regular season; the takeaway credit"]
+  D --> E["process_meter/features.py<br/>one row per team per game:<br/>(K + T_s) / (N + T) and (Y + R) / N"]
+  E --> F["process_meter/posterior.py<br/>the weights posterior, the Beta counts,<br/>the yards mean and its own sample size"]
+  G["process_meter/weights.json<br/>the committed fit, pin-checked"] --> H
+  F --> H["process_meter/record.py<br/>one generator per game from sha256(game_id),<br/>40,000 margin draws"]
+  H --> I["percent_record<br/>mean of Phi(margin / 5.4528)"]
+  I --> J["process_meter/score.py<br/>one row per game: scoreboard, verdict, inputs"]
+  K["process_meter/readiness.py<br/>the 25-play floor: is there enough pbp yet?"] --> J
+  L["process_meter/fit.py<br/>rebuild weights.json, or stop"] --> G
 ```
 
-Two modules are deliberately absent from it: `placement.py`, a reported
-diagnostic that never enters an adjudication, and `paths.py`, which is
+`style.py` and `teams.py` are the figure layer — palette, title blocks, club
+marks and colour pairing — and no scoring path imports them. `paths.py` is
 filesystem layout rather than a pipeline stage.
 
 ## Layout
 
 | Path | What's in it |
 |---|---|
-| `src/nfl_simulator/` | Importable package: ingest, validation, EPA decomposition, FG model, ledger, simulator, product layer |
-| `research/` | Exploratory and build scripts — EDA, skill-vs-luck tests, Bayesian models, power calculations, validation |
+| `src/nfl_simulator/process_meter/` | The model: loaders, features, posteriors, draws, weights, scorer |
+| `src/nfl_simulator/` | Ingest, validation, filesystem layout, and the figure layer (`style`, `teams`) |
+| `research/` | Exploratory and build scripts from the previous model's research |
 | `docs/research/` | The numbered record: pre-registrations, results, ship notes |
 | `docs/writeup/figures/` | Rendered figures and their caption sheet |
-| `tests/` | pytest suite (network-free by default) |
+| `tests/` | pytest suite; everything but `-m slow` is network- and cache-free |
 | `data/` | Gitignored parquet cache + manifest |
 
 ## The research record
 
-[`docs/research/`](docs/research/) holds seventy-odd numbered documents. They exist
-because of one rule: **every gate is written down before the model that has to
-pass it is fit**, so a document is a decision record, not a write-up of results
-that already happened. Several of them report failures for that reason.
+[`docs/research/`](docs/research/) holds seventy-odd numbered documents. They
+exist because of one rule: **every gate is written down before the model that has
+to pass it is fit**, so a document is a decision record, not a write-up of
+results that already happened. Several of them report failures for that reason.
 
 A reader who wants the argument rather than the archive should start with these:
 
@@ -289,7 +229,18 @@ A reader who wants the argument rather than the archive should start with these:
 | [09 — Coin-flip candidates](docs/research/09-coinflip-candidates.md) | Every candidate component, and why most were refused |
 | [33 — Magnitude audit](docs/research/33-magnitude-audit.md) | Does a small luck share ever actually change a verdict? |
 | [59 — The two editions](docs/research/59-a3-enacted.md) | the second coverage level, enacted |
-| [68 — Simulator v1.4](docs/research/68-simulator-v14.md) | The current release, its gates, and what moved |
+| [68 — Simulator v1.4](docs/research/68-simulator-v14.md) | The previous model's last release, its gates, and what moved |
+
+Documents 00–74 are the previous model's record and are left exactly as they were
+written. They are a decision record, and a decision record that gets edited after
+the fact is worth nothing.
+
+## Reading a post
+
+The account that publishes these verdicts shows a **whole percent**, and calls a
+team that won the game with a share of 47 or less a *luck merchant*. That is the
+poster's display rule and it lives with the poster: there is no such line in this
+library, and nothing here rounds or flags anything.
 
 ## The process rules
 
@@ -308,38 +259,66 @@ avoided by it:
 
 ## Status
 
-**Shipped: simulator v1.4** (2026-08-31) — stadium elevation joins the
-make-probability model, worth +4.09 percentage points of make probability on a 45-yard
-kick in Denver. The ship record, with every gate and what moved, is
-[68 — Simulator v1.4](docs/research/68-simulator-v14.md).
+**Shipped: process meter v2.1.0** (2026-09-23) — the model described above, with
+its weights, its fit and its stage-0 checks. The previous model is retired; see
+below.
 
-The measurement program is closed: every candidate component is shipped, refused
-with the arithmetic attached, or marked unmeasurable. The write-up of the whole
-method for a general reader is
+The version number tracks the model label rather than the package's own history.
+Version 2.0 was a two-week interim definition that counted a takeaway as a play
+in *both* inputs; it was never released as a library, so `v2.0.0` was never cut.
+
+The write-up of the previous model's method for a general reader is
 [Who Deserved to Win? Pricing Luck in NFL Games](https://medium.com/@dmgrifka_64770/who-deserved-to-win-pricing-luck-in-nfl-games-02d5ae4ced91)
-— every figure in it lives in this repository.
+— every figure in it lives in this repository, and it describes v1, not the
+model above.
+
+## The previous model (v1, 2026-08-31 to 2026-09-16)
+
+Version 1 answered the same question a different way. Instead of asking what a
+team's play usually scores, it re-adjudicated the game event by event: for each
+play whose outcome contained a coin flip — a fumble on the ground, a field-goal
+attempt, an extra point, a dropped interception, a receiver drop — it replaced
+the realized Expected Points Added with its expectation, then bootstrapped those
+coin flips into a distribution over margins.
+
+It is retired, and **its code is not in this repository any more**. The last
+release is tagged:
+
+- **the code** — [v1.4.3](https://github.com/dgrifka/nfl_simulator/tree/v1.4.3)
+- **the record** — documents [00–74](docs/research/) here, unchanged
+- **the wiki** — the pages grouped under *v1 (retired 2026-09-17)* in the
+  [Wiki](../../wiki)
+- **the research scripts** — `research/` here, which run at tag v1.4.3
+
+**v1 read FTN charting.** Its dropped-interception and receiver-drop components
+needed FTN Data's `is_interception_worthy` and `is_catchable_ball` fields, which
+begin in 2022, so its coverage depended on the season: fumbles, field goals and
+extra points from 2016, plus the two charting components from 2022. The process
+meter reads no charting at all, which is why its coverage does not.
+
+**Credit for that charting.** The dropped-pass and interceptable-throw fields
+behind v1's dropped-pick and receiver-drop components are
+[FTN Data](https://ftndata.com)'s, delivered through nflverse. Figures whose
+verdict read them are stamped `Data: nflverse & FTN` for that reason — the credit
+names the sources that verdict actually used.
 
 ## Wiki
 
-Explanatory pages — one rule, one component, one figure at a time, rewritten for
-a reader who wants the explanation rather than the dated record — live in this
-repo's [Wiki](../../wiki). The numbered documents stay here as the record.
+Explanatory pages — one idea at a time, rewritten for a reader who wants the
+explanation rather than the dated record — live in this repo's
+[Wiki](../../wiki). The numbered documents stay here as the record.
 
 ## Data and credit
 
 Everything comes free via [`nflreadpy`](https://github.com/nflverse/nflreadpy):
-play-by-play 2016–2025 and FTN charting 2022–2025.
+play-by-play 2016–2025 and schedules.
 
 **Credit.** The play-by-play, schedules, team colours and club marks all come
 from the [nflverse](https://github.com/nflverse) project — `nflreadpy` on top of
 the `nflfastR` play-by-play data — whose licence asks that its data be credited
 wherever it is used. Every figure this repo renders carries `Data: nflverse` in
-its watermark for that reason. The dropped-pass and interceptable-throw charting
-behind the dropped-pick and receiver-drop components is [FTN Data](https://ftndata.com)'s,
-delivered through nflverse, so a figure whose verdict reads it is stamped
-`Data: nflverse & FTN` instead — the credit names the sources that verdict
-actually used. Club logos are the clubs' own marks, cached under the gitignored
-`data/` directory for rendering and never redistributed here.
+its watermark for that reason. Club logos are the clubs' own marks, cached under
+the gitignored `data/` directory for rendering and never redistributed here.
 
 ## Licence
 
