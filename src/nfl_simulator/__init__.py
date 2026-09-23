@@ -1,25 +1,15 @@
-"""NFL deserve-to-win simulator.
+"""NFL deserve-to-win meter.
 
-The product has two front doors:
+One number per game, from the plays each team ran:
 
-* :func:`nfl_simulator.render.render_game` — a game the research record covers,
-  drawn from the committed artifacts.
-* :func:`nfl_simulator.live.adjudicate_live_game` — a game that has just gone
-  final, adjudicated from its own play-by-play. It is re-exported here because
-  it is the entry point a caller outside this repo uses.
+    >>> from nfl_simulator.process_meter import load_weights, score_games
 
-The second is exposed lazily: importing it pulls in matplotlib and the whole
-figure stack, and `from nfl_simulator import paths` should not pay for that.
+:mod:`nfl_simulator.process_meter` is the model. Nothing in it draws, so
+scoring a season never pulls a plotting stack in behind it; :mod:`.style` and
+:mod:`.teams` are the figure layer and are imported only by something that
+renders.
 """
 
-__version__ = "1.4.0"
+__version__ = "2.1.0"
 
-__all__ = ["adjudicate_live_game"]
-
-
-def __getattr__(name: str):
-    if name == "adjudicate_live_game":
-        from nfl_simulator.live import adjudicate_live_game
-
-        return adjudicate_live_game
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__all__ = ["__version__"]

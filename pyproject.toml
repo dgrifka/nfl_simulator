@@ -12,6 +12,10 @@ dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
     "scikit-learn>=1.5",
+    # The process meter reads scipy directly (the Normal CDF behind the percent,
+    # the Student-t fit). It arrives transitively today; naming it here keeps a
+    # thinner dependency tree from breaking the meter.
+    "scipy>=1.13",
     # PyMC 6 / ArviZ 1.x — ArviZ 1.x is the DataTree split (arviz-base, arviz-stats,
     # arviz-plots). Code written against the 0.x `az.plot_*` API will not import.
     "pymc>=6.0",
@@ -53,6 +57,15 @@ extend-exclude = ["data", "docs"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "W"]
 ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+# Stated rather than inferred. Ruff decides first-party by resolving a module to
+# a file under `src/`, and the research scripts import modules that exist only at
+# tag v1.4.3 (`nfl_simulator.components` and the rest of the retired v1 model).
+# Left to inference, those imports become third-party the moment the files go and
+# every one of those scripts fails I001 — while the scripts themselves must stay
+# byte-identical to v1.4.3, since docs 00-74 cite them as their evidence.
+known-first-party = ["nfl_simulator"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
