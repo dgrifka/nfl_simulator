@@ -1,6 +1,6 @@
 [project]
 name = "nfl-simulator"
-version = "2.1.1"
+version = "2.1.2"
 description = "One deserve-to-win number per NFL game, from the plays each team ran."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
