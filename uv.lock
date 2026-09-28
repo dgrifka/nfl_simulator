@@ -617,23 +617,16 @@ wheels = [
 
 [[package]]
 name = "nfl-simulator"
-version = "2.1.0"
+version = "2.1.1"
 source = { editable = "." }
 dependencies = [
-    { name = "arviz" },
-    { name = "h5netcdf" },
-    { name = "h5py" },
     { name = "matplotlib" },
     { name = "nflreadpy" },
     { name = "numpy" },
-    { name = "nutpie" },
     { name = "pandas" },
     { name = "pillow" },
-    { name = "plotly" },
     { name = "polars" },
     { name = "pyarrow" },
-    { name = "pymc" },
-    { name = "scikit-learn" },
     { name = "scipy" },
 ]
 
@@ -644,30 +637,39 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
+research = [
+    { name = "arviz" },
+    { name = "h5netcdf" },
+    { name = "h5py" },
+    { name = "nutpie" },
+    { name = "plotly" },
+    { name = "pymc" },
+    { name = "scikit-learn" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "arviz", specifier = ">=1.1" },
-    { name = "h5netcdf", specifier = ">=1.3" },
-    { name = "h5py", specifier = ">=3.11" },
+    { name = "arviz", marker = "extra == 'research'", specifier = ">=1.1" },
+    { name = "h5netcdf", marker = "extra == 'research'", specifier = ">=1.3" },
+    { name = "h5py", marker = "extra == 'research'", specifier = ">=3.11" },
     { name = "matplotlib", specifier = ">=3.9" },
     { name = "nflreadpy", specifier = ">=0.1.5" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "nutpie", specifier = ">=0.13" },
+    { name = "nutpie", marker = "extra == 'research'", specifier = ">=0.13" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pillow", specifier = ">=10" },
-    { name = "plotly", specifier = ">=5.22" },
+    { name = "plotly", marker = "extra == 'research'", specifier = ">=5.22" },
     { name = "polars", specifier = ">=1.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7" },
     { name = "pyarrow", specifier = ">=16.0" },
-    { name = "pymc", specifier = ">=6.0" },
+    { name = "pymc", marker = "extra == 'research'", specifier = ">=6.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "scikit-learn", specifier = ">=1.5" },
+    { name = "scikit-learn", marker = "extra == 'research'", specifier = ">=1.5" },
     { name = "scipy", specifier = ">=1.13" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["research", "dev"]
 
 [[package]]
 name = "nflreadpy"
