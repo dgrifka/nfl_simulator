@@ -77,5 +77,5 @@ known-first-party = ["nfl_simulator"]
 testpaths = ["tests"]
 addopts = "-q"
 markers = [
-    "slow: tests that hit the network or fit a model (deselect with '-m \"not slow\"')",
+    "slow: tests that read the local play-by-play cache (deselect with '-m \"not slow\"')",
 ]
