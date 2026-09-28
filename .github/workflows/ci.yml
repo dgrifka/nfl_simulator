@@ -60,6 +60,46 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
+  wheel:
+    # Every other job tests an editable install. The private orchestration repo
+    # installs this package by git tag, non-editable, so what it actually gets
+    # is the wheel -- including the package data (the committed weights, the
+    # logo) that an editable install reads straight from the source tree and so
+    # never proves is packaged at all.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        # An exact tag, not a major: setup-uv publishes floating `v1`-`v7` only,
+        # so `@v10` is unresolvable and the job never starts.
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Build the wheel
+        run: uv build --wheel
+
+      - name: Load the committed weights from the installed package
+        # From the runner's temp directory, so a stray import cannot resolve to
+        # the source tree and pass for the wrong reason.
+        working-directory: ${{ runner.temp }}
+        run: |
+          uv run --isolated --no-project --python 3.12 \
+            --with "$GITHUB_WORKSPACE"/dist/*.whl python - <<'PY'
+          import importlib.resources as res
+
+          import nfl_simulator
+          from nfl_simulator.process_meter import load_weights
+
+          assert "site-packages" in nfl_simulator.__file__, nfl_simulator.__file__
+          assert load_weights() is not None
+          logo = res.files("nfl_simulator") / "assets" / "logo.png"
+          assert logo.is_file(), f"missing asset: {logo}"
+          print("ok:", nfl_simulator.__file__)
+          PY
+
   safety:
     # Public-safety gate. Mirrors .pre-commit-config.yaml so a clone that never
     # ran `pre-commit install` is still caught here.
