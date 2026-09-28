@@ -1,15 +1,19 @@
-"""The three files the release rule bumps by hand must carry one version.
+"""Everything that states this package's version must state the same one.
 
-`pyproject.toml` is the package version; `uv.lock` records it again in the
-project's own entry, and `CITATION.cff` is what a citation of this software
-resolves to. The rule bumps all three, so nothing but hand-editing keeps them
-in step. This test is that check.
+`pyproject.toml` is the version. `uv.lock` records it again in the project's
+own entry, `CITATION.cff` is what a citation of this software resolves to, and
+`nfl_simulator.__version__` is what an installed consumer reads. The release
+rule bumps the first three by hand, so nothing but care keeps them in step.
 
-What the two tests are worth is not the same:
+What the three tests are worth is not the same:
 
 - `CITATION.cff` is the one that earns its place. Nothing rewrites it, so this
   is all that stands between a bumped release and a citation still pointing at
   the previous version.
+- `__version__` no longer holds a hand-written string -- it is derived from the
+  installed distribution's metadata -- so this test is not guarding a typo. It
+  guards the derivation: that the package is importable as installed and still
+  answers to the distribution name the metadata is filed under.
 - `uv.lock` is belt and braces. CI's `uv sync --locked` already refuses a stale
   lockfile a step before pytest runs, and `uv run` silently repairs the
   project's own version line before pytest starts at all -- so under every
@@ -17,8 +21,9 @@ What the two tests are worth is not the same:
   where pytest is invoked without uv (`.venv/bin/pytest`). It is a backstop for
   that case, not the lockfile's guard.
 
-Both tests skip when their file is absent. That is defensive rather than
-reachable: `tests/` is not packaged in the wheel, and the sdist carries both.
+The lockfile and citation tests skip when their file is absent. That is
+defensive rather than reachable: `tests/` is not packaged in the wheel, and the
+sdist carries both files.
 """
 
 import re
@@ -26,6 +31,8 @@ import tomllib
 from pathlib import Path
 
 import pytest
+
+import nfl_simulator
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -63,3 +70,7 @@ def test_the_citation_carries_the_package_version():
     if not CITATION.exists():
         pytest.skip("CITATION.cff ships with the source tree, not the installed package")
     assert citation_version() == pyproject_version()
+
+
+def test_the_package_reports_the_package_version():
+    assert nfl_simulator.__version__ == pyproject_version()

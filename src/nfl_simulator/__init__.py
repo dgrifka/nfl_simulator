@@ -10,6 +10,10 @@ scoring a season never pulls a plotting stack in behind it; :mod:`.style` and
 renders.
 """
 
-__version__ = "2.1.0"
+from importlib.metadata import version
+
+#: Read from the installed distribution's metadata rather than repeated here,
+#: so the package version has exactly one source: `pyproject.toml`.
+__version__ = version("nfl-simulator")
 
 __all__ = ["__version__"]

@@ -85,9 +85,14 @@ jobs:
         # From the runner's temp directory, so a stray import cannot resolve to
         # the source tree and pass for the wrong reason.
         working-directory: ${{ runner.temp }}
+        # `--no-cache` because uv's archive cache keys a local wheel on its path,
+        # not its contents: rebuild the same version with changed source and uv
+        # serves the previous unpack. `enable-cache` above restores that cache
+        # across runs, so without this the job can smoke-test stale code.
         run: |
-          uv run --isolated --no-project --python 3.12 \
+          uv run --isolated --no-project --no-cache --python 3.12 \
             --with "$GITHUB_WORKSPACE"/dist/*.whl python - <<'PY'
+          import importlib.metadata as md
           import importlib.resources as res
 
           import nfl_simulator
@@ -97,7 +102,11 @@ jobs:
           assert load_weights() is not None
           logo = res.files("nfl_simulator") / "assets" / "logo.png"
           assert logo.is_file(), f"missing asset: {logo}"
-          print("ok:", nfl_simulator.__file__)
+          installed = md.version("nfl-simulator")
+          assert nfl_simulator.__version__ == installed, (
+              f"{nfl_simulator.__version__} != {installed}"
+          )
+          print("ok:", installed, nfl_simulator.__file__)
           PY
 
   safety:
