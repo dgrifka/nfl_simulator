@@ -19,24 +19,95 @@ jobs:
         python-version: ["3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        # An exact tag, not a major: setup-uv publishes floating `v1`-`v7` only,
+        # so `@v10` is unresolvable and the job never starts.
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      # `--locked` so a stale uv.lock fails the job instead of silently
+      # re-resolving to versions no one committed.
+      - name: Install project from lockfile
+        run: uv sync --locked --extra dev --python ${{ matrix.python-version }}
+
+      - name: Test
+        # The `slow` tests read the local play-by-play cache, which CI does not
+        # have; the cache is deliberately behind upstream, so it stays local.
+        run: uv run pytest -q -m "not slow"
+
+  lint:
+    # Its own job, so a lint failure no longer stops the tests from running.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        # An exact tag, not a major: setup-uv publishes floating `v1`-`v7` only,
+        # so `@v10` is unresolvable and the job never starts.
+        uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
 
       - name: Install project from lockfile
-        run: uv sync --extra dev --python ${{ matrix.python-version }}
+        run: uv sync --locked --extra dev --python 3.12
 
       - name: Lint
         run: |
           uv run ruff check .
           uv run ruff format --check .
 
-      - name: Test
-        # Network-dependent tests are marked `slow` and skipped in CI.
-        run: uv run pytest -q -m "not slow"
+  wheel:
+    # Every other job tests an editable install. The private orchestration repo
+    # installs this package by git tag, non-editable, so what it actually gets
+    # is the wheel -- including the package data (the committed weights, the
+    # logo) that an editable install reads straight from the source tree and so
+    # never proves is packaged at all.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        # An exact tag, not a major: setup-uv publishes floating `v1`-`v7` only,
+        # so `@v10` is unresolvable and the job never starts.
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Build the wheel
+        run: uv build --wheel
+
+      - name: Load the committed weights from the installed package
+        # From the runner's temp directory, so a stray import cannot resolve to
+        # the source tree and pass for the wrong reason.
+        working-directory: ${{ runner.temp }}
+        # `--no-cache` because uv's archive cache keys a local wheel on its path,
+        # not its contents: rebuild the same version with changed source and uv
+        # serves the previous unpack. `enable-cache` above restores that cache
+        # across runs, so without this the job can smoke-test stale code.
+        run: |
+          uv run --isolated --no-project --no-cache --python 3.12 \
+            --with "$GITHUB_WORKSPACE"/dist/*.whl python - <<'PY'
+          import importlib.metadata as md
+          import importlib.resources as res
+
+          import nfl_simulator
+          from nfl_simulator.process_meter import load_weights
+
+          assert "site-packages" in nfl_simulator.__file__, nfl_simulator.__file__
+          assert load_weights() is not None
+          logo = res.files("nfl_simulator") / "assets" / "logo.png"
+          assert logo.is_file(), f"missing asset: {logo}"
+          installed = md.version("nfl-simulator")
+          assert nfl_simulator.__version__ == installed, (
+              f"{nfl_simulator.__version__} != {installed}"
+          )
+          print("ok:", installed, nfl_simulator.__file__)
+          PY
 
   safety:
     # Public-safety gate. Mirrors .pre-commit-config.yaml so a clone that never
@@ -46,15 +117,18 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # gitleaks scans history, not just the checked-out tree.
           fetch-depth: 0
 
       - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Must equal `rev` for the gitleaks hook in .pre-commit-config.yaml,
+          # minus the `v`, so the local gate and CI scan with one scanner.
+          GITLEAKS_VERSION: 8.30.1
 
       # `if: always()` so a gitleaks finding does not hide a public-safety one;
       # both reports are wanted in the same run.

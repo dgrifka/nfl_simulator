@@ -1,6 +1,6 @@
 [project]
 name = "nfl-simulator"
-version = "2.1.1"
+version = "2.1.2"
 description = "One deserve-to-win number per NFL game, from the plays each team ran."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -77,5 +77,5 @@ known-first-party = ["nfl_simulator"]
 testpaths = ["tests"]
 addopts = "-q"
 markers = [
-    "slow: tests that hit the network or fit a model (deselect with '-m \"not slow\"')",
+    "slow: tests that read the local play-by-play cache (deselect with '-m \"not slow\"')",
 ]
