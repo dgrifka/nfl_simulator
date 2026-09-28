@@ -140,6 +140,10 @@ uv run ruff check .
 `uv sync` builds the environment from `uv.lock`, so a fresh clone runs the exact
 dependency versions the shipped numbers were validated against.
 
+Scoring needs no sampler. The packages only the previous model's research
+scripts import — PyMC, ArviZ, nutpie, scikit-learn, plotly and the NetCDF
+backends — sit in a separate `research` extra (`uv sync --extra research`).
+
 Pull the data once — ten seasons of play-by-play, cached to a **gitignored**
 `data/` directory alongside a manifest recording seasons, pull date and library
 version:
