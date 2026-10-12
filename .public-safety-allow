@@ -9,12 +9,6 @@
 # fails, so a doc edit that moves one of these lines is caught rather than
 # silently widening the list.
 
-# Finding register F-5: the token and key markers the scrub searched for.
-# Finding register F-6: the address marker, and the author's public byline.
-
-# This round's own handoff, section 5 Part 1 step 2: the built-in pattern list.
-# The same handoff's Part 1 verification 2: the canary command.
-
-# The scrub handoff's section 3.3: the patterns that round was told to search.
-
-# The scrub log's findings pass: the grep command it ran, quoted verbatim.
+# No entries today. Every file that once quoted the gate's patterns (the scrub
+# record and its handoffs and logs) is local-only, so nothing tracked needs an
+# exemption. Add an entry only when a tracked document has to quote a pattern.

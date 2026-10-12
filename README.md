@@ -152,6 +152,10 @@ version:
 uv run python -m nfl_simulator.ingest
 ```
 
+That window is fixed at 2016–2025 because every shipped artifact was fit on it.
+The season in progress is pulled separately by `ingest_live_season`, which
+always re-downloads, so a game that went final tonight can be scored.
+
 Then score a game:
 
 ```python
@@ -209,11 +213,16 @@ filesystem layout rather than a pipeline stage.
 |---|---|
 | `src/nfl_simulator/process_meter/` | The model: loaders, features, posteriors, draws, weights, scorer |
 | `src/nfl_simulator/` | Ingest, validation, filesystem layout, and the figure layer (`style`, `teams`) |
-| `research/` | Exploratory and build scripts from the previous model's research |
+| `src/nfl_simulator/data/` | Small, hand-entered reference tables committed with the source |
+| `src/nfl_simulator/assets/` | The project mark stamped on rendered figures |
+| `research/` | Exploratory and build scripts from the previous model's research; they run at tag v1.4.3 (see its README) |
 | `docs/research/` | The numbered record: pre-registrations, results, ship notes |
 | `docs/writeup/figures/` | Rendered figures and their caption sheet |
+| `docs/pre-publication-checklist.md` | The manual review that gated making the repo public, kept as the release-time re-read |
 | `tests/` | pytest suite; everything but `-m slow` is network- and cache-free |
-| `data/` | Gitignored parquet cache + manifest |
+| `scripts/` | The public-safety gate that the pre-commit hook and CI both run |
+| `.github/workflows/` | CI: tests on two Python versions, lint, a wheel smoke test, and the safety gate |
+| `data/` | Gitignored parquet cache + manifest; `research/outputs/` is likewise gitignored |
 
 ## The research record
 
@@ -263,9 +272,11 @@ avoided by it:
 
 ## Status
 
-**Shipped: process meter v2.1.0** (2026-09-23) — the model described above, with
-its weights, its fit and its stage-0 checks. The previous model is retired; see
-below.
+**Shipped: process meter v2.1** (2026-09-23) — the model described above, with
+its weights, its fit and its stage-0 checks. The current release is **v2.1.2**
+(2026-09-28); the v2.1.x patches changed packaging and checks, never a verdict,
+and the [wiki's release history](../../wiki/Release-history) lists each one.
+The previous model is retired; see below.
 
 The version number tracks the model label rather than the package's own history.
 Version 2.0 was a two-week interim definition that counted a takeaway as a play

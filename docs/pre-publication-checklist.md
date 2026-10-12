@@ -1,5 +1,10 @@
 # Pre-publication checklist
 
+*Status: this review ran and the repository went public on 2026-09-02, from a
+scrubbed history. The list stays as the re-read before any release, and the
+automated floor it describes now runs on every commit (gitleaks and
+`scripts/check_public_safe.sh`, mirrored in CI).*
+
 This repo is written to be public-safe from day one, but **making it public —
 or adding any git remote at all — is a gated decision, not a push.** The gate
 is a full manual review, run as its own checklisted task, with the explicit
@@ -14,7 +19,8 @@ Nothing below is automated away. A grep is the floor, not the review.
       author reserves the right to rescind entire documents or sections.
 - [ ] `git ls-files -z | xargs -0 grep -nE '/(Users|home)/'` returns nothing.
 - [ ] No usernames, emails, credentials, tokens, or absolute paths anywhere.
-- [ ] `CLAUDE.local.md` is untracked (gitignored) and stays that way.
+- [ ] `CLAUDE.md`, `CLAUDE.local.md`, `.claude/`, `.remember/` and
+      `.public-safety-patterns` are untracked (gitignored) and stay that way.
 
 ## 2. The private sibling
 
@@ -27,7 +33,8 @@ Nothing below is automated away. A grep is the floor, not the review.
       contain local absolute paths (in `CLAUDE.md` and one research script,
       both since fixed). Either scrub history (`git filter-repo`) or publish
       from a fresh history. **Do not push the unscrubbed history without a
-      deliberate decision.**
+      deliberate decision.** (Resolved 2026-09-01: the history was scrubbed
+      before the first push.)
 
 ## 4. Data and outputs
 
@@ -47,14 +54,14 @@ Nothing below is automated away. A grep is the floor, not the review.
 
 - [ ] Fresh clone into a clean directory; run the test suite and one research
       script; confirm nothing depends on anything outside the repo.
-- [ ] Read the README and `CLAUDE.md` as a stranger would.
+- [ ] Read the README and the wiki's Home page as a stranger would.
 - [ ] Re-trace the article's final pasted text (added 2026-09-02): any hand
       edit to the Medium draft after a claim trace reopens every row, so the
       last text that will actually be published gets one more read-only trace
-      per `handoff-2026-09-02-claim-trace.md` — extract the final text, run
-      the trace, zero MISMATCH rows before the Publish button.
+      — extract the final text, run the trace, zero MISMATCH rows before the
+      Publish button.
 
-## 5. Spelling and voice (added 2026-08-27)
+## 7. Spelling and voice (added 2026-08-27)
 
 - [ ] American English in **prose and rendered strings**: "defense" not
       "defence", "neutralize" not "neutralise", "color" not "colour",
