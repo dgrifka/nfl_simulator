@@ -156,6 +156,9 @@ That window is fixed at 2016–2025 because every shipped artifact was fit on it
 The season in progress is pulled separately by `ingest_live_season`, which
 always re-downloads, so a game that went final tonight can be scored.
 
+The same command also caches FTN charting for 2022–2025. Only the previous
+model read it; the process meter never opens those files.
+
 Then score a game:
 
 ```python
@@ -213,7 +216,6 @@ filesystem layout rather than a pipeline stage.
 |---|---|
 | `src/nfl_simulator/process_meter/` | The model: loaders, features, posteriors, draws, weights, scorer |
 | `src/nfl_simulator/` | Ingest, validation, filesystem layout, and the figure layer (`style`, `teams`) |
-| `src/nfl_simulator/data/` | Small, hand-entered reference tables committed with the source |
 | `src/nfl_simulator/assets/` | The project mark stamped on rendered figures |
 | `research/` | Exploratory and build scripts from the previous model's research; they run at tag v1.4.3 (see its README) |
 | `docs/research/` | The numbered record: pre-registrations, results, ship notes |
