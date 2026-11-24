@@ -4,8 +4,8 @@ title: "nfl_simulator: a deserve-to-win meter for NFL games"
 type: software
 authors:
   - name: "dgrifka"
-version: 2.1.2
-date-released: "2026-09-28"
+version: 2.1.3
+date-released: "2026-11-24"
 repository-code: "https://github.com/dgrifka/nfl_simulator"
 license: MIT
 abstract: >-
