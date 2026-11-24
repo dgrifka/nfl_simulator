@@ -275,8 +275,9 @@ avoided by it:
 ## Status
 
 **Shipped: process meter v2.1** (2026-09-23) — the model described above, with
-its weights, its fit and its stage-0 checks. The current release is **v2.1.2**
-(2026-09-28); the v2.1.x patches changed packaging and checks, never a verdict,
+its weights, its fit and its stage-0 checks. The current release is **v2.1.3**
+(2026-11-24); the v2.1.x patches changed packaging, checks and documentation,
+never a verdict,
 and the [wiki's release history](../../wiki/Release-history) lists each one.
 The previous model is retired; see below.
 
